@@ -25,10 +25,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/l00p3rl00p/quatrus-scratchpad.git",
+    "url": "git+https://github.com/l00p3rl00p/qdev-dsh-plugins.git",
     "directory": "plugins/qdev-soup-drift"
   },
-  "homepage": "https://github.com/l00p3rl00p/quatrus-scratchpad/tree/main/plugins/qdev-soup-drift",
+  "homepage": "https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift",
   "icon": "./icon.svg",
   "dsh": {
     "bundle": {
