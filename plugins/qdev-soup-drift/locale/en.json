@@ -1,0 +1,13 @@
+{
+  "meta": {
+    "title": "SOUP Trajectory Drift",
+    "description": "Native DSH Settings for official SOUP trajectory drift, Gentle Mentor reanchoring, and durable human-controlled accountability."
+  },
+  "config": {
+    "summary": "Detects trajectory drift with SOUP and gently reanchors the agent before requesting human clarification.",
+    "master": "Master control",
+    "detector": "Drift detector",
+    "mentor": "Gentle Mentor",
+    "status": "Trajectory readout"
+  }
+}
