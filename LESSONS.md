@@ -2,6 +2,21 @@
 
 **One authoritative lessons document for every DSH plugin in `plugins/`.** New discoveries belong here, with the plugin and DSH version identified. Do not create plugin-specific lessons files or duplicate this technical record elsewhere. Each plugin README remains a standalone *operator* guide, including its own emergency escape command; its architecture, environment and runbook document that plugin's actual implementation.
 
+## Shared operational rules — reusable across every DSH plugin
+
+### Configuration design: no `.volatile()` in new plugin configuration
+
+Do not introduce Schemastery `.volatile()` into our plugin implementation as a default or as a shortcut to making a Settings page editable. Use and inspect the supported persisted DSH configuration lifecycle instead; a setting must survive close/reopen and process restart, and the running Host must read the saved value. The old SOUP investigation below records why a historical rc.5 UI appeared disabled and what was tried at the time; **it is historical evidence, not an instruction to copy that workaround into new plugins**. If the installed SDK exposes only the historical volatile seam for a particular UI, document that compatibility conflict and identify a supported persistence seam before changing production code. Do not silently contradict this policy.
+
+### Distinguish plugin registration from an actually working UI action
+
+1. **Host/plugin activation:** `dsh plugin --profile web list` checks package registration; `dsh --profile web --dump-config` checks that the plugin Loader entry is enabled in the active profile. Neither proves the browser registered the page or button.
+2. **Client slot registration:** inspect DSH's actual slot tree using `cordis_inspect_query platform=client provider=Slots method=listSubTree input='{"root":"settings.section"}'` for Settings (or the equivalent actual `conversation.view` subtree). This checks the client slot, **not** whether the control handles clicks.
+3. **Active button/action:** open the running Web UI, confirm the control is visible and enabled, click it, and verify the actual Host-side effect (remote call, saved setting, probe, or operation) with output/status evidence. A mounted control without a proven action is not operational.
+4. **Durability:** reload the page, revisit the setting, restart only when the release plan calls for it, and check both persistence and behavior. Distinguish `registered`, `mounted`, `enabled`, `executed` and `persisted` in verification records.
+
+These are universal acceptance boundaries. Put the plugin-specific button, service, configuration and tool names in that plugin's own runbook and lessons.
+
 ## 1. Recover a broken plugin without the Web UI
 
 **Observed failure (ACC, DSH 0.2.1-rc.5):** the Host plugin and clean-profile package installation passed, but the Web client bundle contained `require("@deepseek-ai/dsh-typert-protocol/remote-info")`. The browser `window.__ModuleLoader__` did not provide this Node package, and the resulting loader exception made the DSH Web UI unusable. Installing an npm dependency inside Docker is not equivalent to registering a browser module.
@@ -38,7 +53,7 @@ For every **Web-capable** plugin package workflow:
 
 Reference: [tsdown dependency options](https://tsdown.dev/options/dependencies).
 
-## 2.5. Config-backed Settings require `.volatile()` fields (SOUP v0.5.2, DSH 0.2.1-rc.5)
+## 2.5. Historical SOUP rc.5 `.volatile()` investigation — not the current design rule
 
 **Observed failure:** Settings page rendered but showed "Configuration is unavailable" with all controls disabled.
 
@@ -46,14 +61,14 @@ Reference: [tsdown dependency options](https://tsdown.dev/options/dependencies).
 
 **The seam exists:** `settings.section` slot provides first-class Settings pages. `ctx.configForms` service integrates with Config.
 
-**How to use it:**
+**Historical implementation used at the time (retain as evidence, not as a current build recipe):**
 
 1. **Before building Settings UI:**
    - Read `@deepseek-ai/dsh-settings/README.md` for volatile field requirement
    - Check installed `dsh-superagent` for working Config-backed pattern
    - Use `cordis_inspect_query platform=client provider=Slots method=listSubTree input='{"root":"settings.section"}'` to see the slot contract
 
-2. **Mark UI-editable fields volatile:**
+2. **Historical workaround: mark UI-editable fields volatile:**
    ```typescript
    export const Config = s.object({
      enabled: s.boolean().default(true).volatile(),  // ✅ UI can edit
