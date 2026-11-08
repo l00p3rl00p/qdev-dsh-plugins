@@ -1,5 +1,6 @@
 # SOUP Plugin Development Lessons
 
+> **Historical compatibility record, not current implementation policy:** This 2026-11-06 SOUP v0.5.2 investigation describes a `.volatile()` workaround for DSH 0.2.1-rc.5. The general policy in [../../LESSONS.md](../../LESSONS.md) now directs new plugin work away from `.volatile()`. Preserve this account as evidence of the earlier SDK behavior; evaluate the current native persistent configuration seam before changing SOUP code.\n\n
 **Captured:** 2026-11-06  
 **Plugin:** qdev-trajectory-drift-soup v0.5.2  
 **DSH Version:** 0.2.1-rc.5
