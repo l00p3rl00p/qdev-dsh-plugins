@@ -1,27 +1,29 @@
 # QDev DeepSeek Harness Plugins
 
-Consolidated home for the working DeepSeek Harness plugins. Each plugin retains its native package identity, source, tests and lockfile.
+The coordination repository for independently versioned DeepSeek Harness plugins.
 
-| Plugin | Directory | Package identity | Transferred version |
+**Target topology:** each `plugins/<name>` directory is a **Git submodule** pointing to a dedicated plugin repository. Changes, releases, and history belong to the individual plugin; the parent pins tested commits and maintains cross-plugin governance.
+
+| Plugin | Directory | Package identity | Current source version |
 | --- | --- | --- | --- |
 | Auto Code Correct (ACC) | [plugins/dsh-auto-code-correct](plugins/dsh-auto-code-correct) | `dsh-auto-code-correct` | 0.1.12 |
 | SOUP Drift + Gentle Mentor | [plugins/qdev-soup-drift](plugins/qdev-soup-drift) | `qdev-trajectory-drift-soup` | 0.5.3 |
+| Telemetry Seams | [plugins/dsh-telemetry-seams](plugins/dsh-telemetry-seams) | `dsh-telemetry-seams` | 0.1.2 |
 
-## Verification
+## Planning and learning
 
-GitHub Actions: [Working DSH plugins verification](.github/workflows/plugins.yml). ACC uses the existing strict package reusable workflow; SOUP typechecks, builds, runs its tests with the official `soup-cli==0.77.1`, checks native host/client contracts, packs and installs into a clean DSH profile.
+- [Overall backlog](BACKLOG.md) — priorities and inter-plugin dependencies.
+- [General lessons learned](LESSONS.md) — common Web loader, packaging, deployment and emergency removal rules.
+- Each plugin has its own `ROADMAP.md`, `LESSONS.md`, README, tests and packaging contract.
 
-Run locally from each plugin directory:
+## Independent development model
 
-```sh
-cd plugins/dsh-auto-code-correct && pnpm install && pnpm run verify
-cd ../qdev-soup-drift && pnpm install && SOUP_PYTHON=python pnpm run verify
-```
+Work in a **single child repository** for an individual plugin. Release/test it there, then update the parent submodule reference to its verified commit. Do not duplicate live source or automatically propagate changes back into Scratchpad.
 
-SOUP requires the official `soup_cli` Python package in the interpreter specified by `SOUP_PYTHON`. See each plugin's README for the installed QDev interpreter and targeted emergency removal command.
+## Transfer state
 
-## Migration
+This branch is a **staging snapshot**, not the final Git submodule arrangement. ACC already has its [own Git repository](https://github.com/l00p3rl00p/dsh-auto-code-correct). SOUP and Telemetry Seams are currently sourced from [quatrus-scratchpad](https://github.com/l00p3rl00p/quatrus-scratchpad) subfolders; they need dedicated GitHub repositories before their directories can become genuine submodules. The GitHub connector available here cannot create repositories, so these folders must not be represented as Git links to non-existent remotes. No live QDev installation is changed.
 
-This is a **source consolidation**, not an installation or QDev environment change. Existing source repositories and release tags are retained; their historical Git commits are not rewritten into this monorepo. The copied plugin code is pinned by the transfer PR, with package versions unchanged. Do not delete the legacy sources or change the live Harness installation solely because this repository exists.
+GitHub Actions currently validates the **staged copied source** (ACC strict package contract, SOUP official worker, Telemetry Seams read-only plugin). When submodules are created, update checkout to `submodules: recursive` and paths/filters to run the same checks against the pinned child commits before merging the topology change.
 
-The unfinished `dsh-telemetry-seams` scaffold, SOUP v1, and other experimental branches are intentionally excluded.
+Historical SOUP v1 and unrelated Scratchpad experiments are intentionally excluded.
