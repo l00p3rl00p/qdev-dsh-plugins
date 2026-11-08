@@ -1,22 +1,11 @@
-# Roadmap
+# Roadmap — upcoming features
 
-The parent repository tracks the **coordination and adoption milestones**. The actionable cross-plugin priority queue remains [BACKLOG.md](BACKLOG.md). Each plugin owns its implementation roadmap in its own `ROADMAP.md`.
+This is the feature-level view of upcoming capabilities across the QDev DSH plugin collection. Each plugin has its own feature roadmap. No individual tasks, CI chores, repository restructuring, or acceptance checklists belong in a release roadmap.
 
-## Coordination milestones
+| Plugin | Upcoming feature | Feature intent |
+| --- | --- | --- |
+| [SOUP Drift](plugins/qdev-soup-drift/ROADMAP.md) | CHAT 2.0 | Per-chat live views, control overrides, active-plan editing, intervention controls and drift history |
+| [Telemetry Seams](plugins/dsh-telemetry-seams/ROADMAP.md) | Evidence-backed seam health | Better visibility into actual telemetry delivery and session provenance |
+| [Auto Code Correct](plugins/dsh-auto-code-correct/ROADMAP.md) | Operational correction experience | Persisted settings, clearer tool readiness, and observable correction outcomes |
 
-1. Preserve all three source implementations and shared lessons during consolidation.
-2. Establish independent Git repositories for SOUP and Telemetry Seams; keep the existing ACC repository canonical.
-3. Convert the three staged plugin directories into genuine Git submodules, with reviewed URLs and pinned verified commits.
-4. Update the parent CI to checkout submodules recursively, verify each selected commit, and publish artifacts tied to source commits.
-5. Keep all plugin development, release history, roadmaps and plugin-specific lessons inside the independent repositories.
-6. Confirm deployment into QDev only through explicit, verified operator action; this parent repository remains a catalog.
-
-## Plugin roadmaps
-
-- [ACC](plugins/dsh-auto-code-correct/ROADMAP.md)
-- [SOUP Drift](plugins/qdev-soup-drift/ROADMAP.md)
-- [Telemetry Seams](plugins/dsh-telemetry-seams/ROADMAP.md)
-
-## Scope and release gates
-
-No background rewrites of Scratchpad, automatic installed-version changes, speculative submodule links, or cross-plugin releases. A passing CI package build is not a substitute for a live Web UI action and evidence. Follow [Runbook](RUNBOOK.md) and [Lessons](LESSONS.md).
+A release includes **only features planned for upcoming versions**, not a task list. Sequencing and implementation work live in [BACKLOG.md](BACKLOG.md). Historical completed capabilities belong in release notes, not the upcoming-feature list.
