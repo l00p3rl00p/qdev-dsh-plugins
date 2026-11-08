@@ -1,0 +1,19 @@
+name: ACC strict package verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**"
+      - ".github/workflows/dsh-auto-code-correct-package.yml"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    uses: l00p3rl00p/git-shared-workflows/.github/workflows/dsh-acc-package.yml@main
+    with:
+      plugin_path: "."
