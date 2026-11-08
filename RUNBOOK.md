@@ -27,6 +27,20 @@ pnpm run verify
 
 These commands operate on source. They do not install or replace anything in the running Harness. Run the build using each plugin's documented dependencies and package manager.
 
+## Strict source-to-release package contract
+
+Every plugin release must pass **all** required checks, in sequence. A green unit test or package-install row alone is not sufficient.
+
+1. **Exact source:** check out the committed revision; record the full Git SHA and validate the expected plugin package name, version, manifest, source and lockfile.
+2. **Deterministic dependencies:** `pnpm install --frozen-lockfile`; reject drift, missing locks and silent resolver updates. Use the declared official SOUP worker dependency for SOUP.
+3. **Verify:** run the plugin's actual `verify` command, including static checks, real tests, build and browser-loader/package checks. Fail the build on any error.
+4. **Inspect actual output:** check Host and browser entrypoints and the emitted client, including compatibility with the DSH browser ModuleLoader; do not accept a Host-only pass as full Web readiness.
+5. **Package the tested commit:** create the versioned tarball, inspect its entries, generate SHA-256 and write the complete source Git SHA alongside it.
+6. **Verify artifact integrity:** check the SHA-256, install that exact tarball into a clean official DSH profile, inspect registration, recheck SHA-256 and publish the tarball, checksum and source revision together.
+7. **Live acceptance boundary:** installation into a temporary profile proves registration, **not** browser mounting, enabled button behavior, session operations, runtime persistence or safe restart. Verify those separately in the actual intended profile before treating a release as deployed and operational.
+
+**No alternate source, untracked build, unverified tarball, skip-on-failure, or package-only green status may be used as release evidence.** Do not automatically install into the running QDev environment. Use [GitHub Actions](.github/workflows/plugins.yml) as the collection-level packaging enforcement and [general lessons](LESSONS.md) for reusable SDK acceptance rules.
+
 ## Verify a release
 
 1. Test the exact commit and build the artifact.
