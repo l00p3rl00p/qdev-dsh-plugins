@@ -88,5 +88,11 @@
     "verify": "pnpm run typecheck && pnpm test && pnpm run build && pnpm run check:package",
     "check:package": "node ./scripts/check-package.mjs",
     "packcheck": "pnpm run build && mkdir -p dist && pnpm pack --pack-destination ./dist"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/l00p3rl00p/qdev-dsh-plugins.git",
+    "directory": "plugins/dsh-telemetry-seams"
+  },
+  "homepage": "https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/dsh-telemetry-seams"
 }
