@@ -1,18 +1,17 @@
-# SOUP Drift roadmap
+# SOUP Drift — upcoming features
 
-## Proven baseline
-Package `qdev-trajectory-drift-soup`, version 0.5.3. Live drift detection and Gentle Mentor intervention were demonstrated in the QDev Harness.
+## CHAT 2.0 — frozen feature scope
 
-## Next — CHAT 2.0 (frozen scope)
-1. Finish native Settings values and persistence.
-2. Provide per-chat live view, with overrides of global sensitivity/threshold defaults.
-3. Show and edit the active Gentle Mentor message and governing plan/amendments.
-4. Keep first qualifying drift as one reminder; on second, inject reminder plus active plan; retain three-count escalation guard.
-5. Allow per-chat intervention suppression **without stopping** observation or telemetry.
-6. Show per-chat threshold graph and intervention history.
+- **Per-chat live SOUP view:** see trajectory drift during each session.
+- **Per-chat settings:** override global sensitivity and threshold choices.
+- **Editable Gentle Mentor context:** view and edit the active message, plan and amendments.
+- **Progressive intervention:** first qualifying drift delivers one reminder; second delivers the reminder plus the active plan; existing three-count human escalation remains.
+- **Per-chat intervention control:** suppress intervention for one chat without suppressing observation or telemetry.
+- **Drift visualization:** threshold graph and intervention/event history per chat.
+- **Persistent native settings:** retain effective configuration across reopen and restart.
 
-## Acceptance
-Complete the agreed CHAT 2.0 checklist against actual DSH sessions; preserve the verified observation → SOUP evaluation → Gentle Mentor → DSH loop. Preserve the independent SOUP worker and real Python tests. Move source ownership to its own Git repository before converting the parent folder to a submodule.
+## Future feature — separate scope
 
-## Later work
-Original SOUP application visualization is separate from CHAT 2.0.
+- **Original SOUP application visualization:** expose the real upstream SOUP application's capabilities without duplicating its engine.
+
+Only prospective features belong in release roadmaps. Implementation and acceptance work remain in [BACKLOG.md](../../BACKLOG.md).
