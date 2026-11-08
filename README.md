@@ -10,12 +10,16 @@ The catalog, backlog, and shared lessons for independently developed Quatrus plu
 
 **Explore the project**
 
-[![Getting started](https://img.shields.io/badge/Getting_Started-EAF2EF?style=for-the-badge&logo=rocket&logoColor=203D39&labelColor=EAF2EF)](#getting-started)
-[![Architecture](https://img.shields.io/badge/Architecture-233C40?style=for-the-badge)](#repository-structure)
-[![Plugins](https://img.shields.io/badge/Plugins-233C40?style=for-the-badge)](#plugin-catalog)
+[![Getting started](https://img.shields.io/badge/Getting_Started-EAF2EF?style=for-the-badge&labelColor=EAF2EF)](#getting-started)
+[![Architecture](https://img.shields.io/badge/Architecture-233C40?style=for-the-badge)](ARCHITECTURE.md)
+[![Environment](https://img.shields.io/badge/Environment-233C40?style=for-the-badge)](ENVIRONMENT.md)
+[![Runbook](https://img.shields.io/badge/Runbook-233C40?style=for-the-badge)](RUNBOOK.md)
+[![Components](https://img.shields.io/badge/Components-233C40?style=for-the-badge)](COMPONENTS.md)
+[![Roadmap](https://img.shields.io/badge/Roadmap-233C40?style=for-the-badge)](ROADMAP.md)
 [![Backlog](https://img.shields.io/badge/Backlog-233C40?style=for-the-badge)](BACKLOG.md)
 [![Lessons](https://img.shields.io/badge/Lessons-233C40?style=for-the-badge)](LESSONS.md)
-[![Verification](https://img.shields.io/badge/Verification-233C40?style=for-the-badge)](.github/workflows/plugins.yml)
+[![Contributing](https://img.shields.io/badge/Contributing-233C40?style=for-the-badge)](CONTRIBUTING.md)
+[![Attribution](https://img.shields.io/badge/Attribution-233C40?style=for-the-badge)](ATTRIBUTION.md)
 
 </div>
 
@@ -35,7 +39,7 @@ A plugin's source can change and ship without requiring changes to the other plu
 | **[SOUP Drift + Gentle Mentor](plugins/qdev-soup-drift)** | `qdev-trajectory-drift-soup` | 0.5.3 | Live trajectory drift detection and in-session intervention |
 | **[Telemetry Seams](plugins/dsh-telemetry-seams)** | `dsh-telemetry-seams` | 0.1.2 | Read-only inventory and health probes of native telemetry interfaces |
 
-Each plugin's README is the operator entry point. Its `ROADMAP.md` tracks plugin-only work; `LESSONS.md` keeps its implementation-specific discoveries.
+Each plugin's README is the operator entry point. Its `ROADMAP.md` lists upcoming features; `LESSONS.md` keeps its implementation-specific discoveries.
 
 ## What you need
 
@@ -66,7 +70,7 @@ These checks do not install into the running QDev Harness. Packaging checks and 
 qdev-dsh-plugins/
 ├── README.md                 # Project landing page
 ├── BACKLOG.md                # Overall priorities
-├── LESSONS.md                # General DSH/plugin lessons
+├── LESSONS.md                # General DSH/plugin lessons\n├── ARCHITECTURE.md           # Repository boundaries\n├── ENVIRONMENT.md            # Runtime/build requirements\n├── RUNBOOK.md                # Package and recovery operations\n├── COMPONENTS.md             # Plugin inventory\n├── ROADMAP.md                # Upcoming features only\n├── CONTRIBUTING.md           # Contribution contract\n├── ATTRIBUTION.md            # Credits and provenance
 ├── .github/workflows/       # Collection-level checks
 └── plugins/                 # Independent plugin repositories (target: git submodules)
     ├── dsh-auto-code-correct/
@@ -89,7 +93,7 @@ qdev-dsh-plugins/
 
 - **[General lessons](LESSONS.md):** reusable DSH configuration, loader/slot activation, UI action proof, packaging and recovery contracts.
 - **Plugin-specific lessons:** exact integration discoveries and repeatable configuration recipes, including ACC's formatter/linter coexistence rules.
-- **[Overall backlog](BACKLOG.md):** shared priorities and dependencies. Plugin-only tasks stay in their own roadmaps.
+- **[Overall backlog](BACKLOG.md):** shared priorities and dependencies. Implementation tasks stay in the backlog; roadmaps list only upcoming features.
 - **[GitHub Actions](.github/workflows/plugins.yml):** builds, tests, package-contract checks and clean-profile registration of the staged plugin sources. Actual running-session verification remains separate.
 
 No source transfer automatically updates an installed plugin or authorizes removing the original repositories.
@@ -105,6 +109,6 @@ No source transfer automatically updates an installed plugin or authorizes remov
 | What is specific to ACC? | [ACC roadmap](plugins/dsh-auto-code-correct/ROADMAP.md) · [ACC lessons](plugins/dsh-auto-code-correct/LESSONS.md) |
 | What is specific to SOUP? | [SOUP roadmap](plugins/qdev-soup-drift/ROADMAP.md) · [SOUP lessons](plugins/qdev-soup-drift/LESSONS.md) |
 | What is specific to Telemetry Seams? | [Telemetry roadmap](plugins/dsh-telemetry-seams/ROADMAP.md) · [Telemetry lessons](plugins/dsh-telemetry-seams/LESSONS.md) |
-| How is packaging verified? | [Verification workflow](.github/workflows/plugins.yml) |
+| How is packaging verified? | [Strict packaging workflow](.github/workflows/plugins.yml) · [Runbook](RUNBOOK.md) |\n| What documentation applies? | [Architecture](ARCHITECTURE.md) · [Environment](ENVIRONMENT.md) · [Components](COMPONENTS.md) |\n| How do I contribute and who contributed? | [Contributing](CONTRIBUTING.md) · [Attribution](ATTRIBUTION.md) |
 
 <div align="center"><sub>Quatrus: Trust Intelligence · Govern Intelligently · Preserve Intent<br>Created by <a href="https://github.com/l00p3rl00p">l00p3rl00p</a></sub></div>
