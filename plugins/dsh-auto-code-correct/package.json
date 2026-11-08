@@ -35,11 +35,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/l00p3rl00p/dsh-auto-code-correct.git"
+    "url": "git+https://github.com/l00p3rl00p/qdev-dsh-plugins.git",
+    "directory": "plugins/dsh-auto-code-correct"
   },
-  "homepage": "https://github.com/l00p3rl00p/dsh-auto-code-correct#readme",
+  "homepage": "https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/dsh-auto-code-correct",
   "bugs": {
-    "url": "https://github.com/l00p3rl00p/dsh-auto-code-correct/issues"
+    "url": "https://github.com/l00p3rl00p/qdev-dsh-plugins/issues"
   },
   "license": "MIT",
   "engines": {
