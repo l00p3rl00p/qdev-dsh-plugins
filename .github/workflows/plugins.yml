@@ -59,3 +59,37 @@ jobs:
           name: qdev-trajectory-drift-soup
           path: plugins/qdev-soup-drift/qdev-trajectory-drift-soup-*.tgz
           if-no-files-found: error
+
+  telemetry-seams-package:
+    name: Telemetry Seams package and clean-profile verification
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugins/dsh-telemetry-seams
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Verify read-only plugin implementation and browser package
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm run verify
+      - name: Pack native plugin
+        run: pnpm pack --pack-destination .
+      - name: Install into clean DSH profile
+        env:
+          DSH_HOME: ${{ runner.temp }}/telemetry-seams-dsh-home
+        run: |
+          version=$(node -p "require('./package.json').version")
+          pnpm dlx --package=@deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile telemetry-ci add "./dsh-telemetry-seams-${version}.tgz"
+          pnpm dlx --package=@deepseek-ai/dsh@0.2.1-rc.5 dsh --profile telemetry-ci --dump-config | grep -q dsh-telemetry-seams
+      - name: Publish installable plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: dsh-telemetry-seams
+          path: plugins/dsh-telemetry-seams/dsh-telemetry-seams-*.tgz
+          if-no-files-found: error
