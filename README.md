@@ -6,20 +6,20 @@
 
 The catalog, backlog, and shared lessons for independently developed Quatrus plugins.
 
-[![Platform](https://img.shields.io/badge/Platform-DeepSeek_Harness-233C40?style=flat-square)](https://github.com/deepseek-ai) [![Configuration](https://img.shields.io/badge/Configuration-Native_Plugins-6853B7?style=flat-square)](.github/workflows/plugins.yml) [![Technology](https://img.shields.io/badge/Technology-TypeScript-178A94?style=flat-square&logo=typescript&logoColor=white)](plugins/dsh-auto-code-correct/package.json)
+[![Platform](https://img.shields.io/badge/Platform-DeepSeek_Harness-FF1744?style=flat-square)](https://github.com/deepseek-ai) [![Configuration](https://img.shields.io/badge/Configuration-Native_Plugins-8B5CF6?style=flat-square)](.github/workflows/plugins.yml) [![Technology](https://img.shields.io/badge/Technology-TypeScript-00D6C2?style=flat-square&logo=typescript&logoColor=white)](plugins/dsh-auto-code-correct/package.json)
 
 **Explore the project**
 
-[![Getting started](https://img.shields.io/badge/Getting_Started-EAF2EF?style=for-the-badge&labelColor=EAF2EF)](#getting-started)
-[![Architecture](https://img.shields.io/badge/Architecture-233C40?style=for-the-badge)](ARCHITECTURE.md)
-[![Environment](https://img.shields.io/badge/Environment-233C40?style=for-the-badge)](ENVIRONMENT.md)
-[![Runbook](https://img.shields.io/badge/Runbook-233C40?style=for-the-badge)](RUNBOOK.md)
-[![Components](https://img.shields.io/badge/Components-233C40?style=for-the-badge)](COMPONENTS.md)
-[![Roadmap](https://img.shields.io/badge/Roadmap-233C40?style=for-the-badge)](ROADMAP.md)
-[![Backlog](https://img.shields.io/badge/Backlog-233C40?style=for-the-badge)](BACKLOG.md)
-[![Lessons](https://img.shields.io/badge/Lessons-233C40?style=for-the-badge)](LESSONS.md)
-[![Contributing](https://img.shields.io/badge/Contributing-233C40?style=for-the-badge)](CONTRIBUTING.md)
-[![Attribution](https://img.shields.io/badge/Attribution-233C40?style=for-the-badge)](ATTRIBUTION.md)
+[![Getting started](https://img.shields.io/badge/Getting_Started-16A34A?style=for-the-badge&labelColor=14532D)](#getting-started)
+[![Architecture](https://img.shields.io/badge/Architecture-7C3AED?style=for-the-badge)](ARCHITECTURE.md)
+[![Environment](https://img.shields.io/badge/Environment-0284C7?style=for-the-badge)](ENVIRONMENT.md)
+[![Runbook](https://img.shields.io/badge/Runbook-EA580C?style=for-the-badge)](RUNBOOK.md)
+[![Components](https://img.shields.io/badge/Components-0891B2?style=for-the-badge)](COMPONENTS.md)
+[![Roadmap](https://img.shields.io/badge/Roadmap-DB2777?style=for-the-badge)](ROADMAP.md)
+[![Backlog](https://img.shields.io/badge/Backlog-D97706?style=for-the-badge)](BACKLOG.md)
+[![Lessons](https://img.shields.io/badge/Lessons-0D9488?style=for-the-badge)](LESSONS.md)
+[![Contributing](https://img.shields.io/badge/Contributing-4F46E5?style=for-the-badge)](CONTRIBUTING.md)
+[![Attribution](https://img.shields.io/badge/Attribution-B45309?style=for-the-badge)](ATTRIBUTION.md)
 
 </div>
 
@@ -70,7 +70,14 @@ These checks do not install into the running QDev Harness. Packaging checks and 
 qdev-dsh-plugins/
 ├── README.md                 # Project landing page
 ├── BACKLOG.md                # Overall priorities
-├── LESSONS.md                # General DSH/plugin lessons\n├── ARCHITECTURE.md           # Repository boundaries\n├── ENVIRONMENT.md            # Runtime/build requirements\n├── RUNBOOK.md                # Package and recovery operations\n├── COMPONENTS.md             # Plugin inventory\n├── ROADMAP.md                # Upcoming features only\n├── CONTRIBUTING.md           # Contribution contract\n├── ATTRIBUTION.md            # Credits and provenance
+├── LESSONS.md                # General DSH/plugin lessons
+├── ARCHITECTURE.md           # Repository boundaries
+├── ENVIRONMENT.md            # Runtime/build requirements
+├── RUNBOOK.md                # Package and recovery operations
+├── COMPONENTS.md             # Plugin inventory
+├── ROADMAP.md                # Upcoming features only
+├── CONTRIBUTING.md           # Contribution contract
+├── ATTRIBUTION.md            # Credits and provenance
 ├── .github/workflows/       # Collection-level checks
 └── plugins/                 # Independent plugin repositories (target: git submodules)
     ├── dsh-auto-code-correct/
@@ -109,6 +116,8 @@ No source transfer automatically updates an installed plugin or authorizes remov
 | What is specific to ACC? | [ACC roadmap](plugins/dsh-auto-code-correct/ROADMAP.md) · [ACC lessons](plugins/dsh-auto-code-correct/LESSONS.md) |
 | What is specific to SOUP? | [SOUP roadmap](plugins/qdev-soup-drift/ROADMAP.md) · [SOUP lessons](plugins/qdev-soup-drift/LESSONS.md) |
 | What is specific to Telemetry Seams? | [Telemetry roadmap](plugins/dsh-telemetry-seams/ROADMAP.md) · [Telemetry lessons](plugins/dsh-telemetry-seams/LESSONS.md) |
-| How is packaging verified? | [Strict packaging workflow](.github/workflows/plugins.yml) · [Runbook](RUNBOOK.md) |\n| What documentation applies? | [Architecture](ARCHITECTURE.md) · [Environment](ENVIRONMENT.md) · [Components](COMPONENTS.md) |\n| How do I contribute and who contributed? | [Contributing](CONTRIBUTING.md) · [Attribution](ATTRIBUTION.md) |
+| How is packaging verified? | [Strict packaging workflow](.github/workflows/plugins.yml) · [Runbook](RUNBOOK.md) |
+| What documentation applies? | [Architecture](ARCHITECTURE.md) · [Environment](ENVIRONMENT.md) · [Components](COMPONENTS.md) |
+| How do I contribute and who contributed? | [Contributing](CONTRIBUTING.md) · [Attribution](ATTRIBUTION.md) |
 
 <div align="center"><sub>Quatrus: Trust Intelligence · Govern Intelligently · Preserve Intent<br>Created by <a href="https://github.com/l00p3rl00p">l00p3rl00p</a></sub></div>
