@@ -1,0 +1,150 @@
+{
+  "name": "dsh-auto-code-correct",
+  "version": "0.1.12",
+  "description": "Native DeepSeek Harness Auto Code Correct: language gates, opt-in tool manager, autofix and hygiene",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "diagnostics",
+    "lint"
+  ],
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json",
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./typert": {
+      "default": "./lib/typert.host.js"
+    },
+    "./remote": {
+      "default": "./lib/typert.remote-client.js"
+    }
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/l00p3rl00p/qdev-dsh-plugins.git",
+    "directory": "plugins/dsh-auto-code-correct"
+  },
+  "homepage": "https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/dsh-auto-code-correct",
+  "bugs": {
+    "url": "https://github.com/l00p3rl00p/qdev-dsh-plugins/issues"
+  },
+  "license": "MIT",
+  "engines": {
+    "node": "^22.19.0 || >=24.0.0",
+    "dsh": ">=0.2.1-0 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-renderer",
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-client-ui-conversation"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/dsh-llm": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-session": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-subprocess": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-tools": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-lsp-stdio": ">=0.2.1-0 <0.3.0",
+    "react": "^18.2.0",
+    "@deepseek-ai/dsh-client-ui-settings": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-conversation": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-commands": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-sandbox": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-sandbox-policy": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-user-approval": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-working-directory": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-attachment": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-config-editor": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-lsp": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.2.1-0 <0.3.0"
+  },
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.5",
+    "dsh-lsp-actions": "0.5.17"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.5",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-session": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-subprocess": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-subprocess-local": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-timeout": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-tools": "0.2.1-rc.5",
+    "@types/node": "^26.2.0",
+    "tsdown": "^0.15.6",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.0",
+    "eslint": "^9.39.0",
+    "@typescript-eslint/parser": "^8.46.0",
+    "@typescript-eslint/eslint-plugin": "^8.46.0",
+    "prettier": "^3.6.2",
+    "typescript-language-server": "^5.1.3",
+    "@deepseek-ai/dsh-lsp-stdio": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-lsp": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-fs": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-fs-local": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-tool-lsp": "0.2.1-rc.5",
+    "react": "^18.3.1",
+    "@types/react": "^18.3.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-client-ui-settings": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-client-ui-settings-plugins": "0.2.1-rc.5",
+    "@deepseek-ai/schemastery": "^3.18.5",
+    "@deepseek-ai/dsh-client-ui-renderer": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-commands": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-api-remotes": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-client-ui-session": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-sandbox": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-sandbox-policy": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-user-approval": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-working-directory": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-attachment": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-config-editor": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-client-ui-conversation": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.5",
+    "zod": "^4.6.7"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json --noEmit",
+    "lint": "eslint src test",
+    "formatcheck": "prettier --check 'src/**/*.{ts,tsx}' 'test/**/*.ts'",
+    "verify": "pnpm run lint && pnpm run formatcheck && pnpm run typecheck && pnpm test && pnpm run build && pnpm run check:package",
+    "packcheck": "pnpm run build && mkdir -p dist && pnpm pack --pack-destination ./dist",
+    "format": "prettier --write 'src/**/*.{ts,tsx}' 'test/**/*.ts'",
+    "lint:fix": "eslint --fix src test",
+    "check:package": "node ./scripts/check-package.mjs"
+  },
+  "bin": {
+    "acc-tools": "./lib/cli.js"
+  }
+}

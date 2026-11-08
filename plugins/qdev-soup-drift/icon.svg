@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">SOUP trajectory drift</title>
+  <desc id="desc">A flowing trajectory curve held between two guide rails</desc>
+  <defs>
+    <linearGradient id="soup-flow" x1="10" y1="50" x2="54" y2="14" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#22c7a9"/>
+      <stop offset="1" stop-color="#6d72ff"/>
+    </linearGradient>
+  </defs>
+  <rect x="4" y="4" width="56" height="56" rx="16" fill="#101828"/>
+  <path d="M15 17v30M49 17v30" fill="none" stroke="#93a4c7" stroke-width="3" stroke-linecap="round" opacity=".72"/>
+  <path d="M14 43c8 0 8-22 18-22s10 22 19 22" fill="none" stroke="url(#soup-flow)" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="14" cy="43" r="4" fill="#22c7a9"/>
+  <circle cx="51" cy="43" r="4" fill="#6d72ff"/>
+</svg>

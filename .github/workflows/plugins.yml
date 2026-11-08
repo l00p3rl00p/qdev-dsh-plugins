@@ -1,0 +1,61 @@
+name: Working DSH plugins verification
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'plugins/**'
+      - '.github/workflows/plugins.yml'
+  pull_request:
+    paths:
+      - 'plugins/**'
+      - '.github/workflows/plugins.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  acc-package:
+    name: ACC strict package checks
+    uses: l00p3rl00p/git-shared-workflows/.github/workflows/dsh-acc-package.yml@main
+    with:
+      plugin_path: plugins/dsh-auto-code-correct
+
+  soup-package:
+    name: SOUP native package and real worker checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: plugins/qdev-soup-drift
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install official SOUP
+        run: python -m pip install 'soup-cli==0.77.1'
+      - name: Verify SOUP host, client and policy
+        env:
+          SOUP_PYTHON: python
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm run verify
+      - name: Pack installable plugin
+        run: pnpm pack --pack-destination .
+      - name: Install into clean DSH profile
+        env:
+          DSH_HOME: ${{ runner.temp }}/soup-dsh-home
+        run: |
+          version=$(node -p "require('./package.json').version")
+          pnpm dlx --package=@deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile soup-ci add "./qdev-trajectory-drift-soup-${version}.tgz"
+          pnpm dlx --package=@deepseek-ai/dsh@0.2.1-rc.5 dsh --profile soup-ci --dump-config | grep -q qdev-trajectory-drift-soup
+      - name: Publish SOUP package
+        uses: actions/upload-artifact@v4
+        with:
+          name: qdev-trajectory-drift-soup
+          path: plugins/qdev-soup-drift/qdev-trajectory-drift-soup-*.tgz
+          if-no-files-found: error
