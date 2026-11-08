@@ -4,18 +4,18 @@
 
 **One catalog. Independent plugins. Verifiable releases.**
 
-The coordinated home for native DeepSeek Harness plugins supporting Quatrus.
+The catalog, backlog, and shared lessons for independently developed Quatrus plugins.
 
-[![Platform](https://img.shields.io/badge/Platform-DeepSeek%20Harness-233C40?style=flat-square)](https://github.com/deepseek-ai) [![Configuration](https://img.shields.io/badge/Structure-Git%20Submodules-6853B7?style=flat-square&logo=git&logoColor=white)](#repository-structure) [![Node](https://img.shields.io/badge/Runtime-Node%2024-178A94?style=flat-square&logo=nodedotjs&logoColor=white)](.github/workflows/plugins.yml)
+[![Platform](https://img.shields.io/badge/Platform-DeepSeek_Harness-233C40?style=flat-square)](https://github.com/deepseek-ai) [![Configuration](https://img.shields.io/badge/Configuration-Native_Plugins-6853B7?style=flat-square)](.github/workflows/plugins.yml) [![Technology](https://img.shields.io/badge/Technology-TypeScript-178A94?style=flat-square&logo=typescript&logoColor=white)](plugins/dsh-auto-code-correct/package.json)
 
 **Explore the project**
 
 [![Getting started](https://img.shields.io/badge/Getting_Started-EAF2EF?style=for-the-badge&logo=rocket&logoColor=203D39&labelColor=EAF2EF)](#getting-started)
-[![Architecture](https://img.shields.io/badge/Architecture-233C40?style=for-the-badge&logo=dependabot&logoColor=white)](#repository-structure)
-[![Plugins](https://img.shields.io/badge/Plugins-233C40?style=for-the-badge&logo=code&logoColor=white)](#plugin-catalog)
-[![Backlog](https://img.shields.io/badge/Backlog-233C40?style=for-the-badge&logo=githubprojects&logoColor=white)](BACKLOG.md)
-[![Lessons](https://img.shields.io/badge/Lessons-233C40?style=for-the-badge&logo=bookstack&logoColor=white)](LESSONS.md)
-[![Verification](https://img.shields.io/badge/Verification-233C40?style=for-the-badge&logo=githubactions&logoColor=white)](.github/workflows/plugins.yml)
+[![Architecture](https://img.shields.io/badge/Architecture-233C40?style=for-the-badge)](#repository-structure)
+[![Plugins](https://img.shields.io/badge/Plugins-233C40?style=for-the-badge)](#plugin-catalog)
+[![Backlog](https://img.shields.io/badge/Backlog-233C40?style=for-the-badge)](BACKLOG.md)
+[![Lessons](https://img.shields.io/badge/Lessons-233C40?style=for-the-badge)](LESSONS.md)
+[![Verification](https://img.shields.io/badge/Verification-233C40?style=for-the-badge)](.github/workflows/plugins.yml)
 
 </div>
 
@@ -36,6 +36,15 @@ A plugin's source can change and ship without requiring changes to the other plu
 | **[Telemetry Seams](plugins/dsh-telemetry-seams)** | `dsh-telemetry-seams` | 0.1.2 | Read-only inventory and health probes of native telemetry interfaces |
 
 Each plugin's README is the operator entry point. Its `ROADMAP.md` tracks plugin-only work; `LESSONS.md` keeps its implementation-specific discoveries.
+
+## What you need
+
+| | Dependency | Purpose |
+| --- | --- | --- |
+| **Required for plugin execution** | Compatible DeepSeek Harness | Native Host and Web plugin runtime |
+| **Required for building from source** | Node.js 24 and pnpm | Builds, checks, and packages the transferred plugins |
+| **SOUP only** | Python with official `soup_cli` | Runs SOUP drift analysis through its worker |
+| **Optional for repository browsing** | Git with submodule support | Needed once independent plugin repositories are mounted as actual submodules |
 
 ## Getting started
 
