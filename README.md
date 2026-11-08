@@ -10,16 +10,16 @@ The catalog, backlog, and shared lessons for independently developed Quatrus plu
 
 **Explore the project**
 
-[![Getting started](https://img.shields.io/badge/Getting_Started-16A34A?style=for-the-badge&labelColor=14532D)](#getting-started)
-[![Architecture](https://img.shields.io/badge/Architecture-7C3AED?style=for-the-badge)](ARCHITECTURE.md)
-[![Environment](https://img.shields.io/badge/Environment-0284C7?style=for-the-badge)](ENVIRONMENT.md)
-[![Runbook](https://img.shields.io/badge/Runbook-EA580C?style=for-the-badge)](RUNBOOK.md)
-[![Components](https://img.shields.io/badge/Components-0891B2?style=for-the-badge)](COMPONENTS.md)
-[![Roadmap](https://img.shields.io/badge/Roadmap-DB2777?style=for-the-badge)](ROADMAP.md)
-[![Backlog](https://img.shields.io/badge/Backlog-D97706?style=for-the-badge)](BACKLOG.md)
-[![Lessons](https://img.shields.io/badge/Lessons-0D9488?style=for-the-badge)](LESSONS.md)
-[![Contributing](https://img.shields.io/badge/Contributing-4F46E5?style=for-the-badge)](CONTRIBUTING.md)
-[![Attribution](https://img.shields.io/badge/Attribution-B45309?style=for-the-badge)](ATTRIBUTION.md)
+[![Getting started](https://img.shields.io/badge/Getting_Started-EAF2EF?style=for-the-badge&labelColor=EAF2EF)](#getting-started)
+[![Architecture](https://img.shields.io/badge/Architecture-233C40?style=for-the-badge)](ARCHITECTURE.md)
+[![Environment](https://img.shields.io/badge/Environment-233C40?style=for-the-badge)](ENVIRONMENT.md)
+[![Runbook](https://img.shields.io/badge/Runbook-233C40?style=for-the-badge)](RUNBOOK.md)
+[![Components](https://img.shields.io/badge/Components-233C40?style=for-the-badge)](COMPONENTS.md)
+[![Roadmap](https://img.shields.io/badge/Roadmap-233C40?style=for-the-badge)](ROADMAP.md)
+[![Backlog](https://img.shields.io/badge/Backlog-233C40?style=for-the-badge)](BACKLOG.md)
+[![Lessons](https://img.shields.io/badge/Lessons-233C40?style=for-the-badge)](LESSONS.md)
+[![Contributing](https://img.shields.io/badge/Contributing-233C40?style=for-the-badge)](CONTRIBUTING.md)
+[![Attribution](https://img.shields.io/badge/Attribution-233C40?style=for-the-badge)](ATTRIBUTION.md)
 
 </div>
 
