@@ -1,0 +1,114 @@
+# dsh-telemetry-seams
+
+A native DeepSeek Harness plugin that **discovers and health-checks every
+telemetry and information seam** in this DSH deployment.
+
+**Why it exists:** You cannot manage what you cannot see. This plugin gives
+you — and the AI agent — a single authoritative answer to "is my telemetry
+actually working?" It distinguishes *configured* (someone set it up) from
+*operational* (we have real evidence it is carrying data). That distinction
+is the whole point.
+
+**What it does not do:** It never creates exporters, collectors, or OTLP
+channels. It is a read-only observer. Removing it does not change anything
+about how data flows. That independence is intentional and permanent.
+
+---
+
+## Quick start
+
+The plugin is already installed in the `web` profile. Use it in two ways:
+
+**Agent tool** — ask the agent to run it, or call it directly:
+```
+telemetry_seams_inventory
+```
+
+**Conversation tab** — open any session and click the **Telemetry Seams** tab.
+Click **Run probe** to get a live health snapshot. You can also enable
+**Probe automatically when tab opens**; this performs one probe per tab mount,
+cancels on unmount, and never polls in the background. The preference is saved
+locally in the browser.
+
+---
+
+## What each health state means
+
+| State | Meaning |
+|---|---|
+| ✅ `operational` | Real evidence (TCP connect, file present, service mounted) confirms the seam is live |
+| 🔵 `configured` | The seam is wired up, but we have no end-to-end delivery proof from inside this container |
+| ⚪ `supported` | DSH ships this interface but this deployment doesn't activate it |
+| 🔴 `unavailable` | Known seam that is unreachable or switched off |
+| ❓ `unknown` | Not enough evidence to classify |
+
+**Important:** `configured` is not `operational`. A service being mounted does
+not prove data reached the collector. That honest gap is by design.
+
+---
+
+## Seams covered
+
+| ID | Kind | What it checks |
+|---|---|---|
+| `collector.otlp.grpc` | transport | TCP connect to `otel-collector:4317` |
+| `collector.otlp.http` | transport | TCP connect to `otel-collector:4318` |
+| `collector.pipeline.logs` | logs | zpages pipeline active |
+| `collector.pipeline.metrics` | metrics | zpages pipeline active |
+| `collector.pipeline.traces` | traces | zpages pipeline active |
+| `collector.pipeline.profiles` | profiles | zpages pipeline active |
+| `dsh.otel.service` | logs | `ctx.otel` service mounted in profile |
+| `dsh.productTelemetry.service` | logs | `ctx.productTelemetry` mounted (DeepSeek analytics — expected absent in private QDev) |
+| `dsh.sessionTelemetry.service` | logs | `ctx.sessionTelemetry` mounted (internal DSH interface) |
+| `dsh.session.persistence.jsonl` | session-persistence | JSONL session log files under `~/.dsh/sessions/` |
+| `dsh.session.projection.cache` | session-projection | Projection cache files under `~/.dsh/storages/session_projcache/` |
+| `qdev.env.otel-endpoint` | transport | `OTEL_EXPORTER_OTLP_ENDPOINT` environment variable |
+| `qdev.session-exporter.config` | logs | `DSH_TELEMETRY_OTLP_URL` + `DSH_TELEMETRY_MODE` env vars |
+
+---
+
+## Configuration
+
+Defaults are set in `cordis.patch.yml` and match the QDev `quatrus-network`:
+
+```yaml
+collector:
+  otlpGrpc: otel-collector:4317
+  otlpHttp: otel-collector:4318
+  health: http://otel-collector:13133/
+  zpages: http://otel-collector:55679/debug/pipelinez
+  probeTimeoutMillis: 4000
+includeInternal: true   # show internal DSH interfaces not publicly exported
+```
+
+---
+
+## Emergency removal — if the Web UI fails to load
+
+```sh
+docker exec -it quatrus-harness-deepseek-harness bash -lc \
+  'dsh plugin --profile web remove dsh-telemetry-seams'
+docker restart quatrus-harness-deepseek-harness
+```
+
+If the row persists: `dsh --profile web --dump-config` and remove only the
+`dsh-telemetry-seams` insertion. Leave all other plugins, sessions, collector
+wiring, and QDev volumes untouched.
+
+---
+
+## Development
+
+```sh
+cd plugins/dsh-telemetry-seams
+pnpm install
+pnpm run verify          # typecheck + 13 unit tests + build + package check
+pnpm run build           # build only
+node scripts/check-package.mjs   # package health check only
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md), [ENVIRONMENT.md](ENVIRONMENT.md),
+and [RUNBOOK.md](RUNBOOK.md) for full technical detail.
+
+See [../plugin-lessons.md](../plugin-lessons.md) for browser loader, package
+validation, and recovery requirements shared across all plugins.

@@ -1,0 +1,6 @@
+{
+  "meta": {
+    "title": "Telemetry Seams",
+    "description": "Discover and health-check every DSH and OTEL Collector telemetry interface. Shows each seam's source, collection method, destination, enabled status, and verified connection health."
+  }
+}

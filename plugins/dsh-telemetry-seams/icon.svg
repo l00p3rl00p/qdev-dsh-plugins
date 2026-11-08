@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Telemetry Seams icon: pipeline flow with health indicator -->
+  <rect width="64" height="64" rx="14" fill="#1a1a2e"/>
+  <!-- Source node -->
+  <circle cx="12" cy="32" r="6" fill="none" stroke="#4ade80" stroke-width="2"/>
+  <circle cx="12" cy="32" r="3" fill="#4ade80"/>
+  <!-- Destination node -->
+  <circle cx="52" cy="32" r="6" fill="none" stroke="#4ade80" stroke-width="2"/>
+  <circle cx="52" cy="32" r="3" fill="#4ade80"/>
+  <!-- Pipeline line -->
+  <line x1="18" y1="32" x2="46" y2="32" stroke="#4ade80" stroke-width="2" stroke-dasharray="4 2"/>
+  <!-- Collection node (middle) -->
+  <rect x="27" y="27" width="10" height="10" rx="2" fill="none" stroke="#60a5fa" stroke-width="2"/>
+  <rect x="30" y="30" width="4" height="4" rx="1" fill="#60a5fa"/>
+  <!-- Upper seam -->
+  <path d="M18 24 Q32 16 46 24" fill="none" stroke="#94a3b8" stroke-width="1.5" opacity="0.6"/>
+  <!-- Lower seam -->
+  <path d="M18 40 Q32 48 46 40" fill="none" stroke="#94a3b8" stroke-width="1.5" opacity="0.6"/>
+</svg>

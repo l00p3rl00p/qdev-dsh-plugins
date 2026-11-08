@@ -1,0 +1,20 @@
+# Telemetry Seams — Host mount.
+#
+# This entry registers a read-only inventory service plus one model-facing tool.
+# It deliberately mounts NO exporter, receiver, collector, or pipeline: the
+# native telemetry transport belongs to other components and must survive this
+# plugin being added, removed, upgraded, or reloaded.
+- insert:
+    - id: telemetry-seams
+      name: dsh-telemetry-seams
+      config:
+        # Probe the collector through its own diagnostic endpoints. These are
+        # read-only observations; nothing here reconfigures the collector.
+        collector:
+          otlpGrpc: otel-collector:4317
+          otlpHttp: otel-collector:4318
+          health: http://otel-collector:13133/
+          zpages: http://otel-collector:55679/debug/pipelinez
+          probeTimeoutMillis: 4000
+        # Include seams that exist inside DSH but are not publicly exported.
+        includeInternal: true
