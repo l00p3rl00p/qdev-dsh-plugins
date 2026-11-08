@@ -101,7 +101,9 @@ qdev-dsh-plugins/
 - **[General lessons](LESSONS.md):** reusable DSH configuration, loader/slot activation, UI action proof, packaging and recovery contracts.
 - **Plugin-specific lessons:** exact integration discoveries and repeatable configuration recipes, including ACC's formatter/linter coexistence rules.
 - **[Overall backlog](BACKLOG.md):** shared priorities and dependencies. Implementation tasks stay in the backlog; roadmaps list only upcoming features.
-- **[GitHub Actions](.github/workflows/plugins.yml):** builds, tests, package-contract checks and clean-profile registration of the staged plugin sources. Actual running-session verification remains separate.
+- **[GitHub Actions — proven three-plugin pipeline](.github/workflows/plugins.yml):** builds, tests, validates browser-loader contracts, installs verified archives into clean profiles, and publishes checksums plus source commits.
+- **[Reusable strict plugin workflow](.github/workflows/strict-plugin-package.yml):** an input-driven packaging gate copied from [QDev Generic Plugins](https://github.com/l00p3rl00p/qdev-generic-plugins), for a compatible native DSH Web package. It requires a real plugin path, package name and DSH version; no dummy package runs automatically.
+- **Live runtime acceptance:** check actual Web mounting, controls and persistent behavior separately from clean-profile package verification.
 
 No source transfer automatically updates an installed plugin or authorizes removing the original repositories.
 
@@ -116,7 +118,7 @@ No source transfer automatically updates an installed plugin or authorizes remov
 | What is specific to ACC? | [ACC roadmap](plugins/dsh-auto-code-correct/ROADMAP.md) · [ACC lessons](plugins/dsh-auto-code-correct/LESSONS.md) |
 | What is specific to SOUP? | [SOUP roadmap](plugins/qdev-soup-drift/ROADMAP.md) · [SOUP lessons](plugins/qdev-soup-drift/LESSONS.md) |
 | What is specific to Telemetry Seams? | [Telemetry roadmap](plugins/dsh-telemetry-seams/ROADMAP.md) · [Telemetry lessons](plugins/dsh-telemetry-seams/LESSONS.md) |
-| How is packaging verified? | [Strict packaging workflow](.github/workflows/plugins.yml) · [Runbook](RUNBOOK.md) |
+| How is packaging verified? | [Proven package pipeline](.github/workflows/plugins.yml) · [Reusable strict workflow](.github/workflows/strict-plugin-package.yml) · [Runbook](RUNBOOK.md) |
 | What documentation applies? | [Architecture](ARCHITECTURE.md) · [Environment](ENVIRONMENT.md) · [Components](COMPONENTS.md) |
 | How do I contribute and who contributed? | [Contributing](CONTRIBUTING.md) · [Attribution](ATTRIBUTION.md) |
 
