@@ -1,29 +1,101 @@
-# QDev DeepSeek Harness Plugins
+<div align="center">
 
-The coordination repository for independently versioned DeepSeek Harness plugins.
+# QDev DSH Plugins
 
-**Target topology:** each `plugins/<name>` directory is a **Git submodule** pointing to a dedicated plugin repository. Changes, releases, and history belong to the individual plugin; the parent pins tested commits and maintains cross-plugin governance.
+**One catalog. Independent plugins. Verifiable releases.**
 
-| Plugin | Directory | Package identity | Current source version |
+The coordinated home for native DeepSeek Harness plugins supporting Quatrus.
+
+[![Platform](https://img.shields.io/badge/Platform-DeepSeek%20Harness-233C40?style=flat-square)](https://github.com/deepseek-ai) [![Configuration](https://img.shields.io/badge/Structure-Git%20Submodules-6853B7?style=flat-square&logo=git&logoColor=white)](#repository-structure) [![Node](https://img.shields.io/badge/Runtime-Node%2024-178A94?style=flat-square&logo=nodedotjs&logoColor=white)](.github/workflows/plugins.yml)
+
+**Explore the project**
+
+[![Getting started](https://img.shields.io/badge/Getting_Started-EAF2EF?style=for-the-badge&logo=rocket&logoColor=203D39&labelColor=EAF2EF)](#getting-started)
+[![Architecture](https://img.shields.io/badge/Architecture-233C40?style=for-the-badge&logo=dependabot&logoColor=white)](#repository-structure)
+[![Plugins](https://img.shields.io/badge/Plugins-233C40?style=for-the-badge&logo=code&logoColor=white)](#plugin-catalog)
+[![Backlog](https://img.shields.io/badge/Backlog-233C40?style=for-the-badge&logo=githubprojects&logoColor=white)](BACKLOG.md)
+[![Lessons](https://img.shields.io/badge/Lessons-233C40?style=for-the-badge&logo=bookstack&logoColor=white)](LESSONS.md)
+[![Verification](https://img.shields.io/badge/Verification-233C40?style=for-the-badge&logo=githubactions&logoColor=white)](.github/workflows/plugins.yml)
+
+</div>
+
+---
+
+## One plugin at a time
+
+This repository coordinates independently developed DeepSeek Harness plugins. The parent owns the shared backlog, cross-plugin verification, and general lessons. Every plugin owns its own source, releases, tests, roadmap, and lessons.
+
+A plugin's source can change and ship without requiring changes to the other plugins. The parent records which verified revision belongs in the collection.
+
+## Plugin catalog
+
+| Plugin | Package | Version | Scope |
 | --- | --- | --- | --- |
-| Auto Code Correct (ACC) | [plugins/dsh-auto-code-correct](plugins/dsh-auto-code-correct) | `dsh-auto-code-correct` | 0.1.12 |
-| SOUP Drift + Gentle Mentor | [plugins/qdev-soup-drift](plugins/qdev-soup-drift) | `qdev-trajectory-drift-soup` | 0.5.3 |
-| Telemetry Seams | [plugins/dsh-telemetry-seams](plugins/dsh-telemetry-seams) | `dsh-telemetry-seams` | 0.1.2 |
+| **[Auto Code Correct (ACC)](plugins/dsh-auto-code-correct)** | `dsh-auto-code-correct` | 0.1.12 | Language tooling, bounded correction, readiness, and operation evidence |
+| **[SOUP Drift + Gentle Mentor](plugins/qdev-soup-drift)** | `qdev-trajectory-drift-soup` | 0.5.3 | Live trajectory drift detection and in-session intervention |
+| **[Telemetry Seams](plugins/dsh-telemetry-seams)** | `dsh-telemetry-seams` | 0.1.2 | Read-only inventory and health probes of native telemetry interfaces |
 
-## Planning and learning
+Each plugin's README is the operator entry point. Its `ROADMAP.md` tracks plugin-only work; `LESSONS.md` keeps its implementation-specific discoveries.
 
-- [Overall backlog](BACKLOG.md) — priorities and inter-plugin dependencies.
-- [General lessons learned](LESSONS.md) — common Web loader, packaging, deployment and emergency removal rules.
-- Each plugin has its own `ROADMAP.md`, `LESSONS.md`, README, tests and packaging contract.
+## Getting started
 
-## Independent development model
+The current transfer branch contains **staged source copies**, not active Git submodules yet. Build and verify a staged plugin independently:
 
-Work in a **single child repository** for an individual plugin. Release/test it there, then update the parent submodule reference to its verified commit. Do not duplicate live source or automatically propagate changes back into Scratchpad.
+```sh
+cd plugins/dsh-auto-code-correct
+pnpm install
+pnpm run verify
+```
 
-## Transfer state
+For SOUP, first make the official `soup_cli` Python package available and set `SOUP_PYTHON` to that interpreter as described in its [operator guide](plugins/qdev-soup-drift/README.md). Telemetry Seams has its own [build and probe instructions](plugins/dsh-telemetry-seams/README.md).
 
-This branch is a **staging snapshot**, not the final Git submodule arrangement. ACC already has its [own Git repository](https://github.com/l00p3rl00p/dsh-auto-code-correct). SOUP and Telemetry Seams are currently sourced from [quatrus-scratchpad](https://github.com/l00p3rl00p/quatrus-scratchpad) subfolders; they need dedicated GitHub repositories before their directories can become genuine submodules. The GitHub connector available here cannot create repositories, so these folders must not be represented as Git links to non-existent remotes. No live QDev installation is changed.
+These checks do not install into the running QDev Harness. Packaging checks and live session behavior are distinct release gates.
 
-GitHub Actions currently validates the **staged copied source** (ACC strict package contract, SOUP official worker, Telemetry Seams read-only plugin). When submodules are created, update checkout to `submodules: recursive` and paths/filters to run the same checks against the pinned child commits before merging the topology change.
+## Repository structure
 
-Historical SOUP v1 and unrelated Scratchpad experiments are intentionally excluded.
+```text
+qdev-dsh-plugins/
+├── README.md                 # Project landing page
+├── BACKLOG.md                # Overall priorities
+├── LESSONS.md                # General DSH/plugin lessons
+├── .github/workflows/       # Collection-level checks
+└── plugins/                 # Independent plugin repositories (target: git submodules)
+    ├── dsh-auto-code-correct/
+    │   ├── README.md
+    │   ├── ROADMAP.md
+    │   └── LESSONS.md
+    ├── qdev-soup-drift/
+    │   ├── README.md
+    │   ├── ROADMAP.md
+    │   └── LESSONS.md
+    └── dsh-telemetry-seams/
+        ├── README.md
+        ├── ROADMAP.md
+        └── LESSONS.md
+```
+
+**Target ownership:** each `plugins/<name>` is a Git submodule pointing at a dedicated repository, and the parent pins a tested child commit. ACC already has an independent [source repository](https://github.com/l00p3rl00p/dsh-auto-code-correct). SOUP and Telemetry Seams still originate in [Quatrus Scratchpad](https://github.com/l00p3rl00p/quatrus-scratchpad); their independent repositories and actual Git submodule links have **not** been created. Until then, this is a source-preserving migration stage, not a completed topology.
+
+## Lessons and release discipline
+
+- **[General lessons](LESSONS.md):** reusable DSH configuration, loader/slot activation, UI action proof, packaging and recovery contracts.
+- **Plugin-specific lessons:** exact integration discoveries and repeatable configuration recipes, including ACC's formatter/linter coexistence rules.
+- **[Overall backlog](BACKLOG.md):** shared priorities and dependencies. Plugin-only tasks stay in their own roadmaps.
+- **[GitHub Actions](.github/workflows/plugins.yml):** builds, tests, package-contract checks and clean-profile registration of the staged plugin sources. Actual running-session verification remains separate.
+
+No source transfer automatically updates an installed plugin or authorizes removing the original repositories.
+
+## Project reference
+
+| Question | Source |
+| --- | --- |
+| What plugins are in scope? | [Plugin catalog](#plugin-catalog) |
+| How are they organized? | [Repository structure](#repository-structure) |
+| What is next across all plugins? | [Overall backlog](BACKLOG.md) |
+| What rules apply everywhere? | [General lessons](LESSONS.md) |
+| What is specific to ACC? | [ACC roadmap](plugins/dsh-auto-code-correct/ROADMAP.md) · [ACC lessons](plugins/dsh-auto-code-correct/LESSONS.md) |
+| What is specific to SOUP? | [SOUP roadmap](plugins/qdev-soup-drift/ROADMAP.md) · [SOUP lessons](plugins/qdev-soup-drift/LESSONS.md) |
+| What is specific to Telemetry Seams? | [Telemetry roadmap](plugins/dsh-telemetry-seams/ROADMAP.md) · [Telemetry lessons](plugins/dsh-telemetry-seams/LESSONS.md) |
+| How is packaging verified? | [Verification workflow](.github/workflows/plugins.yml) |
+
+<div align="center"><sub>Quatrus: Trust Intelligence · Govern Intelligently · Preserve Intent<br>Created by <a href="https://github.com/l00p3rl00p">l00p3rl00p</a></sub></div>
