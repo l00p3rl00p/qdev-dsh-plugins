@@ -1,21 +1,27 @@
-# QDev DSH plugin backlog
+# Backlog — what to build next
 
-This is the cross-plugin prioritization queue. Each independently versioned plugin owns its implementation details in `ROADMAP.md`.
+This is the working queue of implementation work across plugin repositories. It owns sequence, integration chores, verification tasks and technical dependencies. The [Roadmap](ROADMAP.md) lists features only, without task details.
 
-## Current order
-1. **Telemetry Seams — evidence-backed observability:** maintain real, non-synthetic proof of configured versus operational telemetry paths; preserve the read-only inventory contract.
-2. **SOUP Drift — CHAT 2.0:** implement the already-agreed per-chat controls and visualization, without regressing verified live drift detection and Gentle Mentor intervention.
-3. **ACC — operational readiness:** complete and verify stable language readiness, settings persistence, package/load safety, and visible correction outcomes.
+## Next build order
 
-## Cross-plugin gates
-- Keep each plugin independently buildable, testable, installable, and removable.
-- Strict package checks include native DSH loading, browser loader compatibility, clean-profile installation and release artifacts.
-- Distinguish automated checks from real running-session acceptance.
-- Preserve each plugin's existing package identity and scoped emergency removal command.
-- Do not replace working code, silently rewrite history, or deploy simply because a source transfer occurred.
-- Maintain a common lessons record in [plugins/plugin-lessons.md](plugins/plugin-lessons.md); plugin-local investigations live in each plugin's `LESSONS.md`.
+1. **Repository consolidation:** establish independent SOUP and Telemetry Seams repositories; convert all three plugin folders to real Git submodules, preserving sources and independently manageable histories.
+2. **Parent verification:** adapt CI to recursively check out pinned plugin commits and run their package/build checks.
+3. **Telemetry Seams:** verify actual configured-versus-operational evidence, including real data delivery, without adding transport ownership.
+4. **SOUP CHAT 2.0:** implement the frozen per-chat features while retaining proven drift detection and Gentle Mentor behavior.
+5. **ACC:** complete live settings persistence, readiness, and visible correction-result verification.
 
-## Repository architecture
-`plugins/<plugin>` is the intended **Git submodule mount** of an independent repository, not a second source of truth. Main repo tracks the chosen commit of each plugin, shared policies and the integration test matrix. Use independent commits and PRs in the plugin repo for work on just one plugin. Update the parent submodule pointer only after verification.
+## Shared acceptance and release work
 
-**Migration status:** ACC has an independent upstream already. SOUP and Telemetry Seams currently originate from Scratchpad subdirectories and require standalone Git repositories before converting these directories to submodules. Until then, this branch has self-contained copies of source for preservation and verification, not functioning Git submodules.
+- Verify native Host loading, browser slot mounting, live control activation and actual action results separately.
+- Verify persistence, scoped removal and restart behavior where applicable.
+- Build and package the exact commit under test; verify checksums and clean-profile installation.
+- Keep plugin work in that plugin's repository and update the parent's submodule reference only for verified revisions.
+- Keep [general lessons](LESSONS.md) applicable across plugins; individual integration discoveries stay in each plugin's `LESSONS.md`.
+
+## Release boundary
+
+The backlog is **not** a public feature commitment. When preparing a release, draw only its upcoming user-visible features from the [Roadmap](ROADMAP.md); keep subtasks, investigation, infrastructure maintenance and test steps in this backlog or the individual engineering issue/PR.
+
+## Migration status
+
+These source directories are currently staged copies, not Git submodules. ACC already has a canonical standalone repository. SOUP and Telemetry Seams still originate in Scratchpad and need dedicated Git repositories before conversion.
