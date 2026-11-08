@@ -1,0 +1,157 @@
+name: Strict native DSH plugin packaging
+
+on:
+  workflow_call:
+    inputs:
+      plugin_path:
+        description: "Committed native DSH plugin directory relative to repository root"
+        required: true
+        type: string
+      package_name:
+        description: "Exact native plugin package identity from package.json"
+        required: true
+        type: string
+      dsh_version:
+        description: "Official DSH version to use for clean-profile verification"
+        required: true
+        type: string
+  workflow_dispatch:
+    inputs:
+      plugin_path:
+        description: "Committed native DSH plugin path (e.g., plugins/my-plugin)"
+        required: true
+        type: string
+      package_name:
+        description: "Exact name from package.json"
+        required: true
+        type: string
+      dsh_version:
+        description: "Official compatible DSH version (e.g., 0.2.1-rc.5)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  verify-package:
+    name: Verify, package, checksum and install
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout exact source commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Establish committed plugin and verify manifest
+        id: source
+        env:
+          PLUGIN_PATH: ${{ inputs.plugin_path }}
+          PACKAGE_NAME: ${{ inputs.package_name }}
+          DSH_VERSION: ${{ inputs.dsh_version }}
+        run: |
+          set -euo pipefail
+          test -n "$PLUGIN_PATH"
+          test -n "$PACKAGE_NAME"
+          test -n "$DSH_VERSION"
+          test -d "$PLUGIN_PATH"
+          test -f "$PLUGIN_PATH/package.json"
+          test -f "$PLUGIN_PATH/pnpm-lock.yaml"
+          test -f "$PLUGIN_PATH/cordis.patch.yml"
+          test -d "$PLUGIN_PATH/src"
+          git diff --exit-code
+          git diff --cached --exit-code
+          cd "$PLUGIN_PATH"
+          test "$(node -p 'require("./package.json").name')" = "$PACKAGE_NAME"
+          version="$(node -p 'require("./package.json").version')"
+          test -n "$version"
+          node -e 'const p=require("./package.json");if (!p.scripts?.verify || !p.main || !p.exports?.["./client"] || p.dsh?.client?.platform!=="web" || p.dsh?.client?.immediately!==true)process.exit(1)'
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: pnpm
+          cache-dependency-path: ${{ inputs.plugin_path }}/pnpm-lock.yaml
+      - name: Frozen install and complete plugin verification
+        working-directory: ${{ inputs.plugin_path }}
+        run: |
+          set -euo pipefail
+          pnpm install --frozen-lockfile
+          pnpm run verify
+      - name: Verify built browser and Host entries
+        working-directory: ${{ inputs.plugin_path }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const p = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const client = p.exports['./client'];
+          const browserPath = typeof client === 'string' ? client : client?.default;
+          if (!browserPath || !fs.existsSync(browserPath) || !fs.existsSync(p.main)) throw Error('Built Host/client entry absent');
+          const js = fs.readFileSync(browserPath, 'utf8');
+          if (!js.includes('load')) throw Error('Browser client lacks loader registration');
+          if (/require\(\s*['"]@deepseek-ai\/dsh-typert-protocol\/remote-info['"]\s*\)/.test(js)) throw Error('Known unsupported browser import');
+          NODE
+      - name: Package exactly the tested source and record checksum
+        id: package
+        working-directory: ${{ inputs.plugin_path }}
+        env:
+          PACKAGE_NAME: ${{ inputs.package_name }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+          VERSION: ${{ steps.source.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          pnpm pack --pack-destination release
+          artifact="release/${PACKAGE_NAME}-${VERSION}.tgz"
+          test -s "$artifact"
+          tar -tzf "$artifact" > "$artifact.contents.txt"
+          node --input-type=module - "$artifact.contents.txt" <<'NODE'
+          import fs from 'node:fs';
+          const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+          const paths = new Set(fs.readFileSync(process.argv[2], 'utf8').trim().split('\n'));
+          const requireEntry = file => {
+            if (!paths.has('package/' + file.replace(/^\.\//, ''))) throw Error('Missing packed entry ' + file);
+          };
+          requireEntry('package.json');
+          requireEntry('cordis.patch.yml');
+          requireEntry(pkg.main);
+          const client = pkg.exports['./client'];
+          requireEntry(typeof client === 'string' ? client : client.default);
+          NODE
+          sha256sum "$artifact" > "$artifact.sha256"
+          printf '%s\n' "$SOURCE_COMMIT" > "$artifact.source-commit"
+          sha256sum --check "$artifact.sha256"
+          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+      - name: Install identical checksum-verified archive in clean official DSH profile
+        working-directory: ${{ inputs.plugin_path }}
+        env:
+          DSH_HOME: ${{ runner.temp }}/generic-dsh-verify
+          PACKAGE_NAME: ${{ inputs.package_name }}
+          DSH_VERSION: ${{ inputs.dsh_version }}
+          ARTIFACT: ${{ steps.package.outputs.artifact }}
+          SOURCE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: |
+          set -euo pipefail
+          sha256sum --check "$ARTIFACT.sha256"
+          pnpm dlx --package="@deepseek-ai/dsh@$DSH_VERSION" dsh plugin --profile generic-ci add "./$ARTIFACT"
+          pnpm dlx --package="@deepseek-ai/dsh@$DSH_VERSION" dsh --profile generic-ci --dump-config | grep -Fq "$PACKAGE_NAME"
+          sha256sum --check "$ARTIFACT.sha256"
+          test "$(cat "$ARTIFACT.source-commit")" = "$SOURCE_COMMIT"
+      - name: Publish package with checksum and source provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.package_name }}-${{ steps.source.outputs.version }}
+          path: |
+            ${{ inputs.plugin_path }}/release/*.tgz
+            ${{ inputs.plugin_path }}/release/*.tgz.sha256
+            ${{ inputs.plugin_path }}/release/*.tgz.source-commit
+          if-no-files-found: error
+          retention-days: 90
