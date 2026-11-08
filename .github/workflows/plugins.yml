@@ -1,95 +1,161 @@
-name: Working DSH plugins verification
+name: Strict DSH plugin release packaging
+
 on:
   push:
     branches: [main]
-    paths:
-      - 'plugins/**'
-      - '.github/workflows/plugins.yml'
+    paths: ['plugins/**', '.github/workflows/plugins.yml']
   pull_request:
-    paths:
-      - 'plugins/**'
-      - '.github/workflows/plugins.yml'
+    paths: ['plugins/**', '.github/workflows/plugins.yml']
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
   acc-package:
-    name: ACC strict package checks
+    name: ACC strict source-to-artifact verification
     uses: l00p3rl00p/git-shared-workflows/.github/workflows/dsh-acc-package.yml@main
     with:
       plugin_path: plugins/dsh-auto-code-correct
 
-  soup-package:
-    name: SOUP native package and real worker checks
+  native-package:
+    name: Strict package / ${{ matrix.id }}
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - id: soup
+            path: plugins/qdev-soup-drift
+            package_name: qdev-trajectory-drift-soup
+            profile: soup-ci
+            python: true
+          - id: telemetry-seams
+            path: plugins/dsh-telemetry-seams
+            package_name: dsh-telemetry-seams
+            profile: telemetry-ci
+            python: false
     defaults:
       run:
-        working-directory: plugins/qdev-soup-drift
+        shell: bash
+        working-directory: ${{ matrix.path }}
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout exact Git commit without persisted credentials
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate committed source and package identity
+        id: source
+        env:
+          EXPECTED_PACKAGE: ${{ matrix.package_name }}
+          EXPECTED_PATH: ${{ matrix.path }}
+        run: |
+          set -euo pipefail
+          test -f package.json
+          test -f pnpm-lock.yaml
+          test -f cordis.patch.yml
+          test -d src
+          git diff --exit-code
+          git diff --cached --exit-code
+          test "$(node -p 'require("./package.json").name')" = "$EXPECTED_PACKAGE"
+          version="$(node -p 'require("./package.json").version')"
+          test -n "$version"
+          commit="$(git rev-parse HEAD)"
+          test -n "$commit"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: '10'
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: pnpm
+          cache-dependency-path: ${{ matrix.path }}/pnpm-lock.yaml
       - uses: actions/setup-python@v5
+        if: matrix.python
         with:
           python-version: '3.13'
-      - name: Install official SOUP
-        run: python -m pip install 'soup-cli==0.77.1'
-      - name: Verify SOUP host, client and policy
+      - name: Install official SOUP implementation
+        if: matrix.python
+        run: |
+          set -euo pipefail
+          python -m pip install 'soup-cli==0.77.1'
+          python -c 'import soup_cli'
+      - name: Install frozen dependencies and verify real plugin
         env:
           SOUP_PYTHON: python
         run: |
-          pnpm install --no-frozen-lockfile
+          set -euo pipefail
+          pnpm install --frozen-lockfile
           pnpm run verify
-      - name: Pack installable plugin
-        run: pnpm pack --pack-destination .
-      - name: Install into clean DSH profile
+          test -s "$(node -p 'require("./package.json").main')"
+          test -f cordis.patch.yml
+      - name: Verify emitted browser loader entry and package contents
         env:
-          DSH_HOME: ${{ runner.temp }}/soup-dsh-home
+          PACKAGE_NAME: ${{ matrix.package_name }}
         run: |
-          version=$(node -p "require('./package.json').version")
-          pnpm dlx --package=@deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile soup-ci add "./qdev-trajectory-drift-soup-${version}.tgz"
-          pnpm dlx --package=@deepseek-ai/dsh@0.2.1-rc.5 dsh --profile soup-ci --dump-config | grep -q qdev-trajectory-drift-soup
-      - name: Publish SOUP package
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          import path from 'node:path';
+          const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+          if(pkg.name!==process.env.PACKAGE_NAME || pkg.dsh?.client?.platform!=='web' || pkg.dsh?.client?.immediately!==true) throw Error('Invalid DSH package identity/client');
+          const entry=pkg.exports?.['./client'];
+          const client=typeof entry==='string'?entry:entry?.default;
+          if(!client || !fs.existsSync(client)) throw Error('Missing built browser client entry');
+          const out=fs.readFileSync(client,'utf8');
+          if(!out.includes('load')) throw Error('No client loader registration found');
+          if(/require\(\s*['"]@deepseek-ai\/dsh-typert-protocol\/remote-info['"]\s*\)/.test(out)) throw Error('Known broken browser import');
+          if(!fs.existsSync(pkg.main)) throw Error('Missing Host entry');
+          NODE
+      - name: Package exactly the verified source and record provenance
+        id: artifact
+        env:
+          PACKAGE_NAME: ${{ matrix.package_name }}
+          COMMIT_SHA: ${{ steps.source.outputs.commit }}
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          pnpm pack --pack-destination release
+          artifact="release/${PACKAGE_NAME}-${{ steps.source.outputs.version }}.tgz"
+          test -s "$artifact"
+          tar -tzf "$artifact" > "$artifact.contents.txt"
+          grep -Fxq package/package.json "$artifact.contents.txt"
+          grep -Fxq package/cordis.patch.yml "$artifact.contents.txt"
+          node --input-type=module - "$artifact.contents.txt" <<'NODE'
+          import fs from 'node:fs';
+          const pkg=JSON.parse(fs.readFileSync('package.json','utf8'));
+          const entries=new Set(fs.readFileSync(process.argv[2],'utf8').trim().split('\n'));
+          const check=(path) => { if(!entries.has('package/'+path.replace(/^\.\//,''))) throw Error('Missing packed entry: '+path) };
+          check(pkg.main);
+          const client=pkg.exports['./client'];check(typeof client==='string'?client:client.default);
+          NODE
+          sha256sum "$artifact" > "$artifact.sha256"
+          printf '%s\n' "$COMMIT_SHA" > "$artifact.source-commit"
+          sha256sum -c "$artifact.sha256"
+          echo "artifact=$artifact" >> "$GITHUB_OUTPUT"
+      - name: Install same checksum-verified archive into a clean official DSH profile
+        env:
+          DSH_HOME: ${{ runner.temp }}/strict-dsh-home-${{ matrix.id }}
+          PACKAGE_NAME: ${{ matrix.package_name }}
+          PROFILE: ${{ matrix.profile }}
+          ARTIFACT: ${{ steps.artifact.outputs.artifact }}
+        run: |
+          set -euo pipefail
+          sha256sum -c "$ARTIFACT.sha256"
+          pnpm dlx --package=@deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile "$PROFILE" add "./$ARTIFACT"
+          pnpm dlx --package=@deepseek-ai/dsh@0.2.1-rc.5 dsh --profile "$PROFILE" --dump-config | grep -Fq "$PACKAGE_NAME"
+          sha256sum -c "$ARTIFACT.sha256"
+          test "$(cat "$ARTIFACT.source-commit")" = "${{ steps.source.outputs.commit }}"
+      - name: Publish package, checksum and exact source revision together
         uses: actions/upload-artifact@v4
         with:
-          name: qdev-trajectory-drift-soup
-          path: plugins/qdev-soup-drift/qdev-trajectory-drift-soup-*.tgz
+          name: ${{ matrix.package_name }}-${{ steps.source.outputs.version }}
+          path: |
+            ${{ matrix.path }}/release/*.tgz
+            ${{ matrix.path }}/release/*.tgz.sha256
+            ${{ matrix.path }}/release/*.tgz.source-commit
           if-no-files-found: error
-
-  telemetry-seams-package:
-    name: Telemetry Seams package and clean-profile verification
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: plugins/dsh-telemetry-seams
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 10
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - name: Verify read-only plugin implementation and browser package
-        run: |
-          pnpm install --no-frozen-lockfile
-          pnpm run verify
-      - name: Pack native plugin
-        run: pnpm pack --pack-destination .
-      - name: Install into clean DSH profile
-        env:
-          DSH_HOME: ${{ runner.temp }}/telemetry-seams-dsh-home
-        run: |
-          version=$(node -p "require('./package.json').version")
-          pnpm dlx --package=@deepseek-ai/dsh@0.2.1-rc.5 dsh plugin --profile telemetry-ci add "./dsh-telemetry-seams-${version}.tgz"
-          pnpm dlx --package=@deepseek-ai/dsh@0.2.1-rc.5 dsh --profile telemetry-ci --dump-config | grep -q dsh-telemetry-seams
-      - name: Publish installable plugin
-        uses: actions/upload-artifact@v4
-        with:
-          name: dsh-telemetry-seams
-          path: plugins/dsh-telemetry-seams/dsh-telemetry-seams-*.tgz
-          if-no-files-found: error
+          retention-days: 90
