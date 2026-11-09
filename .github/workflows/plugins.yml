@@ -1,11 +1,6 @@
 name: Strict DSH plugin release packaging
 
 on:
-  push:
-    branches: [main]
-    paths: ['plugins/**', '.github/workflows/plugins.yml']
-  pull_request:
-    paths: ['plugins/**', '.github/workflows/plugins.yml']
   workflow_dispatch:
 
 permissions:
