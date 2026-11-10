@@ -30,7 +30,9 @@ export default defineConfig([
     platform: 'node',
     dts: true,
     clean: true,
-    deps: { neverBundle: [/^@deepseek-ai\//] },
+    // Both native and third-party LSP integrations are resolved only when
+    // enabled; never copy their implementations into ACC's Host bundle.
+    deps: { neverBundle: [/^@deepseek-ai\//, 'dsh-lsp-actions'] },
   },
   {
     entry: { client: 'src/client/index.tsx' },
