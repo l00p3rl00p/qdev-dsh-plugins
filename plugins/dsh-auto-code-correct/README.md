@@ -35,6 +35,8 @@ ACC runs after supported, successful DeepSeek Harness file edits, applies config
 | **As enabled** | Language quality tools | Reuse available linters, formatters, and language servers |
 | **Not required** | Separate Docker service | ACC is a native plugin, not an independent service |
 
+**LSP integration ownership:** ACC does not install additional DSH LSP service providers or the third-party `dsh-lsp-actions` plugin. It uses an existing LSP service when available and recognizes already registered action tools; when an operator installs `dsh-lsp-actions` separately through DSH Plugins, ACC can reuse that implementation instead of mounting another tool surface. Ruff, ty, rust-analyzer, and TypeScript language executables remain user/build-provisioned external programs. Missing optional LSP integration must not block ACC's post-edit correction pipeline or readiness UI.
+
 ## Delivered components
 
 | Component | Source | Runtime surface |
