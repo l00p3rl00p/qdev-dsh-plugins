@@ -9,7 +9,7 @@ import type { AccReadinessSnapshot } from './readiness.js'
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespaceMap {
     accReadiness: {
-      snapshot(signal?: AbortSignal): Promise<RemoteResult<AccReadinessSnapshot>>
+      snapshot(): Promise<RemoteResult<AccReadinessSnapshot>>
     }
   }
 }
