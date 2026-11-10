@@ -103,13 +103,13 @@ pnpm install --no-frozen-lockfile
 pnpm run verify
 mkdir -p dist
 pnpm pack --pack-destination dist
-dsh plugin --profile web add ./dist/dsh-auto-code-correct-0.1.9.tgz
+dsh plugin --profile web add ./dist/dsh-auto-code-correct-0.1.12.tgz
 dsh --profile web --dump-config
 ```
 
 Use the actual container-visible checkout path. The verified distribution is a **built local tarball**, which includes ACC's Host entry, Web settings client, CLI, and Cordis patch. Do not assume a raw directory link has the same packaging/peer behavior as a tarball; SOUP has a separately tested local-directory workflow.
 
-**Native profile prerequisites:** ACC needs compatible `@deepseek-ai/dsh-lsp` and `@deepseek-ai/dsh-lsp-stdio` available when DSH Web starts. The QDev [Harness startup script](https://github.com/l00p3rl00p/qdocker-compose/blob/main/stacks/harness/start-harness.sh) owns the environment-specific dependency setup; ACC does not introduce a second installer or Docker service. See [ENVIRONMENT.md](ENVIRONMENT.md#native-lsp-package-dependency-chain).
+**Native profile integration:** ACC does not require a separate LSP package installation to run its post-edit correction pipeline. Its LSP providers are optional: when compatible native `@deepseek-ai/dsh-lsp` / `@deepseek-ai/dsh-lsp-stdio` services exist, ACC can use them; when they are absent, LSP integration is unavailable without blocking ACC installation or its configured checkers. DSH’s built-in plugin manager owns installation; ACC adds no installer, Docker service, or profile mutation. See [ENVIRONMENT.md](ENVIRONMENT.md#native-lsp-package-dependency-chain).
 
 After installation, restart the **DSH Web process** (or its owning Harness container), not the whole stack. Launch [DSH Web](http://localhost:3080), using its token-bearing start URL where required.
 
