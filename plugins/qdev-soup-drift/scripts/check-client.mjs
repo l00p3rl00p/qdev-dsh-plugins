@@ -13,8 +13,12 @@ const packedFiles = ['dist/index.js', 'client.js', 'locale/en.json', 'icon.svg',
   'drift.mjs', 'reanchor.mjs', 'runtime.mjs', 'soup_worker.py', 'cordis.patch.yml']
 for (const file of packedFiles) {
   if (!existsSync(file)) errors.push('Missing built package asset: ' + file)
-  const top = file.split('/')[0]
-  if (!(pkg.files ?? []).includes(top)) errors.push('Asset is omitted by package files: ' + file)
+  const declared = (pkg.files ?? []).some((entry) =>
+    entry === file ||
+    entry === file.split('/')[0] ||
+    (entry.endsWith('/*.json') && file.startsWith(entry.slice(0, -6) + '/') && file.endsWith('.json'))
+  )
+  if (!declared) errors.push('Asset is omitted by package files: ' + file)
 }
 if (pkg.main !== './dist/index.js' || pkg.exports?.['.'] !== './dist/index.js') {
   errors.push('SOUP Host export must resolve to the compiled runtime entry')
