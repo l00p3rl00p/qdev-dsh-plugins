@@ -94,7 +94,7 @@ qdev-dsh-plugins/
         └── LESSONS.md
 ```
 
-**Target ownership:** each `plugins/<name>` is a Git submodule pointing at a dedicated repository, and the parent pins a tested child commit. ACC already has an independent [source repository](https://github.com/l00p3rl00p/dsh-auto-code-correct). SOUP and Telemetry Seams still originate in [Quatrus Scratchpad](https://github.com/l00p3rl00p/quatrus-scratchpad); their independent repositories and actual Git submodule links have **not** been created. Until then, this is a source-preserving migration stage, not a completed topology.
+**Current ownership:** This repository is the **only active development, build, and release source** for ACC, SOUP, and Telemetry Seams. ACC lives at [`plugins/dsh-auto-code-correct/`](plugins/dsh-auto-code-correct/). The former standalone `l00p3rl00p/dsh-auto-code-correct` repository and Scratchpad plugin copies are **deprecated archives**. Plugin directories are ordinary Git-tracked directories in this repo, not functioning Git submodules; do not install from or push fixes to the deprecated repos.
 
 ## Lessons and release discipline
 
