@@ -1,14 +1,15 @@
 import { z } from 'zod'
-// Use the public DSH Typert subpath. tsdown maps it to its JavaScript
-// runtime for the Web bundle; no runtime import depends on pnpm internals.
-import { createTypertRemoteInfo } from '@deepseek-ai/dsh-typert-protocol/remote-info'
+// The published rc.5 package's runtime leaf is the pure JS factory.
+// Import its local JS file for bundling; the package subpath resolves externally
+// in tsdown's current CJS Web build and DSH does not register that browser module.
+import { createTypertRemoteInfo } from '../node_modules/@deepseek-ai/dsh-typert-protocol/lib/types/remote-info.js'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { AccReadinessSnapshot } from './readiness.js'
 
 declare module '@deepseek-ai/dsh-typert-protocol' {
   interface TypertRemoteNamespaceMap {
     accReadiness: {
-      snapshot(): Promise<RemoteResult<AccReadinessSnapshot>>
+      snapshot(signal?: AbortSignal): Promise<RemoteResult<AccReadinessSnapshot>>
     }
   }
 }

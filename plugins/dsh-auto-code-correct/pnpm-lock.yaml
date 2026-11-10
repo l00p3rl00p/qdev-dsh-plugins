@@ -11,10 +11,10 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: ^3.18.5
         version: 3.18.5
-    devDependencies:
       dsh-lsp-actions:
         specifier: 0.5.17
         version: 0.5.17(1fef8758cb2bc5a8feac5278f561a612)
+    devDependencies:
       '@deepseek-ai/cordis':
         specifier: ^4.0.5
         version: 4.0.5(@deepseek-ai/cordis-plugin-include@1.0.10)(@deepseek-ai/cordis-plugin-loader@1.0.6)

@@ -23,6 +23,8 @@ import {
   type AccResultMeta,
 } from './operation-record.js'
 import type { Language } from './capabilities.js'
+import * as nativeLspStdio from '@deepseek-ai/dsh-lsp-stdio'
+import * as lspActions from 'dsh-lsp-actions'
 import type { Context, Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -380,20 +382,7 @@ export function apply(ctx: Context, config: Config): void {
         )
       }
     }
-    if (Object.keys(entries).length) {
-      // The native LSP stdio package is deployment-provided. Resolve it only
-      // after DSH has supplied an LSP service and a language server is usable.
-      // An absent optional integration must not prevent ACC's checker pipeline
-      // or the Web UI from loading.
-      let nativeLspStdio: typeof import('@deepseek-ai/dsh-lsp-stdio')
-      try {
-        nativeLspStdio = await import('@deepseek-ai/dsh-lsp-stdio')
-      } catch (error) {
-        console.warn('[auto-code-correct] native LSP stdio could not be loaded: ' + errorMessage(error))
-        return
-      }
-      scoped.plugin(nativeLspStdio, { servers: entries })
-    }
+    if (Object.keys(entries).length) scoped.plugin(nativeLspStdio, { servers: entries })
   })
 
   // Reuse the existing multi-language LSP actions plugin. It accepts an arbitrary
@@ -470,18 +459,8 @@ export function apply(ctx: Context, config: Config): void {
         )
       }
     }
-    if (Object.keys(entries).length > 0) {
-      // LSP action support is an integration, not a prerequisite for ACC.
-      // If the Harness already registered these tools, we returned above.
-      let lspActions: typeof import('dsh-lsp-actions')
-      try {
-        lspActions = await import('dsh-lsp-actions')
-      } catch (error) {
-        console.warn('[auto-code-correct] LSP actions provider could not be loaded: ' + errorMessage(error))
-        return
-      }
+    if (Object.keys(entries).length > 0)
       scoped.plugin(lspActions, { servers: entries, editor: { enabled: false } })
-    }
   })
 
   const hygienePolicy = () => ({

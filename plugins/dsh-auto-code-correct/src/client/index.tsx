@@ -398,10 +398,7 @@ export async function apply(ctx: Context): Promise<() => Promise<void>> {
     registerAutoCorrectView(scope)
     const config = scope.configForms.get<Record<string, unknown>>('auto-code-correct')
     const PluginPage = createPluginPage(config, async (signal) => {
-      // The Remote method declares zero parameters. Cancellation only guards UI state.
-      signal.throwIfAborted()
-      const result = await scope.remote.accReadiness.snapshot()
-      signal.throwIfAborted()
+      const result = await scope.remote.accReadiness.snapshot(signal)
       if (!result.ok) throw result.error
       return result.value
     })

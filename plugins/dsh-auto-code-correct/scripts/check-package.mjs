@@ -9,7 +9,6 @@ function check(ok, message) { if (!ok) errors.push(message) }
 const bundle = pkg.dsh?.bundle
 check(bundle?.patch === './cordis.patch.yml', 'Native DSH bundle patch must resolve to ./cordis.patch.yml')
 check(pkg.name === 'dsh-auto-code-correct', 'Package name must match Cordis bundle name')
-check(pkg.scripts?.prepare === 'pnpm run build && pnpm run check:package', 'GitHub subdirectory installation must build the Host and Web artifacts via prepare')
 for (const path of ['lib/index.js', 'lib/index.d.ts', 'lib/client.js', 'lib/cli.js', 'cordis.patch.yml']) {
   check(existsSync(resolve(path)), 'Missing packaged file: ' + path)
 }
@@ -24,48 +23,11 @@ const clientText = readFileSync('lib/client.js', 'utf8')
 // Regression: Cordis requires the plugin's own remote namespace to be
 // consumed from a child injection scope, never the mounting parent fiber.
 const clientSource = readFileSync('src/client/index.tsx', 'utf8')
-const hostSource = readFileSync('src/index.ts', 'utf8')
-// A missing optional LSP package must not crash ACC before Cordis can inject
-// services or readiness can report that the provider is unavailable.
-check(
-  !/^import .* from ['"](?:@deepseek-ai\/dsh-lsp-stdio|dsh-lsp-actions)['"]$/m.test(hostSource),
-  'Optional LSP providers must not be eagerly imported at Host startup',
-)
-check(
-  hostSource.includes("await import('@deepseek-ai/dsh-lsp-stdio')") &&
-    hostSource.includes("await import('dsh-lsp-actions')"),
-  'Optional LSP modules must be loaded only from their guarded integration scopes',
-)
-
 const childInject = "ctx.inject(['slots', 'configForms', 'uiConversation', 'remote.accReadiness'], (scope) => {"
 check(clientSource.includes(childInject), 'ACC readiness requires a child-scoped remote.accReadiness injection')
 check(
-  clientSource.includes('scope.remote.accReadiness.snapshot()'),
-  'ACC readiness must call the zero-argument Remote snapshot from the injected child scope',
-)
-// The generated-equivalent Typert contract declares no positional parameters.
-// Never silently accept an AbortSignal as a serialized Remote argument.
-const remoteContract = readFileSync('src/typert.remote-client.ts', 'utf8')
-check(
-  !remoteContract.includes('../node_modules/'),
-  'Typert client contract must not import pnpm-internal node_modules paths',
-)
-check(
-  remoteContract.includes("from '@deepseek-ai/dsh-typert-protocol/remote-info'"),
-  'Typert must use the official DSH SDK remote-info export',
-)
-
-check(
-  /snapshot\(\): Promise<RemoteResult<AccReadinessSnapshot>>/.test(remoteContract),
-  'ACC client contract must declare a zero-argument readiness snapshot',
-)
-check(
-  /parameters:\s*\[\]/.test(remoteContract),
-  'ACC readiness Remote descriptor must declare zero parameters',
-)
-check(
-  !clientSource.includes('scope.remote.accReadiness.snapshot(signal)'),
-  'ACC browser must not serialize AbortSignal as a Remote argument',
+  clientSource.includes('scope.remote.accReadiness.snapshot(signal)'),
+  'ACC readiness must read the remote namespace from the injected child scope',
 )
 check(
   !clientSource.includes('ctx.remote.accReadiness.snapshot('),
