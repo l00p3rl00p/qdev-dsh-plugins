@@ -26,8 +26,23 @@ const clientSource = readFileSync('src/client/index.tsx', 'utf8')
 const childInject = "ctx.inject(['slots', 'configForms', 'uiConversation', 'remote.accReadiness'], (scope) => {"
 check(clientSource.includes(childInject), 'ACC readiness requires a child-scoped remote.accReadiness injection')
 check(
-  clientSource.includes('scope.remote.accReadiness.snapshot(signal)'),
-  'ACC readiness must read the remote namespace from the injected child scope',
+  clientSource.includes('scope.remote.accReadiness.snapshot()'),
+  'ACC readiness must call the zero-argument Remote snapshot from the injected child scope',
+)
+// The generated-equivalent Typert contract declares no positional parameters.
+// Never silently accept an AbortSignal as a serialized Remote argument.
+const remoteContract = readFileSync('src/typert.remote-client.ts', 'utf8')
+check(
+  /snapshot\(\): Promise<RemoteResult<AccReadinessSnapshot>>/.test(remoteContract),
+  'ACC client contract must declare a zero-argument readiness snapshot',
+)
+check(
+  /parameters:\s*\[\]/.test(remoteContract),
+  'ACC readiness Remote descriptor must declare zero parameters',
+)
+check(
+  !clientSource.includes('scope.remote.accReadiness.snapshot(signal)'),
+  'ACC browser must not serialize AbortSignal as a Remote argument',
 )
 check(
   !clientSource.includes('ctx.remote.accReadiness.snapshot('),
