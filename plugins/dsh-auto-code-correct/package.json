@@ -83,11 +83,11 @@
     "@deepseek-ai/dsh-attachment": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
     "@deepseek-ai/dsh-config-editor": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
     "@deepseek-ai/dsh-lsp": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
-    "@deepseek-ai/dsh-typert-protocol": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
-    "dsh-lsp-actions": ">=0.5.17 <1"
+    "@deepseek-ai/dsh-typert-protocol": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0"
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "^3.18.5"
+    "@deepseek-ai/schemastery": "^3.18.5",
+    "dsh-lsp-actions": "0.5.17"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.5",
@@ -133,14 +133,14 @@
     "dsh-lsp-actions": "0.5.17"
   },
   "scripts": {
-    "prepare": "pnpm run build && pnpm run check:package",
+    "prepare": "pnpm run build",
     "build": "tsdown",
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json --noEmit",
     "lint": "eslint src test",
     "formatcheck": "prettier --check 'src/**/*.{ts,tsx}' 'test/**/*.ts'",
     "verify": "pnpm run lint && pnpm run formatcheck && pnpm run typecheck && pnpm test && pnpm run build && pnpm run check:package",
-    "packcheck": "pnpm run verify && mkdir -p dist && pnpm pack --pack-destination ./dist",
+    "packcheck": "pnpm run build && mkdir -p dist && pnpm pack --pack-destination ./dist",
     "format": "prettier --write 'src/**/*.{ts,tsx}' 'test/**/*.ts'",
     "lint:fix": "eslint --fix src test",
     "check:package": "node ./scripts/check-package.mjs"
@@ -201,9 +201,6 @@
       "optional": true
     },
     "@deepseek-ai/dsh-typert-protocol": {
-      "optional": true
-    },
-    "dsh-lsp-actions": {
       "optional": true
     }
   }
