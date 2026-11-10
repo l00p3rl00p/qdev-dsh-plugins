@@ -23,7 +23,6 @@ import {
   type AccResultMeta,
 } from './operation-record.js'
 import type { Language } from './capabilities.js'
-import * as nativeLspStdio from '@deepseek-ai/dsh-lsp-stdio'
 import * as lspActions from 'dsh-lsp-actions'
 import type { Context, Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
@@ -382,7 +381,18 @@ export function apply(ctx: Context, config: Config): void {
         )
       }
     }
-    if (Object.keys(entries).length) scoped.plugin(nativeLspStdio, { servers: entries })
+    if (Object.keys(entries).length) {
+      // The native LSP stdio package is deployment-provided. Resolve it only
+      // after DSH has supplied an LSP service and a language server is usable.
+      // An absent optional integration must not prevent ACC's checker pipeline
+      // or the Web UI from loading.
+      try {
+        const nativeLspStdio = await import('@deepseek-ai/dsh-lsp-stdio')
+        scoped.plugin(nativeLspStdio, { servers: entries })
+      } catch (error) {
+        console.warn('[auto-code-correct] native LSP stdio unavailable: ' + errorMessage(error))
+      }
+    }
   })
 
   // Reuse the existing multi-language LSP actions plugin. It accepts an arbitrary
