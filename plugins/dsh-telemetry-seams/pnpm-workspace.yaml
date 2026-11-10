@@ -1,0 +1,4 @@
+# Only the plugin's verified source-build prerequisite is permitted.
+# This file is shipped with GitHub source; QClean must use it unchanged.
+allowBuilds:
+  esbuild: true
