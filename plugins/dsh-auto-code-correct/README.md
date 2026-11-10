@@ -1,3 +1,5 @@
+> **CANONICAL ACC SOURCE.** This is the only active ACC development and release location. Do not edit, build from, or publish the deprecated standalone ACC repository or Scratchpad copies.
+
 <div align="center">
 
 # dsh-auto-code-correct (ACC)
@@ -55,13 +57,13 @@ docker exec -it quatrus-harness-deepseek-harness bash -lc 'dsh plugin --profile 
 docker restart quatrus-harness-deepseek-harness
 ```
 
-If ACC still loads, inspect `dsh --profile web --dump-config` and the effective profile/home Cordis patch for a separately configured ACC insertion; disable only that insertion through the native configuration path and restart once. Do **not** delete `~/.dsh`, clear sessions, remove other plugins, or rebuild the entire Docker stack. Full operator details: [ACC Runbook](RUNBOOK.md#emergency-recovery--bad-web-plugin) and [shared plugin lessons](https://github.com/l00p3rl00p/quatrus-scratchpad/blob/main/plugins/plugin-lessons.md).
+If ACC still loads, inspect `dsh --profile web --dump-config` and the effective profile/home Cordis patch for a separately configured ACC insertion; disable only that insertion through the native configuration path and restart once. Do **not** delete `~/.dsh`, clear sessions, remove other plugins, or rebuild the entire Docker stack. Full operator details: [ACC Runbook](RUNBOOK.md#emergency-recovery--bad-web-plugin) and [shared plugin lessons](https://github.com/l00p3rl00p/qdev-dsh-plugins/blob/main/plugins/plugin-lessons.md).
 
 ACC 0.1.9 also corrects the Environment readiness panel's native Remote-service injection. It reads the mounted `remote.accReadiness` namespace through an explicitly injected child Cordis scope. The verified package must show readiness on first load and after **Refresh**, without the `without inject` error. See [Runbook](RUNBOOK.md#confirm-installed-readiness-dashboard-acc-019) for live acceptance; CI covers the injection source contract but cannot substitute for an installed browser session.
 
 ## Browser safety and recovery
 
-**Mandatory DSH plugin lessons:** [All-plugin lessons learned](https://github.com/l00p3rl00p/quatrus-scratchpad/blob/main/plugins/plugin-lessons.md), including the ACC-specific findings.
+**Mandatory DSH plugin lessons:** [All-plugin lessons learned](https://github.com/l00p3rl00p/qdev-dsh-plugins/blob/main/plugins/plugin-lessons.md), including the ACC-specific findings.
 
 ACC's Web settings and AutoCorrect tab can fail before the DSH Plugins UI is accessible if the published `lib/client.js` retains a dependency the DSH browser ModuleLoader cannot resolve. The versioned GitHub Actions packager now executes `pnpm run verify`, including `scripts/check-package.mjs`, which checks the **built** browser bundle's loader registration and external `require()` calls, self-tests the scanner against the original failure, and smoke-executes the generated client factory under a guarded DSH-style loader. A green Host-side install alone never proves browser startup. Only install the tarball built from the verified source revision; after installation verify browser startup and real ACC behavior. To recover without the UI, use the explicit CLI removal procedure in the [Runbook](RUNBOOK.md#emergency-recovery--bad-web-plugin). The project source checkout is not the installed plugin copy.
 
@@ -111,7 +113,7 @@ Use `/acc status <capability-id>` in DSH to inspect an available tool and `/acc 
 
 ## Plugin completion contract
 
-ACC is the **programming/linting plugin**. Its authoritative source, package, user documentation and release checks live in **this repository**. [Quatrus Scratchpad](https://github.com/l00p3rl00p/quatrus-scratchpad) owns the separate **SOUP trajectory-drift plugin** and its historical experiments; SOUP is not a dependency of ACC. Both plugins run within DSH and can use whichever compatible model endpoint the Harness is configured to use, including local inference. ACC does not require a training platform, a frontier model, or a dedicated Docker service.
+ACC is the **programming/linting plugin**. Its sole active source, package, user documentation, and release checks live in **this directory of qdev-dsh-plugins**. The standalone ACC repository and Scratchpad copies are deprecated. SOUP is separately maintained at [`../qdev-soup-drift/`](../qdev-soup-drift/) and is not an ACC dependency. Both plugins run within DSH and can use whichever compatible model endpoint the Harness is configured to use, including local inference. ACC does not require a training platform, a frontier model, or a dedicated Docker service.
 
 Before declaring ACC production-ready, reconcile code, manifest, native host entry, browser settings client, README, [architecture](ARCHITECTURE.md), [environment](ENVIRONMENT.md), and [runbook](RUNBOOK.md). The confirmed user-facing contract is: install in the intended DSH profile; appear in Plugins; open the native settings page; persist toggles; display read-only executable/project readiness; run enabled corrections on a real disposable edit; record those operations in AutoCorrect; report diagnostics back to the agent; and exercise Git hygiene separately. ACC uses an owned durable session event for its tab rather than altering `tool/result`; native nested Chat/Trajectory children and a post-execute metadata patch remain upstream platform requirements. CI and packed-package import tests prove packaging, **not** Web settings mounting or live agent behavior. Missing pieces remain explicit rather than silently treated as finished. Prefer native DSH plugin/UI seams; any new custom integration requires an audit and human approval.
 
@@ -124,7 +126,7 @@ Before declaring ACC production-ready, reconcile code, manifest, native host ent
 | How do I install, operate, and recover it? | [Runbook](RUNBOOK.md) |
 | Which versions, dependencies, and commands are declared? | [Package manifest](package.json) |
 | How do I contribute? | [Contributing](CONTRIBUTING.md) |
-| What should a future ACC change avoid repeating? | [All-plugin lessons learned](https://github.com/l00p3rl00p/quatrus-scratchpad/blob/main/plugins/plugin-lessons.md) |
+| What should a future ACC change avoid repeating? | [All-plugin lessons learned](https://github.com/l00p3rl00p/qdev-dsh-plugins/blob/main/plugins/plugin-lessons.md) |
 | What is the original project and license? | [Attribution](ATTRIBUTION.md) · [MIT license](LICENSE) |
 
 ## License and attribution
