@@ -385,12 +385,14 @@ export function apply(ctx: Context, config: Config): void {
       // after DSH has supplied an LSP service and a language server is usable.
       // An absent optional integration must not prevent ACC's checker pipeline
       // or the Web UI from loading.
+      let nativeLspStdio: typeof import('@deepseek-ai/dsh-lsp-stdio')
       try {
-        const nativeLspStdio = await import('@deepseek-ai/dsh-lsp-stdio')
-        scoped.plugin(nativeLspStdio, { servers: entries })
+        nativeLspStdio = await import('@deepseek-ai/dsh-lsp-stdio')
       } catch (error) {
-        console.warn('[auto-code-correct] native LSP stdio unavailable: ' + errorMessage(error))
+        console.warn('[auto-code-correct] native LSP stdio could not be loaded: ' + errorMessage(error))
+        return
       }
+      scoped.plugin(nativeLspStdio, { servers: entries })
     }
   })
 
@@ -471,12 +473,14 @@ export function apply(ctx: Context, config: Config): void {
     if (Object.keys(entries).length > 0) {
       // LSP action support is an integration, not a prerequisite for ACC.
       // If the Harness already registered these tools, we returned above.
+      let lspActions: typeof import('dsh-lsp-actions')
       try {
-        const lspActions = await import('dsh-lsp-actions')
-        scoped.plugin(lspActions, { servers: entries, editor: { enabled: false } })
+        lspActions = await import('dsh-lsp-actions')
       } catch (error) {
-        console.warn('[auto-code-correct] LSP actions unavailable: ' + errorMessage(error))
+        console.warn('[auto-code-correct] LSP actions provider could not be loaded: ' + errorMessage(error))
+        return
       }
+      scoped.plugin(lspActions, { servers: entries, editor: { enabled: false } })
     }
   })
 
