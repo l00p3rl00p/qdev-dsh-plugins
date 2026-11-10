@@ -14,6 +14,8 @@
 import { readFileSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { runInNewContext } from 'node:vm'
+import { createRequire } from 'node:module'
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..')
 const errors = []
@@ -48,18 +50,60 @@ check('client.js has __ModuleLoader__.load banner', () => {
   }
 })
 
-// 3. No unsupported Node-only static require() in client.js
-//    (node: builtins are never available in the DSH web loader)
-check('client.js has no Node built-in require() calls', () => {
-  const src = requireFile('lib/client.js')
-  const nodeRequire = /require\(['"]node:/g
-  const matches = src.match(nodeRequire) ?? []
-  if (matches.length > 0) {
-    throw new Error(`found ${matches.length} require('node:...) call(s) in browser bundle`)
+// 3. Browser imports must exist in the native DSH ModuleLoader.
+// Reject *all* unsupported require() imports, not just Node built-ins.
+const allowedClientImports = new Set([
+  'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client',
+  '@deepseek-ai/cordis', '@deepseek-ai/dsh-client-ui-slots',
+  '@deepseek-ai/dsh-client-web-react', '@deepseek-ai/dsh-client-ui-primitives',
+  '@deepseek-ai/dsh-client-ui-conversation',
+])
+const browserRequires = (text) => [...text.matchAll(/\\brequire\\(\\s*['\"]([^'\"]+)['\"]\\s*\\)/g)].map((match) => match[1])
+check('browser require scanner recognizes known unsupported import', () => {
+  if (!browserRequires('require("@deepseek-ai/dsh-typert-protocol/remote-info")').includes('@deepseek-ai/dsh-typert-protocol/remote-info')) {
+    throw new Error('browser import scanner missed a known broken module')
+  }
+})
+check('client.js has only DSH-provided browser require() imports', () => {
+  const unsupported = [...new Set(browserRequires(requireFile('lib/client.js')).filter((name) => !allowedClientImports.has(name)))]
+  if (unsupported.length) throw new Error('unsupported browser imports: ' + unsupported.join(', '))
+})
+
+// 4. Validate the browser artifact by executing its native loader registration.
+check('emitted client registers a valid DSH Web factory', () => {
+  const loaded = []
+  const requireFromPlugin = createRequire(import.meta.url)
+  runInNewContext(requireFile('lib/client.js'), {
+    window: {
+      __ModuleLoader__: {
+        load(definition) {
+          const imports = (name) => {
+            if (!allowedClientImports.has(name)) throw new Error('unsupported DSH Web import ' + name)
+            return requireFromPlugin(name)
+          }
+          loaded.push({ id: definition.id, exports: definition.factory(imports) })
+        },
+      },
+    },
+  }, { filename: 'lib/client.js', timeout: 5000 })
+  if (loaded.length !== 1 || loaded[0].id !== 'dsh-telemetry-seams' || typeof loaded[0].exports?.apply !== 'function') {
+    throw new Error('missing expected plugin ID or exported apply()')
   }
 })
 
-// 4. Locale metadata
+// 5. Check Remote client/Host argument-count agreement at the source boundary.
+check('probe Remote contract uses zero arguments and child injection', () => {
+  const client = requireFile('src/client/index.tsx')
+  const contract = requireFile('src/remote-client.ts')
+  const host = requireFile('src/inventory-service.ts')
+  if (!client.includes("'remote.telemetrySeamsInventory'], (scope) =>")) throw new Error('missing child-injected Remote scope')
+  if (!client.includes('scope.remote.telemetrySeamsInventory.probe()')) throw new Error('client must invoke probe with zero arguments')
+  if (client.includes('scope.remote.telemetrySeamsInventory.probe(signal)')) throw new Error('client passes an undeclared AbortSignal')
+  if (!contract.includes('probe(): Promise<RemoteResult<SeamInventory>>') || !/parameters:\\s*\\[\\]/.test(contract)) throw new Error('Typert descriptor must declare zero arguments')
+  if (!host.includes('async probe(): Promise<SeamInventory>')) throw new Error('Host must expose zero-argument probe')
+})
+
+// 6. Locale metadata
 check('locale/en.json has meta.title and meta.description', () => {
   const raw = requireFile('locale/en.json')
   const locale = JSON.parse(raw)
@@ -68,13 +112,13 @@ check('locale/en.json has meta.title and meta.description', () => {
   if (locale.meta.title === 'My Decoration') throw new Error('title is still template copy')
 })
 
-// 5. Icon
+// 7. Icon
 check('icon.svg exists and contains <svg', () => {
   const src = requireFile('icon.svg')
   if (!src.includes('<svg')) throw new Error('icon.svg does not look like SVG')
 })
 
-// 6. Patch
+// 8. Patch
 check('cordis.patch.yml exists', () => requireFile('cordis.patch.yml'))
 
 // Report
