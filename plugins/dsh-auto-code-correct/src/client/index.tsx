@@ -1,18 +1,15 @@
 /** Native DSH ConfigForms settings companion for ACC. */
-import React, { useEffect, useState, useSyncExternalStore } from 'react'
+import React, { useState, useSyncExternalStore } from 'react'
 import type { CSSProperties } from 'react'
 import type { Context } from '@deepseek-ai/cordis'
 import type { ConfigForm } from '@deepseek-ai/dsh-client-ui-settings/client'
 import type {} from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import type {} from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
-import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import type { ConfigPageForm, PluginConfigViewProps } from '@deepseek-ai/dsh-client-ui-plugin-manager/client'
 import { CAPABILITIES } from '../capabilities.js'
 import type { Language } from '../capabilities.js'
 import { registerAutoCorrectView } from './autocorrect-view.js'
-import { TYPERT_REMOTE } from '../typert.remote-client.js'
-import type { AccReadinessSnapshot } from '../readiness.js'
 
 type Settings = {
   languages?: Record<Language, boolean>
@@ -82,15 +79,10 @@ const descriptionStyle: CSSProperties = {
   lineHeight: '20px',
 }
 
-// Client services must be explicitly declared for the Cordis browser runner.
-// `uiConversation` owns the AutoCorrect tab registration.
-export const inject = ['slots', 'configForms', 'uiConversation', 'remote']
+export const inject = ['slots', 'configForms']
 export const name = 'auto-code-correct-settings'
 
-function createPluginPage(
-  scope: ConfigForm<Record<string, unknown>>,
-  loadReadiness: (signal: AbortSignal) => Promise<AccReadinessSnapshot>,
-) {
+function createPluginPage(scope: ConfigForm<Record<string, unknown>>) {
   const subscribe = (listener: () => void) => scope.subscribe(listener)
   const getSnapshot = () => scope.getSnapshot()
   const mutate = scope.mutate.bind(scope)
@@ -98,7 +90,7 @@ function createPluginPage(
   return function PluginPage({ view }: PluginConfigViewProps): React.JSX.Element {
     const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
     if (view === 'summary') return <span>Language gates, autofix, verification, and Git hygiene.</span>
-    return <ConfigPage form={{ state, mutate }} loadReadiness={loadReadiness} />
+    return <ConfigPage form={{ state, mutate }} />
   }
 }
 
@@ -156,41 +148,14 @@ function PreferenceToggle({
   )
 }
 
-function ConfigPage({
-  form,
-  loadReadiness,
-}: {
-  form: ConfigPageForm
-  loadReadiness: (signal: AbortSignal) => Promise<AccReadinessSnapshot>
-}): React.JSX.Element {
+function ConfigPage({ form }: { form: ConfigPageForm }): React.JSX.Element {
   const snapshot = form.state
   const [working, setWorking] = useState<string | null>(null)
   const [error, setError] = useState('')
-  const [readiness, setReadiness] = useState<AccReadinessSnapshot | null>(null)
-  const [readinessError, setReadinessError] = useState('')
-  const [refreshingReadiness, setRefreshingReadiness] = useState(false)
   const value = (snapshot.value ?? {}) as Settings
   const languages = { ...FALLBACK_LANGUAGES, ...value.languages }
   const capabilities = value.capabilities ?? {}
   const servers = { ...FALLBACK_SERVERS, ...value.languageServers }
-
-  async function refreshReadiness(signal: AbortSignal): Promise<void> {
-    setRefreshingReadiness(true)
-    setReadinessError('')
-    try {
-      setReadiness(await loadReadiness(signal))
-    } catch (err) {
-      if (!signal.aborted) setReadinessError(err instanceof Error ? err.message : String(err))
-    } finally {
-      if (!signal.aborted) setRefreshingReadiness(false)
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController()
-    void refreshReadiness(controller.signal)
-    return () => controller.abort()
-  }, [snapshot.revision])
 
   async function change(path: string[], next: boolean): Promise<void> {
     if (snapshot.status !== 'ready' || !snapshot.writable) return
@@ -284,69 +249,6 @@ function ConfigPage({
           {error}
         </p>
       ) : null}
-      <section style={cardStyle} aria-label="Environment readiness">
-        <div style={{ ...rowStyle, paddingTop: 0 }}>
-          <span style={copyStyle}>
-            <h3 style={titleStyle}>Environment readiness</h3>
-            <span style={descriptionStyle}>
-              {readiness
-                ? `Last checked ${new Date(readiness.checkedAt).toLocaleTimeString()} · ${readiness.projectPath}`
-                : 'Checking executable and project configuration readiness…'}
-            </span>
-          </span>
-          <button
-            type="button"
-            disabled={refreshingReadiness}
-            onClick={() => void refreshReadiness(new AbortController().signal)}
-          >
-            {refreshingReadiness ? 'Checking…' : 'Refresh'}
-          </button>
-        </div>
-        {readinessError ? (
-          <p role="alert" style={{ ...hintStyle, color: 'var(--dsw-alias-state-error-primary)' }}>
-            {readinessError}
-          </p>
-        ) : null}
-        {readiness?.tools.map((tool) => {
-          const isWarning = tool.state === 'unavailable' || tool.state === 'failed'
-          const isInfo = tool.state === 'installed' || tool.state === 'configured'
-          const warningColor = 'var(--dsw-alias-state-warning-primary)'
-          const errorColor = 'var(--dsw-alias-state-error-primary)'
-          const successColor = 'var(--dsw-alias-state-success-primary)'
-          const stateColor =
-            tool.state === 'ready'
-              ? successColor
-              : tool.state === 'disabled'
-                ? 'var(--dsw-alias-label-secondary)'
-                : isWarning
-                  ? tool.state === 'failed'
-                    ? errorColor
-                    : warningColor
-                  : 'var(--dsw-alias-label-primary)'
-
-          return (
-            <div key={tool.id} style={{ ...rowStyle, borderTop: '1px solid var(--dsw-alias-border-l2)' }}>
-              <span style={copyStyle}>
-                <span style={labelStyle}>
-                  {tool.state === 'ready' && '✓ '}
-                  {isWarning && '⚠ '}
-                  {tool.state === 'failed' && '✗ '}
-                  {tool.label}
-                </span>
-                <span style={{ ...descriptionStyle, color: isWarning ? warningColor : undefined }}>
-                  {tool.state === 'unavailable' && '⚠ Tool not found. Please install or configure path.'}
-                  {tool.state === 'failed' && '✗ Tool configuration failed. Check settings.'}
-                  {tool.state !== 'unavailable' && tool.state !== 'failed' && tool.detail}
-                  {tool.version ? ` · ${tool.version}` : ''}
-                </span>
-              </span>
-              <strong style={{ ...descriptionStyle, textTransform: 'capitalize', color: stateColor }}>
-                {tool.state}
-              </strong>
-            </div>
-          )
-        })}
-      </section>
       <section style={cardStyle}>
         <h3 style={titleStyle}>Languages and tools</h3>
         <p style={hintStyle}>
@@ -389,34 +291,23 @@ function ConfigPage({
   )
 }
 
-export async function apply(ctx: Context): Promise<() => Promise<void>> {
-  // Mount creates remote.accReadiness, but the mounting fiber cannot read
-  // its own newly-created service. Cordis grants that access only to a child
-  // fiber explicitly injecting the namespace (DSH native Remote pattern).
-  const disposeRemote = await ctx.remote.$mount(TYPERT_REMOTE)
-  ctx.inject(['slots', 'configForms', 'uiConversation', 'remote.accReadiness'], (scope) => {
-    registerAutoCorrectView(scope)
-    const config = scope.configForms.get<Record<string, unknown>>('auto-code-correct')
-    const PluginPage = createPluginPage(config, async (signal) => {
-      const result = await scope.remote.accReadiness.snapshot(signal)
-      if (!result.ok) throw result.error
-      return result.value
-    })
-    scope.effect(
-      () =>
-        scope.configForms.whileServed(['auto-code-correct'], () =>
-          scope.slots.inject('plugins.bundle.config', () =>
-            scope.slots.register(
-              {
-                name: 'plugins.bundle.config',
-                key: 'dsh-auto-code-correct',
-              },
-              PluginPage,
-            ),
+export function apply(ctx: Context): void {
+  registerAutoCorrectView(ctx)
+  const scope = ctx.configForms.get<Record<string, unknown>>('auto-code-correct')
+  const PluginPage = createPluginPage(scope)
+  ctx.effect(
+    () =>
+      ctx.configForms.whileServed(['auto-code-correct'], () =>
+        ctx.slots.inject('plugins.bundle.config', () =>
+          ctx.slots.register(
+            {
+              name: 'plugins.bundle.config',
+              key: 'dsh-auto-code-correct',
+            },
+            PluginPage,
           ),
         ),
-      'auto-code-correct: plugin detail configuration',
-    )
-  })
-  return disposeRemote
+      ),
+    'auto-code-correct: plugin detail configuration',
+  )
 }
