@@ -133,7 +133,6 @@
     "dsh-lsp-actions": "0.5.17"
   },
   "scripts": {
-    "prepare": "pnpm run build",
     "build": "tsdown",
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json --noEmit",
