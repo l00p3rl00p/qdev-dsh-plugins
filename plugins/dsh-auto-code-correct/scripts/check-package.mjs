@@ -20,21 +20,30 @@ check(pkg.exports?.['./client']?.default === './lib/client.js', 'Client entry ex
 // Inspect the exact browser artifact packaged for installation, including CJS
 // requires (which tsdown's deps.onlyImport does not check).
 const clientText = readFileSync('lib/client.js', 'utf8')
-// Regression: Cordis requires the plugin's own remote namespace to be
-// consumed from a child injection scope, never the mounting parent fiber.
+// Regression: the native plugin Options/Settings page must register directly
+// from the normal ConfigForms + slots services. Do not make this UI depend on
+// readiness Remote activation; a Remote failure must not remove plugin settings.
 const clientSource = readFileSync('src/client/index.tsx', 'utf8')
-const childInject = "ctx.inject(['slots', 'configForms', 'uiConversation', 'remote.accReadiness'], (scope) => {"
-check(clientSource.includes(childInject), 'ACC readiness requires a child-scoped remote.accReadiness injection')
 check(
-  clientSource.includes('scope.remote.accReadiness.snapshot(signal)'),
-  'ACC readiness must read the remote namespace from the injected child scope',
+  clientSource.includes("export const inject = ['slots', 'configForms']"),
+  'ACC native settings client must inject slots + configForms directly',
 )
 check(
-  !clientSource.includes('ctx.remote.accReadiness.snapshot('),
-  'ACC readiness must never read its own mounted remote namespace from the parent context',
+  clientSource.includes("ctx.configForms.get<Record<string, unknown>>('auto-code-correct')"),
+  'ACC native settings page must bind the auto-code-correct ConfigForm directly',
 )
-const parentInject = clientSource.match(/export const inject\s*=\s*\[([^\]]*)\]/)?.[1] ?? ''
-check(!parentInject.includes('remote.accReadiness'), 'Parent inject must not depend on its own mounted namespace')
+check(
+  clientSource.includes("ctx.configForms.whileServed(['auto-code-correct']"),
+  'ACC native settings page must wait for its ConfigForm namespace',
+)
+check(
+  clientSource.includes("ctx.slots.inject('plugins.bundle.config'"),
+  'ACC native settings page must register through the native plugin config slot',
+)
+check(
+  clientSource.includes("key: 'dsh-auto-code-correct'"),
+  'ACC native settings page must register under the installed package key',
+)
 
 const allowedClientImports = new Set(['react', 'react/jsx-runtime'])
 const browserRequirePattern = /\brequire\(\s*['"]([^'"]+)['"]\s*\)/g
