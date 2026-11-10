@@ -47,6 +47,15 @@ check(
 // Never silently accept an AbortSignal as a serialized Remote argument.
 const remoteContract = readFileSync('src/typert.remote-client.ts', 'utf8')
 check(
+  !remoteContract.includes('../node_modules/'),
+  'Typert client contract must not import pnpm-internal node_modules paths',
+)
+check(
+  remoteContract.includes("from '@deepseek-ai/dsh-typert-protocol/remote-info'"),
+  'Typert must use the official DSH SDK remote-info export',
+)
+
+check(
   /snapshot\(\): Promise<RemoteResult<AccReadinessSnapshot>>/.test(remoteContract),
   'ACC client contract must declare a zero-argument readiness snapshot',
 )
