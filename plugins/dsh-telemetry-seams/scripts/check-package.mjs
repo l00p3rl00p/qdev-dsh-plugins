@@ -34,6 +34,11 @@ function requireFile(rel) {
   return readFileSync(p, 'utf8')
 }
 
+check('GitHub subdirectory source install builds assets', () => {
+  const pkg = JSON.parse(requireFile('package.json'))
+  if (pkg.scripts?.prepare !== 'pnpm run build') throw new Error('GitHub install must compile Host and Web assets via prepare')
+})
+
 // 1. Required built files
 check('lib/index.js exists', () => requireFile('lib/index.js'))
 check('lib/client.js exists', () => requireFile('lib/client.js'))
