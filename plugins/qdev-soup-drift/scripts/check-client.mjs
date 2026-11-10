@@ -16,7 +16,7 @@ for (const file of packedFiles) {
   const declared = (pkg.files ?? []).some((entry) =>
     entry === file ||
     entry === file.split('/')[0] ||
-    (entry.endsWith('/*.json') && file.startsWith(entry.slice(0, -6) + '/') && file.endsWith('.json'))
+    (entry.endsWith('/*.json') && file.startsWith(entry.slice(0, -6)) && file.endsWith('.json'))
   )
   if (!declared) errors.push('Asset is omitted by package files: ' + file)
 }
