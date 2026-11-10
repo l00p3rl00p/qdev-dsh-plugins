@@ -15,6 +15,24 @@ about how data flows. That independence is intentional and permanent.
 
 ---
 
+## Install or update directly from GitHub (native DSH)
+
+Use **Plugins → Add plugin** in the running DSH Web UI and paste this exact Git source spec (not the GitHub `tree/main` webpage URL):
+
+```text
+github:l00p3rl00p/qdev-dsh-plugins#main&path:/plugins/dsh-telemetry-seams
+```
+
+The equivalent native CLI command, if the Web UI is unavailable, is:
+
+```sh
+dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#main&path:/plugins/dsh-telemetry-seams'
+```
+
+This repository is a **monorepo**. The `&path:/plugins/...` fragment selects the actual installable package; omitting it would install the wrong root. The package's `prepare` script builds `lib/` from source during Git installation. pnpm may require explicit approval of the trusted dsh-telemetry-seams build script in the active Web profile's `pnpm-workspace.yaml` (`allowBuilds`); follow the native installer diagnostic and retry. Git installs do not use the QClean tarball, and the installed Git dependency remains in the profile across restarts. Restart DSH after replacing an existing Host plugin and verify the browser and plugin capability. If the original QDev launcher controls this profile, it must not overwrite this source on startup.
+
+---
+
 ## Quick start
 
 After installation into an appropriate `web` profile, use it in two ways:
