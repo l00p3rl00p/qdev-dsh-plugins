@@ -2,6 +2,18 @@
 
 **One authoritative lessons document for every DSH plugin in `plugins/`.** New discoveries belong here, with the plugin and DSH version identified. Do not create plugin-specific lessons files or duplicate this technical record elsewhere. Each plugin README remains a standalone *operator* guide, including its own emergency escape command; its architecture, environment and runbook document that plugin's actual implementation.
 
+## Shared build and release lessons — ACC isolation, November 9, 2026
+
+**Scope:** Applies to every DSH plugin. The observed instance was ACC 0.1.12 in the isolated DSH 0.2.2-rc.1 clean environment. These fixes were committed but still required a complete clean build and browser retest at the time of writing.
+
+1. **Treat warnings as actionable diagnostics, not cosmetic output.** Trace each warning to its producing tool and actual configuration. Do not globally lower log levels or suppress warnings just to get a clean-looking build. A warning is not automatically a security vulnerability, but unexamined warnings weaken release confidence.
+2. **Keep dependency build approvals explicit, scoped, and state-aware.** With pnpm 12.18.0, running `approve-builds` after declaring the four requested packages in a local `allowBuilds` policy emitted a warning that none was awaiting approval. Remove redundant approval calls, not the supply-chain checks. New or unexpected install scripts must still be inspected and explicitly authorized.
+3. **Separate execution target from output module format.** A browser loader may require a CommonJS wrapper even though the Host runs ESM. ACC's browser bundle inherited the package's Node 22.19 compilation target, prompting tsdown's legacy-CJS warning. The fix is to specify the *browser bundle's* syntax target separately (ACC uses `es2022`) while retaining the loader-required format. Do not blindly convert a working browser bundle to ESM or hide the warning.
+4. **Change all sides of a remote API contract together.** When a Host method declares zero arguments, its browser caller, type declaration, generated-equivalent remote descriptor, and package/regression checks must all agree. In ACC, sending an `AbortSignal` as a positional argument to `accReadiness.snapshot()` produced `expected 0 argument(s), got 1`. Cancellation belongs in the caller's UI lifecycle, not as an undeclared serialized method argument. The first source fix exposed a stale package test still requiring the old call: update the test oracle when the contract changes, without weakening the assertion.
+5. **A green unit suite and successful bundle do not prove a releasable plugin.** ACC passed 32 unit tests and produced both bundles, then failed the package-contract gate. Required acceptance is: lint/format/types/tests → build → emitted bundle/package checks → native install → actual browser registration, click/action, session creation/reopen and reload. Record which gates genuinely ran; do not claim browser acceptance based on build output.
+
+**Code authority:** [ACC implementation](plugins/dsh-auto-code-correct/), its [package check](plugins/dsh-auto-code-correct/scripts/check-package.mjs), [build configuration](plugins/dsh-auto-code-correct/tsdown.config.ts), and [QClean recovery runbook](https://github.com/l00p3rl00p/qdocker-compose/blob/main/cleanbuild/RUNBOOK.md). The standalone ACC GitHub repository and Scratchpad ACC copy are deprecated; do not use them as sources for fixes or release artifacts.
+
 ## Shared operational rules — reusable across every DSH plugin
 
 ### Configuration design: no `.volatile()` in new plugin configuration
