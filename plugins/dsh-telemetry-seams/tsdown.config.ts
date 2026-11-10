@@ -1,4 +1,9 @@
 import { defineConfig } from 'tsdown'
+import { fileURLToPath } from 'node:url'
+
+// Bundle the real Typert runtime into DSH Web; it is not a browser loader module.
+const remoteInfoRuntime = fileURLToPath(import.meta.resolve('@deepseek-ai/dsh-typert-protocol/remote-info'))
+if (!remoteInfoRuntime.endsWith('.js')) throw new Error('Typert remote-info resolved to a non-JavaScript entry')
 
 const clientModules = [
   'react',
@@ -27,10 +32,21 @@ export default defineConfig([
     outDir: 'lib',
     format: 'cjs',
     platform: 'browser',
+    // A browser ModuleLoader bundle must not inherit package engines.node.
+    // Retain DSH's required CJS wrapper while targeting browser syntax.
+    target: 'es2022',
+    alias: {
+      '@deepseek-ai/dsh-typert-protocol/remote-info': remoteInfoRuntime,
+    },
     clean: false,
     dts: false,
     deps: {
       neverBundle: clientModules,
+      alwaysBundle: [
+        '@deepseek-ai/dsh-typert-protocol',
+        '@deepseek-ai/dsh-typert-protocol/remote-info',
+        'zod',
+      ],
     },
     outputOptions: {
       entryFileNames: 'client.js',
