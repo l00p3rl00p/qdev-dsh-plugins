@@ -37,6 +37,11 @@ export default defineConfig([
     outDir: 'lib',
     format: 'cjs',
     platform: 'browser',
+    // This bundle runs inside DSH Web's browser ModuleLoader, not Node.js.
+    // tsdown otherwise inherits engines.node (22.19) for BOTH build entries,
+    // incorrectly interpreting browser CJS as legacy Node CommonJS.
+    // Target modern browser syntax while keeping DSH's required loader format.
+    target: 'es2022',
     // The pnpm/tsdown rc.5 subpath can otherwise be left as a CJS external.
     // Alias explicitly to the package's JS runtime entry, not its .d.ts metadata.
     alias: {
