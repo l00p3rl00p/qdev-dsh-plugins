@@ -67,6 +67,24 @@ ACC 0.1.9 also corrects the Environment readiness panel's native Remote-service 
 
 ACC's Web settings and AutoCorrect tab can fail before the DSH Plugins UI is accessible if the published `lib/client.js` retains a dependency the DSH browser ModuleLoader cannot resolve. The versioned GitHub Actions packager now executes `pnpm run verify`, including `scripts/check-package.mjs`, which checks the **built** browser bundle's loader registration and external `require()` calls, self-tests the scanner against the original failure, and smoke-executes the generated client factory under a guarded DSH-style loader. A green Host-side install alone never proves browser startup. Only install the tarball built from the verified source revision; after installation verify browser startup and real ACC behavior. To recover without the UI, use the explicit CLI removal procedure in the [Runbook](RUNBOOK.md#emergency-recovery--bad-web-plugin). The project source checkout is not the installed plugin copy.
 
+## Install or update directly from GitHub (native DSH)
+
+Use **Plugins → Add plugin** in the running DSH Web UI and paste this exact Git source spec (not the GitHub `tree/main` webpage URL):
+
+```text
+github:l00p3rl00p/qdev-dsh-plugins#main&path:/plugins/dsh-auto-code-correct
+```
+
+The equivalent native CLI command, if the Web UI is unavailable, is:
+
+```sh
+dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#main&path:/plugins/dsh-auto-code-correct'
+```
+
+This repository is a **monorepo**. The `&path:/plugins/...` fragment selects the actual installable package; omitting it would install the wrong root. The package's `prepare` script builds `lib/` from source during Git installation. pnpm may require explicit approval of the trusted dsh-auto-code-correct build script in the active Web profile's `pnpm-workspace.yaml` (`allowBuilds`); follow the native installer diagnostic and retry. Git installs do not use the QClean tarball, and the installed Git dependency remains in the profile across restarts. Restart DSH after replacing an existing Host plugin and verify the browser and plugin capability. If the original QDev launcher controls this profile, it must not overwrite this source on startup.
+
+---
+
 ## Getting started
 
 ### Local package installation — QDev Docker
