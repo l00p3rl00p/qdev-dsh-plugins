@@ -1,13 +1,22 @@
 import { defineConfig } from 'tsdown'
-import { fileURLToPath } from 'node:url'
+import { createRequire } from 'node:module'
 
-// Resolve the published runtime entry, not the declaration-only subpath.
-// This is a tsdown resolution hint; the browser code still bundles the module.
-const typertRemoteInfoRuntime = fileURLToPath(
-  import.meta.resolve('@deepseek-ai/dsh-typert-protocol/remote-info'),
-)
-if (!typertRemoteInfoRuntime.endsWith('.js')) {
-  throw new Error('Typert remote-info did not resolve to a runnable JavaScript entry')
+const require = createRequire(import.meta.url)
+
+// DSH's generated Typert client imports this public subpath. Rolldown can
+// externalize it before tsdown's dependency policy sees it, leaving a browser
+// require() that DSH Web's ModuleLoader cannot satisfy. Resolve the public
+// export to its runnable JS file at the bundler boundary instead.
+const typertRemoteInfoRuntime = require.resolve('@deepseek-ai/dsh-typert-protocol/remote-info')
+
+const bundleTypertRemoteInfo = {
+  name: 'acc-bundle-typert-remote-info',
+  resolveId(source: string) {
+    if (source === '@deepseek-ai/dsh-typert-protocol/remote-info') {
+      return typertRemoteInfoRuntime
+    }
+    return null
+  },
 }
 
 const clientModules = [
@@ -39,23 +48,14 @@ export default defineConfig([
     outDir: 'lib',
     format: 'cjs',
     platform: 'browser',
-    // This bundle runs inside DSH Web's browser ModuleLoader, not Node.js.
-    // tsdown otherwise inherits engines.node (22.19) for BOTH build entries,
-    // incorrectly interpreting browser CJS as legacy Node CommonJS.
-    // Target modern browser syntax while keeping DSH's required loader format.
     target: 'es2022',
-    // The pnpm/tsdown rc.5 subpath can otherwise be left as a CJS external.
-    // Alias explicitly to the package's JS runtime entry, not its .d.ts metadata.
-    alias: {
-      '@deepseek-ai/dsh-typert-protocol/remote-info': typertRemoteInfoRuntime,
-    },
+    plugins: [bundleTypertRemoteInfo],
     clean: false,
     dts: false,
     deps: {
       neverBundle: clientModules,
-      // The DSH Web loader only supplies the modules explicitly externalized above.
-      // Typert remote-info is NOT a registered DSH browser loader module.
-      // Bundle its resolved JS entry and its schema dependency.
+      // DSH Web only supplies the modules explicitly externalized above.
+      // Bundle the pure Typert metadata helper and its schema dependency.
       alwaysBundle: [
         '@deepseek-ai/dsh-typert-protocol',
         '@deepseek-ai/dsh-typert-protocol/remote-info',
