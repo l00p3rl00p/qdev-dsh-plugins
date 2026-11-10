@@ -24,6 +24,19 @@ const clientText = readFileSync('lib/client.js', 'utf8')
 // Regression: Cordis requires the plugin's own remote namespace to be
 // consumed from a child injection scope, never the mounting parent fiber.
 const clientSource = readFileSync('src/client/index.tsx', 'utf8')
+const hostSource = readFileSync('src/index.ts', 'utf8')
+// A missing optional LSP package must not crash ACC before Cordis can inject
+// services or readiness can report that the provider is unavailable.
+check(
+  !/^import .* from ['"](?:@deepseek-ai\/dsh-lsp-stdio|dsh-lsp-actions)['"]$/m.test(hostSource),
+  'Optional LSP providers must not be eagerly imported at Host startup',
+)
+check(
+  hostSource.includes("await import('@deepseek-ai/dsh-lsp-stdio')") &&
+    hostSource.includes("await import('dsh-lsp-actions')"),
+  'Optional LSP modules must be loaded only from their guarded integration scopes',
+)
+
 const childInject = "ctx.inject(['slots', 'configForms', 'uiConversation', 'remote.accReadiness'], (scope) => {"
 check(clientSource.includes(childInject), 'ACC readiness requires a child-scoped remote.accReadiness injection')
 check(
