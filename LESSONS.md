@@ -2,6 +2,16 @@
 
 **One authoritative lessons document for every DSH plugin in `plugins/`.** New discoveries belong here, with the plugin and DSH version identified. Do not create plugin-specific lessons files or duplicate this technical record elsewhere. Each plugin README remains a standalone *operator* guide, including its own emergency escape command; its architecture, environment and runbook document that plugin's actual implementation.
 
+## Shared SDK dependency ownership — November 9, 2026
+
+**Observed:** QClean ACC installs emitted pnpm peer warnings when its profile-installed manifest required DSH-owned services; the test launcher compounded the issue by explicitly installing `@deepseek-ai/dsh-lsp` and `@deepseek-ai/dsh-lsp-stdio` into the Web profile. Official DSH 0.2.2-rc.1 `app-boot/src/profile.ts` builds runtime resolution from the installed CLI dependency graph and profile additions, so profile-local pnpm peer resolution is not the authoritative Host module resolver.
+
+- Declare DSH-provided Cordis, Host SDK and browser React services as platform peers with `peerDependenciesMeta.optional`; retain their version compatibility constraints. This follows Better Left Sidebar's existing third-party convention. Missing optional pnpm peer links do **not** prove runtime availability: separately validate required native services and real browser behavior.
+- Do not install another copy of DSH's runtime or its LSP service providers to make a peer warning disappear. Check the already-installed Harness module resolution first and stop if a required service is genuinely unavailable.
+- Keep actual independently owned packages (SOUP: `@deepseek-ai/schemastery`, `zod`; ACC: the authored correction support package) as normal dependencies. Tool executables such as `ruff`, `ty`, and `rust-analyzer` are distinct from JS SDK modules.
+- Keep Host SDK packages required for compiling TypeScript in `devDependencies` only; no changes to the existing verification toolchain or original locked developer versions are required merely to relocate runtime dependency ownership.
+- ACC, Telemetry Seams and SOUP manifests now follow the shared package boundary, but QClean end-to-end checks and SOUP's actual target installation remain **unverified** until run. Do not claim a zero-warning outcome in advance.
+
 ## Shared build and release lessons — ACC isolation, November 9, 2026
 
 **Scope:** Applies to every DSH plugin. The observed instance was ACC 0.1.12 in the isolated DSH 0.2.2-rc.1 clean environment. These fixes were committed but still required a complete clean build and browser retest at the time of writing.
