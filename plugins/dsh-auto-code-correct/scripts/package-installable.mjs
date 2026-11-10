@@ -24,6 +24,8 @@ if (pkg.dsh?.bundle?.patch !== './cordis.patch.yml') fail('Missing DSH bundle pa
 for (const hook of ['preinstall', 'install', 'postinstall']) {
   if (pkg.scripts?.[hook]) fail('Install-time hook is not allowed: ' + hook)
 }
+console.log('[ACC package] Resolving canonical build dependencies from frozen lockfile')
+run('pnpm', ['install', '--frozen-lockfile'])
 console.log('[ACC package] Building and verifying canonical source')
 run('pnpm', ['run', 'verify'])
 for (const file of required) if (!existsSync(resolve(root, file))) fail('Missing build output: ' + file)
