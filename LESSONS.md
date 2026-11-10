@@ -12,6 +12,30 @@
 
 **One authoritative lessons document for every DSH plugin in `plugins/`.** New discoveries belong here, with the plugin and DSH version identified. Do not create plugin-specific lessons files or duplicate this technical record elsewhere. Each plugin README remains a standalone *operator* guide, including its own emergency escape command; its architecture, environment and runbook document that plugin's actual implementation.
 
+## Verified plugin package/install contract — November 10, 2026
+
+This is the shared installation contract for **ACC, Telemetry Seams, and SOUP**. Do not invent a different installer per plugin.
+
+1. **Package from the plugin's canonical source directory.** The package manifest must include the Host entry, Web/client entry when present, Cordis patch, and every runtime file required by that plugin. `prepare` may build the package when Git/subdirectory installation requires it; verification remains plugin-specific, but packaging must produce an ordinary installable plugin package.
+2. **Install through DSH's native plugin manager into the intended profile.** The install boundary is the package/source reference consumed by `dsh plugin --profile web add ...`; do not add a second custom installer, copy files into DSH internals, or mutate the Harness source tree.
+3. **Installation success is its own acceptance gate.** A successful package resolution/add proves only that DSH can install the plugin. UI parity, Host activation, browser loading, configuration pages, and runtime behavior are separate checks.
+4. **Preserve a proven install anchor.** Once an exact source revision/package is shown to install, retain that revision unchanged as a working-install reference before doing feature/UI repair.
+5. **Apply the same pattern to all three plugins.** Current package identities are:
+   - ACC: `dsh-auto-code-correct`
+   - Telemetry Seams: `dsh-telemetry-seams`
+   - SOUP: `qdev-trajectory-drift-soup`
+6. **Do not confuse source verification with target verification.** Build/package checks can reject a bad artifact before installation, but the final proof is the native DSH install followed by the plugin-specific runtime checks in the real target profile.
+
+### ACC proven installation anchor
+
+On November 10, 2026, ACC source commit `83eaca804c39e91ba0cd6fea06698d3d7e1eeba7` was installed successfully by DSH 0.2.2 from its GitHub subdirectory source. It is preserved as branch `working-install/acc-0.1.12-20261110`.
+
+**Status of that anchor: WORKING INSTALL ONLY.** It proves package/source installation. It does **not** prove UI parity or feature completeness. In that installed build, the embedded plugin Web surface appears, while the expected native Options/Settings surface is absent.
+
+### Next ACC repair boundary
+
+Keep the proven install anchor intact. The next change is narrowly scoped to restoring the native ACC Options/Settings page alongside the existing installed surfaces. Do not remove the embedded Web surface as part of this repair, and do not alter the correction engine, readiness behavior, package/install mechanism, or unrelated plugin functionality. Once the native Options/Settings page is restored and verified, install that repaired package into the normal Harness and continue from there.
+
 ## Shared SDK dependency ownership — November 9, 2026
 
 **Observed:** QClean ACC installs emitted pnpm peer warnings when its profile-installed manifest required DSH-owned services; the test launcher compounded the issue by explicitly installing `@deepseek-ai/dsh-lsp` and `@deepseek-ai/dsh-lsp-stdio` into the Web profile. Official DSH 0.2.2-rc.1 `app-boot/src/profile.ts` builds runtime resolution from the installed CLI dependency graph and profile additions, so profile-local pnpm peer resolution is not the authoritative Host module resolver.
