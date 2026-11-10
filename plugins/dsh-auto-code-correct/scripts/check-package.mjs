@@ -9,6 +9,7 @@ function check(ok, message) { if (!ok) errors.push(message) }
 const bundle = pkg.dsh?.bundle
 check(bundle?.patch === './cordis.patch.yml', 'Native DSH bundle patch must resolve to ./cordis.patch.yml')
 check(pkg.name === 'dsh-auto-code-correct', 'Package name must match Cordis bundle name')
+check(pkg.scripts?.prepare === 'pnpm run build', 'GitHub subdirectory installation must build the Host and Web artifacts via prepare')
 for (const path of ['lib/index.js', 'lib/index.d.ts', 'lib/client.js', 'lib/cli.js', 'cordis.patch.yml']) {
   check(existsSync(resolve(path)), 'Missing packaged file: ' + path)
 }
