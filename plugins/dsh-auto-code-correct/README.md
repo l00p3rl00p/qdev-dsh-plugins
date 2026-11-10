@@ -83,14 +83,9 @@ The equivalent native CLI command, if the Web UI is unavailable, is:
 dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#main&path:/plugins/dsh-auto-code-correct'
 ```
 
-**pnpm 12 Git-source build approval:** This package has a `prepare` script. Before installing through the Web UI, the active Web profile must explicitly approve that Git source; the plugin's own reviewed `pnpm-workspace.yaml` governs its build dependencies but cannot grant approval to the parent profile. Merge this entry under the profile's existing `allowBuilds:` mapping in `$DSH_HOME/profiles/web/pnpm-workspace.yaml` (keep every existing entry):
+**Git build approval (native DSH Web):** First use **Plugins → Add plugin** with the Git spec above. If pnpm refuses the source `prepare` script, DSH's own Plugin Manager records the exact pending `allowBuilds` key and offers **Allow these scripts and retry**. Review the named source and approve **only the intended plugin**. DSH writes the approval into the active Web profile's `pnpm-workspace.yaml` and retries the install. You do **not** have to pre-edit YAML or install via a copied QClean tarball.
 
-```yaml
-allowBuilds:
-  'dsh-auto-code-correct@git+https://github.com/l00p3rl00p/qdev-dsh-plugins.git': true
-```
-
-If pnpm prints `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED` with a more specific identity, use **that exact identity** instead. Do not enable `dangerouslyAllowAllBuilds`, replace the profile's policy, or add all packages to the allowlist. Re-run the native Web installation after approval. This approves build scripts for this specific package from our Git repository, including future commits; if that trust scope is too broad, use pnpm's exact commit-scoped key from its diagnostic.
+As an alternative when the Web approval control is unavailable, use the exact key printed by the failed installer and explicitly add it under the *existing* profile `allowBuilds:` mapping (preserve other entries). The current pnpm 12 documentation permits a repository-wide `<package-name>@git+https://github.com/l00p3rl00p/qdev-dsh-plugins.git` key even for `github:` shorthand downloaded from `codeload.github.com`, but an exact commit key is narrower and preferred for a one-time approval. An approved `prepare` script runs on your machine with the profile user's permissions. Never use `pnpm approve-builds --all`, `dangerouslyAllowAllBuilds`, or `--ignore-scripts` to bypass this check.
 
 This repository is a **monorepo**. The `&path:/plugins/...` fragment selects the actual installable package; omitting it would install the wrong root. The package's `prepare` script builds `lib/` from source during Git installation. The source package's reviewed build-tool policy is committed with the plugin; the parent profile's Git build approval is separate. Git installs do not use the QClean tarball, and the installed Git dependency remains in the profile across restarts. Restart DSH after replacing an existing Host plugin and verify the browser and plugin capability. If the original QDev launcher controls this profile, it must not overwrite this source on startup.
 
