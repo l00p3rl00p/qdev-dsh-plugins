@@ -16,7 +16,7 @@
 
 This is the shared installation contract for **ACC, Telemetry Seams, and SOUP**. Do not invent a different installer per plugin.
 
-1. **Package from the plugin's canonical source directory.** The package manifest must include the Host entry, Web/client entry when present, Cordis patch, and every runtime file required by that plugin. `prepare` may build the package when Git/subdirectory installation requires it; verification remains plugin-specific, but packaging must produce an ordinary installable plugin package.
+1. **Package from the plugin's canonical source directory.** The package manifest must include the Host entry, Web/client entry when present, Cordis patch, and every runtime file required by that plugin. For the verified GitHub/subdirectory install path, the plugin must arrive already built: required runtime output such as `lib/` or `dist/` is part of the installable package. Do **not** rely on `prepare` or another install-time build hook; pnpm policy may block Git-hosted build scripts.
 2. **Install through DSH's native plugin manager into the intended profile.** The install boundary is the package/source reference consumed by `dsh plugin --profile web add ...`; do not add a second custom installer, copy files into DSH internals, or mutate the Harness source tree.
 3. **Installation success is its own acceptance gate.** A successful package resolution/add proves only that DSH can install the plugin. UI parity, Host activation, browser loading, configuration pages, and runtime behavior are separate checks.
 4. **Preserve a proven install anchor.** Once an exact source revision/package is shown to install, retain that revision unchanged as a working-install reference before doing feature/UI repair.
