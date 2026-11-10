@@ -52,6 +52,15 @@ dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#main&path:/plug
 dsh --profile web --dump-config
 ```
 
+**pnpm 12 Git-source build approval:** This package has a `prepare` script. Before installing through the Web UI, the active Web profile must explicitly approve that Git source; the plugin's own reviewed `pnpm-workspace.yaml` governs its build dependencies but cannot grant approval to the parent profile. Merge this entry under the profile's existing `allowBuilds:` mapping in `$DSH_HOME/profiles/web/pnpm-workspace.yaml` (keep every existing entry):
+
+```yaml
+allowBuilds:
+  'qdev-trajectory-drift-soup@git+https://github.com/l00p3rl00p/qdev-dsh-plugins.git': true
+```
+
+If pnpm prints `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED` with a more specific identity, use **that exact identity** instead. Do not enable `dangerouslyAllowAllBuilds`, replace the profile's policy, or add all packages to the allowlist. Re-run the native Web installation after approval. This approves build scripts for this specific package from our Git repository, including future commits; if that trust scope is too broad, use pnpm's exact commit-scoped key from its diagnostic.
+
 The `path:` fragment selects the actual package inside this monorepo; the `prepare` script builds and verifies the Host and Web assets before installation. It uses the DSH runtime's existing SDK packages and does not install another Cordis or DSH service implementation. Restart the existing DSH process after a replacement.
 
 For local source development, inside a checkout of the **canonical** repository:
