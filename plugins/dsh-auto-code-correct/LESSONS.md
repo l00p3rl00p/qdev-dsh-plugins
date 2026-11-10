@@ -1,5 +1,9 @@
 # ACC-specific lessons and installation contract
 
+## ACC packaging boundary — November 10, 2026
+
+The verified native DSH GitHub install path does not build ACC on arrival. ACC must include its built `lib/` runtime in the package/source revision before installation. Do **not** add a `prepare` hook to solve missing build output; Git-hosted build scripts are subject to pnpm `allowBuilds` policy and are not part of the proven installer contract.
+
 ## QClean install observation — November 10, 2026
 
 Observed in the clean DSH 0.2.2 test environment:
