@@ -1,9 +1,42 @@
 # Runbook — dsh-telemetry-seams
 
+## QClean isolation and acceptance (no GitHub Actions)
+
+From the Mac `qdocker-compose` checkout:
+
+```sh
+./qclean test-telemetry
+```
+
+This command fast-forwards source from `qdev-dsh-plugins`, runs the current
+plugin `pnpm run verify` and `pnpm pack` **inside the isolated clean
+container**, replaces **only** Telemetry Seams (if installed) in the disposable
+Web profile, and restarts only `qdev-clean-deepseek`. It preserves the earlier
+ACC isolation installation, clean sessions, and the original QVolume. No
+GitHub Actions workflow or main Harness rebuild is involved.
+
+**Acceptance in the clean browser (`http://127.0.0.1:3082`):** the existing
+session UI loads; open a conversation → Telemetry Seams → **Run probe**;
+confirm a fresh inventory with collector endpoint and evidence, *not* a
+Typert Remote argument-count/ModuleLoader error. Create and reopen a session,
+refresh browser, and invoke Run probe again. Collector connectivity, profile
+attribution and delivery evidence should be judged on what is observable;
+`configured` is never proof a record reached ClickHouse. Record each failure
+literally before modifying the production instance.
+
+**Source repair basis:** Browser build uses `target: 'es2022'` plus the DSH
+CJS ModuleLoader wrapper, explicitly bundles Typert runtime/schema, and
+package-check now rejects all unknown browser imports and verifies the
+zero-argument Remote contract. No warnings are globally muted. These source
+fixes and the QClean test command still need the user's live container run.
+
+---
+
 ## Normal operation
 
-The plugin is installed in the `web` profile as a directory link. No action is
-needed to start it — it activates when DSH starts.
+Installation is profile-specific; do not assume this plugin is already installed.
+For isolated proof, use the **QClean** path below. The normal QDev Web profile
+must remain unchanged until clean-host and browser checks pass.
 
 **Agent tool:** call `telemetry_seams_inventory` in any session.
 
@@ -46,7 +79,9 @@ Never delete `~/.dsh`, other profiles, or QDev persistent volumes.
 
 ## Rebuilding after source changes
 
-The plugin is installed as a directory link, so rebuilding `lib/` is enough:
+Only if a deployment intentionally installed the plugin as a directory link
+is rebuilding `lib/` sufficient. A packaged installation needs a verified
+new tarball and native profile replacement:
 
 ```sh
 cd plugins/dsh-telemetry-seams
