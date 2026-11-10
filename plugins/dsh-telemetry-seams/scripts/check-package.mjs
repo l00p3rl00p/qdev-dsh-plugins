@@ -36,7 +36,7 @@ function requireFile(rel) {
 
 check('GitHub subdirectory source install builds assets', () => {
   const pkg = JSON.parse(requireFile('package.json'))
-  if (pkg.scripts?.prepare !== 'pnpm run build') throw new Error('GitHub install must compile Host and Web assets via prepare')
+  if (pkg.scripts?.prepare !== 'pnpm run build && pnpm run check:package') throw new Error('GitHub install must compile Host and Web assets via prepare')
 })
 
 // 1. Required built files
