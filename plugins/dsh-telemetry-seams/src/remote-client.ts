@@ -3,7 +3,7 @@
  * Pattern: identical to ACC typert.remote-client.ts (lessons §3).
  */
 import { z } from 'zod'
-import { createTypertRemoteInfo } from '../node_modules/@deepseek-ai/dsh-typert-protocol/lib/types/remote-info.js'
+import { createTypertRemoteInfo } from '@deepseek-ai/dsh-typert-protocol/remote-info'
 import type { RemoteResult } from '@deepseek-ai/dsh-typert-protocol'
 import type { SeamInventory } from './seams/types.js'
 
