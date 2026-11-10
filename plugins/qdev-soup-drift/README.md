@@ -37,14 +37,29 @@ If a bad SOUP Web client makes DSH inaccessible, recover without the browser usi
 
 ## Build, test, and install
 
-Inside the DSH container, using the Scratchpad `main` checkout:
+The canonical source is [qdev-dsh-plugins/plugins/qdev-soup-drift](https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift), **not** the historical Scratchpad checkout.
+
+For a native **GitHub install**, open DSH **Plugins → Add plugin** and enter this exact pnpm Git source spec:
+
+```text
+github:l00p3rl00p/qdev-dsh-plugins#main&path:/plugins/qdev-soup-drift
+```
+
+Alternatively, from inside the DSH container:
 
 ```sh
-cd ~/scratchpad/plugins/qdev-soup-drift
+dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#main&path:/plugins/qdev-soup-drift'
+dsh --profile web --dump-config
+```
+
+The `path:` fragment selects the actual package inside this monorepo; the `prepare` script builds and verifies the Host and Web assets before installation. It uses the DSH runtime's existing SDK packages and does not install another Cordis or DSH service implementation. Restart the existing DSH process after a replacement.
+
+For local source development, inside a checkout of the **canonical** repository:
+
+```sh
+cd plugins/qdev-soup-drift
 pnpm install
 SOUP_PYTHON=/home/qdev/llm-runtime/tools/venvs/soup/bin/python pnpm run verify
-dsh plugin --profile web add .
-dsh --profile web --dump-config
 ```
 
 QDev's dedicated interpreter contains official `soup-cli==0.77.1`. Other environments must set `SOUP_PYTHON` to an interpreter containing `soup_cli` and configure the same interpreter in the plugin settings or `cordis.patch.yml`. CI uses `python` after installing the pinned SOUP package.
