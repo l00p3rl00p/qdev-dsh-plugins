@@ -1,3 +1,5 @@
+> **CURRENT SOURCE:** `qdev-dsh-plugins/plugins/dsh-auto-code-correct`. The standalone ACC GitHub repository and Scratchpad copies are deprecated. QDocker Compose uses `stacks/harness/start-harness.sh` to fetch, verify, package and install ACC from this directory. For isolated tests, use `./qclean test-acc` from QDocker Compose. Historical commands below mentioning the old Scratchpad checkout or run IDs are retained for incident history **and must not be executed for current ACC installs**.
+
 # ACC — Runbook
 
 **Authority:** Actual commands are defined in `package.json`, native settings in `cordis.patch.yml`, and the plugin command handler in `src/`. Consult [ENVIRONMENT.md](ENVIRONMENT.md) for Docker path assumptions and [ARCHITECTURE.md](ARCHITECTURE.md) for behavior.
@@ -13,9 +15,9 @@ docker exec -it quatrus-harness-deepseek-harness bash -lc 'dsh plugin --profile 
 docker restart quatrus-harness-deepseek-harness
 ```
 
-The native `dsh plugin` command forwards to the target profile's pnpm package manager. It removes the **installed dependency**; if an explicit manually maintained Cordis patch still inserts ACC, the corresponding insertion must also be removed from the actual profile/home configuration before restarting. Diagnose with `dsh --profile web --dump-config` and inspect `$DSH_HOME/profiles/web/cordis.patch.yml` or `$DSH_HOME/cordis.patch.yml` **when those files exist**. Remove only the ACC insertion, not other plugin entries, sessions, tokens or profile configuration. See [official DSH CLI reference](https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/cli/reference/README.md) and [shared plugin lessons](https://github.com/l00p3rl00p/quatrus-scratchpad/blob/main/plugins/plugin-lessons.md).
+The native `dsh plugin` command forwards to the target profile's pnpm package manager. It removes the **installed dependency**; if an explicit manually maintained Cordis patch still inserts ACC, the corresponding insertion must also be removed from the actual profile/home configuration before restarting. Diagnose with `dsh --profile web --dump-config` and inspect `$DSH_HOME/profiles/web/cordis.patch.yml` or `$DSH_HOME/cordis.patch.yml` **when those files exist**. Remove only the ACC insertion, not other plugin entries, sessions, tokens or profile configuration. See [official DSH CLI reference](https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/cli/reference/README.md) and [shared plugin lessons](https://github.com/l00p3rl00p/qdev-dsh-plugins/blob/main/plugins/plugin-lessons.md).
 
-## Preferred installation — verified GitHub Actions package into Docker
+## Historical installation example — deprecated Scratchpad artifact (DO NOT RUN)
 
 The [ACC GitHub Actions packager](.github/workflows/dsh-auto-code-correct-package.yml) builds from the tested Git commit, checks unresolved Web imports, smoke-loads the actual Web module, installs the tarball into a clean DSH profile, and uploads an artifact. **Prefer this exact artifact over building or fetching private Git dependencies inside the Docker container.** From an authenticated Mac Terminal:
 
@@ -41,7 +43,7 @@ rm -rf "$tmp"
 
 This selectively replaces ACC in the **installed Web profile**, not Scratchpad source and not the Docker image. Re-installing the same package version via an explicit remove/add avoids retained cached package copies. The command stops on build/download/install/validation failures and does not restart a failing plugin installation. Once the container restarts, open DSH Web, confirm the plugin configuration page and AutoCorrect tab load without browser-console ModuleLoader errors, and perform a disposable real edit. A CI loader smoke test cannot prove the mounted React UI or actual DSH session operation.
 
-**Normal Git-source update and install (inside Docker):** fetch the intended branch, build in a detached temporary worktree so uncommitted SOUP/telemetry work is untouched, and install only if the source checks pass. Match the printed revision to the successful GitHub Actions run before promoting to a live Web profile.
+**Historical Git-source procedure (DEPRECATED — DO NOT RUN):** fetch the intended branch, build in a detached temporary worktree so uncommitted SOUP/telemetry work is untouched, and install only if the source checks pass. Match the printed revision to the successful GitHub Actions run before promoting to a live Web profile.
 
 ```sh
 # Invoked from the Mac; fetches the branch to a fresh temporary worktree.
@@ -104,7 +106,7 @@ For a GitHub source installation, the package's `prepare` script builds the plug
 
 ## Completion and verification boundaries
 
-This is the operational contract for the standalone ACC programming plugin. The separate SOUP drift plugin is documented in [Quatrus Scratchpad](https://github.com/l00p3rl00p/quatrus-scratchpad/tree/main/plugins/qdev-soup-drift). Neither plugin requires the other, and model choice (local or frontier) is an independent DSH configuration decision. Keep source/package changes and their corresponding README, architecture, environment, and runbook instructions synchronized **within this repository**. Do not mirror ACC implementation into Scratchpad.
+This is the operational contract for the ACC package inside the sole active `qdev-dsh-plugins` repository. The separate SOUP drift plugin is maintained at [`../qdev-soup-drift/`](../qdev-soup-drift/). Neither plugin requires the other, and model choice (local or frontier) is an independent DSH configuration decision. Keep source/package changes and their corresponding README, architecture, environment, and runbook instructions synchronized **within this repository**. Do not mirror ACC implementation into Scratchpad.
 
 The operator must confirm three independent outcomes: native Host registration, browser-side plugin settings that actually mount and persist, and actual ACC execution on a disposable edit (plus a separate Git hook check). A missing settings window is a real product defect, not a successful install. The tests below are the acceptance procedure, not a claim that a particular user's live Harness has already passed.
 

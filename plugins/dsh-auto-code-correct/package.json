@@ -45,7 +45,7 @@
   "license": "MIT",
   "engines": {
     "node": "^22.19.0 || >=24.0.0",
-    "dsh": ">=0.2.1-0 <0.3.0"
+    "dsh": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0"
   },
   "dsh": {
     "bundle": {
@@ -67,23 +67,23 @@
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.5",
-    "@deepseek-ai/dsh-llm": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-session": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-subprocess": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-tools": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-lsp-stdio": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-llm": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
+    "@deepseek-ai/dsh-session": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
+    "@deepseek-ai/dsh-subprocess": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
+    "@deepseek-ai/dsh-tools": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
+    "@deepseek-ai/dsh-lsp-stdio": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
     "react": "^18.2.0",
-    "@deepseek-ai/dsh-client-ui-settings": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-client-ui-conversation": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-commands": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-sandbox": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-sandbox-policy": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-user-approval": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-working-directory": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-attachment": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-config-editor": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-lsp": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-typert-protocol": ">=0.2.1-0 <0.3.0"
+    "@deepseek-ai/dsh-client-ui-settings": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
+    "@deepseek-ai/dsh-client-ui-conversation": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
+    "@deepseek-ai/dsh-commands": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
+    "@deepseek-ai/dsh-sandbox": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
+    "@deepseek-ai/dsh-sandbox-policy": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
+    "@deepseek-ai/dsh-user-approval": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
+    "@deepseek-ai/dsh-working-directory": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
+    "@deepseek-ai/dsh-attachment": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
+    "@deepseek-ai/dsh-config-editor": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
+    "@deepseek-ai/dsh-lsp": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0",
+    "@deepseek-ai/dsh-typert-protocol": ">=0.2.1-0 <0.3.0 || >=0.2.2-0 <0.3.0"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "^3.18.5",
@@ -116,7 +116,6 @@
     "@deepseek-ai/dsh-client-ui-slots": "0.2.1-rc.5",
     "@deepseek-ai/dsh-client-ui-settings": "0.2.1-rc.5",
     "@deepseek-ai/dsh-client-ui-settings-plugins": "0.2.1-rc.5",
-    "@deepseek-ai/schemastery": "^3.18.5",
     "@deepseek-ai/dsh-client-ui-renderer": "0.2.1-rc.5",
     "@deepseek-ai/dsh-commands": "0.2.1-rc.5",
     "@deepseek-ai/dsh-api-remotes": "0.2.1-rc.5",
@@ -130,7 +129,8 @@
     "@deepseek-ai/dsh-client-ui-plugin-manager": "0.2.1-rc.5",
     "@deepseek-ai/dsh-client-ui-conversation": "0.2.1-rc.5",
     "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.5",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "dsh-lsp-actions": "0.5.17"
   },
   "scripts": {
     "build": "tsdown",
@@ -146,5 +146,61 @@
   },
   "bin": {
     "acc-tools": "./lib/cli.js"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-session": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-subprocess": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-lsp-stdio": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-conversation": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-commands": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-sandbox": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-sandbox-policy": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-user-approval": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-working-directory": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-attachment": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-config-editor": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-lsp": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-typert-protocol": {
+      "optional": true
+    }
   }
 }
