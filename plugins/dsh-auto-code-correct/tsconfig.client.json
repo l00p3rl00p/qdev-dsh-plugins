@@ -10,7 +10,12 @@
     "noEmit": true,
     "types": [
       "node"
-    ]
+    ],
+    "paths": {
+      "@deepseek-ai/dsh-typert-protocol/remote-info": [
+        "./node_modules/@deepseek-ai/dsh-typert-protocol/lib/types/remote-info"
+      ]
+    }
   },
   "include": [
     "src/client/**/*.ts",

@@ -1,23 +1,4 @@
 import { defineConfig } from 'tsdown'
-import { createRequire } from 'node:module'
-
-const require = createRequire(import.meta.url)
-
-// DSH's generated Typert client imports this public subpath. Rolldown can
-// externalize it before tsdown's dependency policy sees it, leaving a browser
-// require() that DSH Web's ModuleLoader cannot satisfy. Resolve the public
-// export to its runnable JS file at the bundler boundary instead.
-const typertRemoteInfoRuntime = require.resolve('@deepseek-ai/dsh-typert-protocol/remote-info')
-
-const bundleTypertRemoteInfo = {
-  name: 'acc-bundle-typert-remote-info',
-  resolveId(source: string) {
-    if (source === '@deepseek-ai/dsh-typert-protocol/remote-info') {
-      return typertRemoteInfoRuntime
-    }
-    return null
-  },
-}
 
 const clientModules = [
   'react', 'react/jsx-runtime', 'react-dom', 'react-dom/client',
@@ -49,13 +30,13 @@ export default defineConfig([
     format: 'cjs',
     platform: 'browser',
     target: 'es2022',
-    plugins: [bundleTypertRemoteInfo],
+    tsconfig: 'tsconfig.client.json',
     clean: false,
     dts: false,
     deps: {
       neverBundle: clientModules,
       // DSH Web only supplies the modules explicitly externalized above.
-      // Bundle the pure Typert metadata helper and its schema dependency.
+      // Typert remote-info and zod must be physically bundled into client.js.
       alwaysBundle: [
         '@deepseek-ai/dsh-typert-protocol',
         '@deepseek-ai/dsh-typert-protocol/remote-info',
