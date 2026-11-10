@@ -1,5 +1,15 @@
 # ACC-specific lessons and installation contract
 
+## QClean install observation — November 10, 2026
+
+Observed in the clean DSH 0.2.2 test environment:
+
+- ACC **installs successfully**.
+- The installed plugin renders its own embedded Web surface/page inside the plugin UI.
+- That embedded Web surface is not currently useful to the operator and should not be treated as evidence that the prior native plugin pages survived.
+- The previously available **options/tasking pages are absent** in this installed build.
+- Therefore, keep these as separate facts: **installation succeeds**, but **the prior options/tasking UI is not present**.
+
 ## Protect known-good execution paths
 
 - Once an execution path is proven to work, treat that behavior as **immutable by default**. Do not change it merely to improve diagnostics, observability, presentation, packaging, or operator convenience.
