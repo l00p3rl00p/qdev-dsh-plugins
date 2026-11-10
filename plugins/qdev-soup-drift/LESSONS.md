@@ -1,5 +1,15 @@
 # SOUP Plugin Development Lessons
 
+## Protect known-good execution paths
+
+- Once an execution path is proven to work, treat that behavior as **immutable by default**. Do not change it merely to improve diagnostics, observability, presentation, packaging, or operator convenience.
+- Add observation around a working path; do not insert transformations into the live value/control path unless the change is explicitly required by the feature itself.
+- Security handling belongs at the boundary where information is copied, persisted, or displayed. Preserve the authoritative runtime value until the consumer that actually needs it has received it.
+- Experimental changes must be isolated in a branch, worktree, disposable profile, or test-only path. Do not alter the known-good implementation in place to test an idea.
+- Before replacing working behavior, prove the replacement against the same real execution boundary. Mocks, static checks, and package success are not substitutes for the live behavior that was already known to work.
+- If a regression appears after an ancillary change, restore the last known-good behavior first, then investigate the ancillary feature separately.
+- Lessons and diagnostics should describe the engineering principle and validation boundary without exposing secrets, credentials, or unnecessary security-sensitive implementation details.
+
 > **Historical compatibility record, not current implementation policy:** This 2026-11-06 SOUP v0.5.2 investigation describes a `.volatile()` workaround for DSH 0.2.1-rc.5. The general policy in [../../LESSONS.md](../../LESSONS.md) now directs new plugin work away from `.volatile()`. Preserve this account as evidence of the earlier SDK behavior; evaluate the current native persistent configuration seam before changing SOUP code.\n\n
 **Captured:** 2026-11-06  
 **Plugin:** qdev-trajectory-drift-soup v0.5.2  
