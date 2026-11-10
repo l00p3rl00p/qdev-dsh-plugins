@@ -17,7 +17,7 @@ about how data flows. That independence is intentional and permanent.
 
 ## Quick start
 
-The plugin is already installed in the `web` profile. Use it in two ways:
+After installation into an appropriate `web` profile, use it in two ways:
 
 **Agent tool** — ask the agent to run it, or call it directly:
 ```
@@ -110,5 +110,8 @@ node scripts/check-package.mjs   # package health check only
 See [ARCHITECTURE.md](ARCHITECTURE.md), [ENVIRONMENT.md](ENVIRONMENT.md),
 and [RUNBOOK.md](RUNBOOK.md) for full technical detail.
 
-See [../plugin-lessons.md](../plugin-lessons.md) for browser loader, package
-validation, and recovery requirements shared across all plugins.
+See [shared plugin lessons](../../LESSONS.md) for browser loader, package
+validation, and recovery requirements. For the isolated QClean install/test,
+run `./qclean test-telemetry` from QDocker Compose (not from this plugin directory).
+Do not install directly into the production Web profile until the clean
+session/UI/probe results are verified.
