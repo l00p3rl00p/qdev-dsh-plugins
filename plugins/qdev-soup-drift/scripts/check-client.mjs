@@ -1,12 +1,28 @@
 // Static guard for DSH Web ModuleLoader import availability.
 // Node/npm resolution does not apply inside the browser's custom loader.
-import { readFileSync } from 'node:fs'
+import { readFileSync, existsSync } from 'node:fs'
 import { runInNewContext } from 'node:vm'
 const pkg = JSON.parse(readFileSync('package.json', 'utf8'))
 const text = readFileSync('client.js', 'utf8')
 const requires = [...text.matchAll(/\brequire\(\s*['"]([^'"]+)['"]\s*\)/g)].map((match) => match[1])
 const unsupported = [...new Set(requires.filter((value) => value !== 'react'))]
 const errors = []
+const prepare = 'pnpm run build && pnpm run check:host && pnpm run check:client'
+if (pkg.scripts?.prepare !== prepare) errors.push('SOUP GitHub install must build Host and verify Host/Web through prepare')
+const packedFiles = ['dist/index.js', 'client.js', 'locale/en.json', 'icon.svg',
+  'drift.mjs', 'reanchor.mjs', 'runtime.mjs', 'soup_worker.py', 'cordis.patch.yml']
+for (const file of packedFiles) {
+  if (!existsSync(file)) errors.push('Missing built package asset: ' + file)
+  const top = file.split('/')[0]
+  if (!(pkg.files ?? []).includes(top)) errors.push('Asset is omitted by package files: ' + file)
+}
+if (pkg.main !== './dist/index.js' || pkg.exports?.['.'] !== './dist/index.js') {
+  errors.push('SOUP Host export must resolve to the compiled runtime entry')
+}
+if (pkg.dsh?.bundle?.patch !== './cordis.patch.yml') {
+  errors.push('SOUP Cordis bundle patch not declared')
+}
+
 if (unsupported.length) errors.push('Unregistered Web imports: ' + unsupported.join(', '))
 if (!text.includes('window.__ModuleLoader__.load(')) errors.push('Missing DSH Web module loader registration')
 if (!text.includes("id: 'qdev-trajectory-drift-soup'")) errors.push('DSH Web loader package ID mismatch')
