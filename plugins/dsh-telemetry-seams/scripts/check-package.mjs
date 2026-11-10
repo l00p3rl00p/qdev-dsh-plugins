@@ -58,7 +58,7 @@ const allowedClientImports = new Set([
   '@deepseek-ai/dsh-client-web-react', '@deepseek-ai/dsh-client-ui-primitives',
   '@deepseek-ai/dsh-client-ui-conversation',
 ])
-const browserRequires = (text) => [...text.matchAll(/\\brequire\\(\\s*['\"]([^'\"]+)['\"]\\s*\\)/g)].map((match) => match[1])
+const browserRequires = (text) => [...text.matchAll(/\brequire\(\s*['\"]([^'\"]+)['\"]\s*\)/g)].map((match) => match[1])
 check('browser require scanner recognizes known unsupported import', () => {
   if (!browserRequires('require("@deepseek-ai/dsh-typert-protocol/remote-info")').includes('@deepseek-ai/dsh-typert-protocol/remote-info')) {
     throw new Error('browser import scanner missed a known broken module')
@@ -99,7 +99,7 @@ check('probe Remote contract uses zero arguments and child injection', () => {
   if (!client.includes("'remote.telemetrySeamsInventory'], (scope) =>")) throw new Error('missing child-injected Remote scope')
   if (!client.includes('scope.remote.telemetrySeamsInventory.probe()')) throw new Error('client must invoke probe with zero arguments')
   if (client.includes('scope.remote.telemetrySeamsInventory.probe(signal)')) throw new Error('client passes an undeclared AbortSignal')
-  if (!contract.includes('probe(): Promise<RemoteResult<SeamInventory>>') || !/parameters:\\s*\\[\\]/.test(contract)) throw new Error('Typert descriptor must declare zero arguments')
+  if (!contract.includes('probe(): Promise<RemoteResult<SeamInventory>>') || !/parameters:\s*\[\]/.test(contract)) throw new Error('Typert descriptor must declare zero arguments')
   if (!host.includes('async probe(): Promise<SeamInventory>')) throw new Error('Host must expose zero-argument probe')
 })
 
