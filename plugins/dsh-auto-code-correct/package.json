@@ -83,11 +83,11 @@
     "@deepseek-ai/dsh-attachment": ">=0.2.1-0 <0.3.0",
     "@deepseek-ai/dsh-config-editor": ">=0.2.1-0 <0.3.0",
     "@deepseek-ai/dsh-lsp": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-typert-protocol": ">=0.2.1-0 <0.3.0"
+    "@deepseek-ai/dsh-typert-protocol": ">=0.2.1-0 <0.3.0",
+    "dsh-lsp-actions": ">=0.5.17 <1"
   },
   "dependencies": {
-    "@deepseek-ai/schemastery": "^3.18.5",
-    "dsh-lsp-actions": "0.5.17"
+    "@deepseek-ai/schemastery": "^3.18.5"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "^4.0.5",
@@ -130,7 +130,8 @@
     "@deepseek-ai/dsh-client-ui-plugin-manager": "0.2.1-rc.5",
     "@deepseek-ai/dsh-client-ui-conversation": "0.2.1-rc.5",
     "@deepseek-ai/dsh-typert-protocol": "0.2.1-rc.5",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "dsh-lsp-actions": "0.5.17"
   },
   "scripts": {
     "prepare": "pnpm run build && pnpm run check:package",
@@ -201,6 +202,9 @@
       "optional": true
     },
     "@deepseek-ai/dsh-typert-protocol": {
+      "optional": true
+    },
+    "dsh-lsp-actions": {
       "optional": true
     }
   }
