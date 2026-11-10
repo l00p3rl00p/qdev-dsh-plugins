@@ -23,3 +23,5 @@ Treat this set as an **installation/merge recipe**, not permission to copy ACC's
 - ACC's `remote.accReadiness` service needs the correct child Cordis injection scope; an active Host plugin does not prove the Refresh action populates the readiness view.
 - A correction pass must remain bounded, visible, and nonblocking; avoid infinite retry/restart cycles.
 - Keep real integrations and run results as acceptance evidence; do not replace them with mocks.
+
+- **Clean Harness, Nov 9 2026:** ACC v0.1.12 loaded and the session UI continued working, but Environment readiness reported `client api: accReadiness/snapshot expected 0 argument(s), got 1`. The browser passed an `AbortSignal` as a positional argument to a zero-parameter Remote method. Fixed the browser invocation to `snapshot()` and aligned the client type declaration; the local `AbortSignal` still prevents stale UI updates. This is a readiness-view contract bug, **not** a reproduced session-loading failure. Fix committed, runtime reinstallation and browser recheck pending.
