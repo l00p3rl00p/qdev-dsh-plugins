@@ -100,6 +100,8 @@ check('emitted client registers a valid DSH Web factory', () => {
 check('probe Remote contract uses zero arguments and child injection', () => {
   const client = requireFile('src/client/index.tsx')
   const contract = requireFile('src/remote-client.ts')
+  if (contract.includes('../node_modules/')) throw new Error('Typert source must use public SDK exports, never pnpm internal paths')
+  if (!contract.includes("from '@deepseek-ai/dsh-typert-protocol/remote-info'")) throw new Error('Typert descriptor must import the public remote-info export')
   const host = requireFile('src/inventory-service.ts')
   if (!client.includes("'remote.telemetrySeamsInventory'], (scope) =>")) throw new Error('missing child-injected Remote scope')
   if (!client.includes('scope.remote.telemetrySeamsInventory.probe()')) throw new Error('client must invoke probe with zero arguments')
