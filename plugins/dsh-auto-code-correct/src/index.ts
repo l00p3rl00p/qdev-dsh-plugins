@@ -23,7 +23,6 @@ import {
   type AccResultMeta,
 } from './operation-record.js'
 import type { Language } from './capabilities.js'
-import * as lspActions from 'dsh-lsp-actions'
 import type { Context, Volatile } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -469,8 +468,16 @@ export function apply(ctx: Context, config: Config): void {
         )
       }
     }
-    if (Object.keys(entries).length > 0)
-      scoped.plugin(lspActions, { servers: entries, editor: { enabled: false } })
+    if (Object.keys(entries).length > 0) {
+      // LSP action support is an integration, not a prerequisite for ACC.
+      // If the Harness already registered these tools, we returned above.
+      try {
+        const lspActions = await import('dsh-lsp-actions')
+        scoped.plugin(lspActions, { servers: entries, editor: { enabled: false } })
+      } catch (error) {
+        console.warn('[auto-code-correct] LSP actions unavailable: ' + errorMessage(error))
+      }
+    }
   })
 
   const hygienePolicy = () => ({
