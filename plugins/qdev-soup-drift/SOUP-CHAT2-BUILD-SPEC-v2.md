@@ -38,28 +38,28 @@ Build order: **6 → 5 → 4 → 7 → 3**. Each depends only on the ones before
 The repo is visible inside the main Harness container, which has the real SOUP Python. Run tests there; it does not touch the Harness install.
 
 ```sh
-docker exec quatrus-harness-deepseek-harness bash -lc 'cd /home/qdev/github/qdev-dsh-plugins/plugins/qdev-soup-drift && PYTHONDONTWRITEBYTECODE=1 SOUP_PYTHON=/home/qdev/llm-runtime/tools/venvs/soup/bin/python pnpm run verify'
+docker exec <main-harness-container> bash -lc 'cd <repo-path-in-container>/plugins/qdev-soup-drift && PYTHONDONTWRITEBYTECODE=1 SOUP_PYTHON=<path-to-soup-python> pnpm run verify'
 ```
 
 Pass = typecheck, build, host check, client check, and `fail 0`. Paste the `tests / pass / fail` lines in your report.
 
-Install for the owner to check (after commit and `git push origin feature/soup-per-chat-20261111`; `<SHA>` = full commit hash). QClean first:
+Install for the owner to check (after commit and `git push origin feature/soup-per-chat-20261111`; `<SHA>` = full commit hash). the clean test Harness first:
 
 ```sh
-docker exec qdev-clean-deepseek dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/qdev-soup-drift'
+docker exec <clean-harness-container> dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/qdev-soup-drift'
 ```
 
 ```sh
-docker restart qdev-clean-deepseek
+docker restart <clean-harness-container>
 ```
 
 Then confirm the Host half loaded (no output = good):
 
 ```sh
-docker logs --since 60s qdev-clean-deepseek 2>&1 | grep -i "failed to import"
+docker logs --since 60s <clean-harness-container> 2>&1 | grep -i "failed to import"
 ```
 
-QClean has no SOUP Python, so **live drift cannot be shown there**; QClean proves install, load and UI only. Live drift is checked on the main Harness, and only after the owner says to install there (same `add` command with container `quatrus-harness-deepseek-harness`; never `remove` first, never restart it without ACC installed).
+the clean test Harness has no SOUP Python, so **live drift cannot be shown there**; the clean test Harness proves install, load and UI only. Live drift is checked on the main Harness, and only after the owner says to install there (same `add` command with container `<main-harness-container>`; never `remove` first, never restart it without ACC installed).
 
 Tell the owner to hard-reload the browser after a restart. The owner confirms every UI check; do not mark one passed yourself.
 
@@ -134,14 +134,18 @@ How it is used: read-only glance by the human; the agent is not involved.
 ## 6. Open points for the owner (defaults apply unless told otherwise)
 
 - Card position: below the composer (default) or no card.
-- Live-drift proof needs the main Harness; QClean has no SOUP Python.
+- Live-drift proof needs the main Harness; the clean test Harness has no SOUP Python.
 - History is memory-only and empties on restart.
 - A chat in the owner's screenshot failed to load with "not marked ignorable; refusing to interpret". Not investigated; out of scope here.
 
 ## 7. Owner correction — 2026-11-11 (overrides sections 4 and 6 where they differ)
 
-- **Placement is settled: SOUP lives in its own tab in the chat's tab row, right beside Trajectory.** That tab already exists and the owner confirmed it in QClean on 0.6.3 (tab row: Chat, Trajectory, AutoCorrect, Telemetry Seams, SOUP). Do not move it and do not change how it registers.
+- **Placement is settled: SOUP lives in its own tab in the chat's tab row, right beside Trajectory.** That tab already exists and the owner confirmed it in the clean test Harness on 0.6.3 (tab row: Chat, Trajectory, AutoCorrect, Telemetry Seams, SOUP). Do not move it and do not change how it registers.
 - **Do not build the compact Trajectory card.** Drop everything in Feature 3 about `conversation.composer.dock`, the card's one-line content, and the card tests. `conversation.composer.dock` is removed from the allowed-seams list for this work.
 - **Feature 3 is now only:** the `Settings | Live & Mentor` switch inside the existing SOUP tab, with the live section (Feature 7 data) and the Gentle Mentor section (Feature 4).
 - Open point "Card position" in section 6 is closed.
 - SOUP 0.6.3 (commit `da279a3` code) is installed on the main Harness as of this date, so live-drift checks can run there.
+
+## 8. Placeholders (this repository is public)
+
+Commands above use `<main-harness-container>`, `<clean-harness-container>`, `<repo-path-in-container>` and `<path-to-soup-python>`. The real values for the owner's machine are in the local-only file `.local-notes/PLACEHOLDER-VALUES.md` at the repository root, which is never committed. Do not write those values into any tracked file, commit message or pull request. Follow the root `AGENTS.md` on `main`.

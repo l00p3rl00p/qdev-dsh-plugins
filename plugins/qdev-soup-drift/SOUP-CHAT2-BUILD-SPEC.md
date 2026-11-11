@@ -97,7 +97,7 @@ rc.1. Do not claim rc.2 support.
 
 ## 4. Baseline — run before Feature 2 and after every feature. If it fails, STOP.
 
-Run where the SOUP Python interpreter exists (see Decision D2). Steps B1–B2 can run in QClean.
+Run where the SOUP Python interpreter exists (see Decision D2). Steps B1–B2 can run in the clean test Harness.
 
 - B1. `pnpm install --frozen-lockfile && pnpm run typecheck && pnpm run build && pnpm run check:host && pnpm run check:client`
 - B2. `pnpm test` — record pass/fail per test. The "direct SOUP Python worker" test needs the interpreter.
@@ -243,8 +243,8 @@ Prove:
 - **D1 (before Feature 3).** No native slot exists for a card at the top of the chat. Options: (a) put the compact
   card in `conversation.composer.dock`, below the composer, as the Anthropic plugin does — this spec's default;
   (b) tab only, no card; (c) wait for an upstream slot. Not allowed: DOM injection.
-- **D2 (before Baseline).** QClean has no SOUP Python interpreter (`/home/qdev/llm-runtime/tools/venvs/soup/bin/python`
-  is missing there), so live drift cannot be proven in QClean. Options: install `soup-cli` in QClean and point
+- **D2 (before Baseline).** the clean test Harness has no SOUP Python interpreter (`<path-to-soup-python>`
+  is missing there), so live drift cannot be proven in the clean test Harness. Options: install `soup-cli` in the clean test Harness and point
   `python` at it, or run runtime proofs on the main Harness.
 - **D3 (before Feature 4).** Whether per-chat plan edits should also be visible to the human as a chat message.
   Default: no, to keep monitoring data out of the transcript.
