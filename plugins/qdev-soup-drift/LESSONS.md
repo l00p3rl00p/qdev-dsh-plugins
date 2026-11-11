@@ -1,16 +1,5 @@
 # SOUP Plugin Development Lessons
 
-## Protect known-good execution paths
-
-- Once an execution path is proven to work, treat that behavior as **immutable by default**. Do not change it merely to improve diagnostics, observability, presentation, packaging, or operator convenience.
-- Add observation around a working path; do not insert transformations into the live value/control path unless the change is explicitly required by the feature itself.
-- Security handling belongs at the boundary where information is copied, persisted, or displayed. Preserve the authoritative runtime value until the consumer that actually needs it has received it.
-- Experimental changes must be isolated in a branch, worktree, disposable profile, or test-only path. Do not alter the known-good implementation in place to test an idea.
-- Before replacing working behavior, prove the replacement against the same real execution boundary. Mocks, static checks, and package success are not substitutes for the live behavior that was already known to work.
-- If a regression appears after an ancillary change, restore the last known-good behavior first, then investigate the ancillary feature separately.
-- Lessons and diagnostics should describe the engineering principle and validation boundary without exposing secrets, credentials, or unnecessary security-sensitive implementation details.
-
-> **Historical compatibility record, not current implementation policy:** This 2026-11-06 SOUP v0.5.2 investigation describes a `.volatile()` workaround for DSH 0.2.1-rc.5. The general policy in [../../LESSONS.md](../../LESSONS.md) now directs new plugin work away from `.volatile()`. Preserve this account as evidence of the earlier SDK behavior; evaluate the current native persistent configuration seam before changing SOUP code.\n\n
 **Captured:** 2026-11-06  
 **Plugin:** qdev-trajectory-drift-soup v0.5.2  
 **DSH Version:** 0.2.1-rc.5
@@ -182,12 +171,13 @@ Test **both** separately:
 1. **UI persistence:** Change → Close → Reopen → Still there?
 2. **Runtime application:** Change → Check `/status` endpoint → Detector using new value?
 
-**SOUP evidence:**
-- UI persisted 0.3: ✅
-- Runtime config updated to 0.3: ✅  
-- Changed to 0.2, runtime immediately showed 0.2: ✅
+**Correction from the 2026-11-06 baseline audit:** Settings persistence was human-accepted, but the 0.5.3 master-OFF runtime check failed: status still reported enabled and observed-event counts increased. Earlier runtime-PASS statements above are not sufficient acceptance evidence for this case.
 
-**Don't claim PASS until user confirms both.**
+Loader 1.0.6 keeps the fiber alive for volatile-only edits, commits its references, then emits `loader/volatile-update` to that fiber only (`src/config/entry.ts`, `_commitVolatile`; contract in `lib/types/index.d.ts`). Reading `.get()` only at startup is insufficient. SOUP 0.5.4 listens on its own context, rereads the references, replaces only the detector, and preserves its Mentor instance/strikes. Detector generations fence callbacks from cancelled workers; each pending question captures its own abort signal so OFF/ON cannot reactivate an old answer.
+
+Native Loader + built Host + real Python integration tests now cover effective sensitivity/window changes without remount, master-OFF suppression, cancellation, late callbacks, and the three-count guard. Installed-profile OFF/ON and eligible ClickHouse receipt are separate pending checks; source, unit tests, and a successful install do not prove them.
+
+**Don't claim baseline PASS until persistence, runtime behavior, and end-to-end receipt are separately verified.**
 
 ## Theme Tokens Seam
 

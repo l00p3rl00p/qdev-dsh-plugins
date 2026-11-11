@@ -1,6 +1,6 @@
 {
   "name": "qdev-trajectory-drift-soup",
-  "version": "0.5.3",
+  "version": "0.6.3",
   "description": "SOUP-powered trajectory drift detection and Gentle Mentor reanchoring for DeepSeek Harness sessions",
   "license": "MIT",
   "type": "module",
@@ -19,9 +19,15 @@
     "drift.mjs",
     "reanchor.mjs",
     "runtime.mjs",
+    "session-settings.mjs",
     "soup_worker.py",
     "cordis.patch.yml",
-    "README.md"
+    "README.md",
+    "SOUP_CONCEPTS.md",
+    "LESSONS.md",
+    "BASELINE_VERIFICATION.md",
+    "FEATURE2_VERIFICATION.md",
+    "NATIVE_CAPABILITY_AUDIT.md"
   ],
   "repository": {
     "type": "git",
@@ -66,30 +72,10 @@
     "@deepseek-ai/dsh-user-questions": ">=0.2.1-0 <0.3.0",
     "@deepseek-ai/cordis": "^4.0.5",
     "@deepseek-ai/dsh-llm": ">=0.2.1-0 <0.3.0",
-    "@deepseek-ai/dsh-storage-domain": ">=0.2.1-0 <0.3.0"
+    "@deepseek-ai/dsh-storage-domain": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-client-connection": ">=0.2.1-0 <0.3.0",
+    "@deepseek-ai/dsh-session-persistence": ">=0.2.1-0 <0.3.0"
   },
-  "devDependencies": {
-    "@deepseek-ai/cordis": "4.0.5",
-    "@deepseek-ai/dsh-agent": "0.2.1-rc.5",
-    "@deepseek-ai/dsh-host-webserver": "0.2.1-rc.5",
-    "@deepseek-ai/dsh-llm": "0.2.1-rc.5",
-    "@deepseek-ai/dsh-session": "0.2.1-rc.5",
-    "@deepseek-ai/dsh-user-questions": "0.2.1-rc.5",
-    "@types/node": "^22.10.0",
-    "typescript": "^5.6.0",
-    "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.5"
-  },
-  "engines": {
-    "node": ">=24",
-    "dsh": ">=0.2.1-rc.5 <0.3.0"
-  },
-  "keywords": [
-    "deepseek-harness",
-    "dsh-plugin",
-    "trajectory-drift",
-    "soup",
-    "gentle-mentor"
-  ],
   "peerDependenciesMeta": {
     "@deepseek-ai/dsh-agent": {
       "optional": true
@@ -111,6 +97,38 @@
     },
     "@deepseek-ai/dsh-storage-domain": {
       "optional": true
+    },
+    "@deepseek-ai/dsh-client-connection": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-session-persistence": {
+      "optional": true
     }
-  }
+  },
+  "devDependencies": {
+    "@deepseek-ai/dsh-client-connection": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-session-persistence": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-storage-json": "0.2.1-rc.5",
+    "@deepseek-ai/cordis": "4.0.5",
+    "@deepseek-ai/cordis-plugin-loader": "1.0.6",
+    "@deepseek-ai/dsh-agent": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-host-webserver": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-llm": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-session": "0.2.1-rc.5",
+    "@deepseek-ai/dsh-user-questions": "0.2.1-rc.5",
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.0",
+    "@deepseek-ai/dsh-storage-domain": "0.2.1-rc.5"
+  },
+  "engines": {
+    "node": ">=24",
+    "dsh": ">=0.2.1-rc.5 <0.3.0"
+  },
+  "keywords": [
+    "deepseek-harness",
+    "dsh-plugin",
+    "trajectory-drift",
+    "soup",
+    "gentle-mentor"
+  ]
 }

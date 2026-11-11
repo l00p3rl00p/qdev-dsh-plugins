@@ -41,6 +41,19 @@ window.__ModuleLoader__.load({
       button: { padding: '8px 12px', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 9, background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)', font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
       error: { margin: 0, color: 'var(--dsw-alias-state-error-primary)', fontSize: 13, lineHeight: '20px' },
       code: { color: 'var(--dsw-alias-label-primary)', fontSize: 12 },
+      sessionView: { display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%', color: 'var(--dsw-alias-label-primary)' },
+      sessionHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 11, flexShrink: 0, padding: '9px 14px 8px', borderBottom: '1px solid var(--dsw-alias-border-l2)' },
+      sessionHeaderCopy: { display: 'flex', alignItems: 'baseline', gap: 6, minWidth: 0, flexWrap: 'wrap' },
+      sessionBody: { flex: 1, minHeight: 0, overflowY: 'auto', padding: '9px 14px 18px' },
+      sessionGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 400px), 1fr))', gap: 8, maxWidth: 1080 },
+      compactCard: { display: 'flex', flexDirection: 'column', padding: '3px 11px', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 8, background: 'var(--dsw-alias-bg-layer-1)' },
+      compactCardTitle: { margin: 0, padding: '7px 0 4px', color: 'var(--dsw-alias-label-secondary)', fontSize: 10, lineHeight: '14px', fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase' },
+      compactRow: { display: 'grid', gridTemplateColumns: 'minmax(140px, 1fr) minmax(200px, auto)', alignItems: 'center', gap: 9, minHeight: 39, padding: '4px 0', borderTop: '1px solid var(--dsw-alias-border-l1)' },
+      compactMeta: { display: 'flex', alignItems: 'baseline', gap: 5, minWidth: 0, flexWrap: 'wrap' },
+      compactControls: { display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 5, minWidth: 0, flexWrap: 'wrap' },
+      sourceBadge: { display: 'inline-flex', alignItems: 'center', minHeight: 17, padding: '0 6px', borderRadius: 999, background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-secondary)', fontSize: 10, lineHeight: '16px', fontWeight: 650, whiteSpace: 'nowrap' },
+      inlineHint: { color: 'var(--dsw-alias-label-secondary)', fontSize: 10, lineHeight: '16px', whiteSpace: 'nowrap' },
+      compactButton: { padding: '4px 7px', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 6, background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)', font: 'inherit', fontSize: 11, lineHeight: '16px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' },
     };
 
     function SoupIcon({ size = 34 }) {
@@ -55,12 +68,30 @@ window.__ModuleLoader__.load({
       h('circle', { cx: 51, cy: 43, r: 4, fill: '#6d72ff' }));
     }
 
-    function Toggle({ label, checked, disabled, onChange }) {
+    function Toggle({ label, checked, disabled, onChange, prominent = false, compact = false }) {
+      if (prominent) {
+        const stateColor = checked ? '--dsw-alias-state-success-primary' : '--dsw-alias-state-warn-primary';
+        return h('button', {
+          type: 'button', role: 'switch', 'aria-label': label, 'aria-checked': checked,
+          disabled, onClick: () => { if (!disabled) onChange(!checked); },
+          style: {
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between', gap: compact ? 6 : 8,
+            flexDirection: checked ? 'row-reverse' : 'row', flex: '0 0 auto', minWidth: compact ? 70 : 86, minHeight: compact ? 28 : 34,
+            padding: compact ? '4px 7px' : '6px 10px', border: `2px solid var(${stateColor})`, borderRadius: 999,
+            backgroundColor: 'var(--dsw-alias-bg-layer-2)',
+            background: `color-mix(in srgb, var(${stateColor}) 18%, var(--dsw-alias-bg-layer-2))`,
+            color: 'var(--dsw-alias-label-primary)', font: 'inherit', fontSize: compact ? 11 : 12, fontWeight: 750,
+            cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
+          },
+        },
+        h('span', { 'aria-hidden': true, style: { width: compact ? 13 : 16, height: compact ? 13 : 16, flex: '0 0 auto', borderRadius: '50%', background: 'currentColor' } }),
+        h('span', { 'aria-hidden': true }, checked ? 'ON' : 'OFF'));
+      }
       return h('button', {
         type: 'button', role: 'switch', 'aria-label': label, 'aria-checked': checked,
-        disabled, onClick: () => onChange(!checked),
+        disabled, onClick: () => { if (!disabled) onChange(!checked); },
         style: {
-          position: 'relative', width: 42, height: 24, flex: '0 0 auto', padding: 0,
+          position: 'relative', width: compact ? 34 : 42, height: compact ? 20 : 24, flex: '0 0 auto', padding: 0,
           border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 999,
           background: checked ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-bg-layer-2)',
           cursor: disabled ? 'not-allowed' : 'pointer', opacity: disabled ? 0.5 : 1,
@@ -68,7 +99,7 @@ window.__ModuleLoader__.load({
       }, h('span', {
         'aria-hidden': true,
         style: {
-          position: 'absolute', top: 3, left: checked ? 21 : 3, width: 16, height: 16,
+          position: 'absolute', top: compact ? 3 : 3, left: checked ? (compact ? 17 : 21) : 3, width: compact ? 12 : 16, height: compact ? 12 : 16,
           borderRadius: '50%', background: 'var(--dsw-alias-bg-layer-1)', transition: 'left 120ms ease',
         },
       }));
@@ -176,9 +207,10 @@ window.__ModuleLoader__.load({
           : 'var(--dsw-alias-state-error-primary)';
       const hostErrors = Array.isArray(status?.errors) ? status.errors : [];
       const resetDecision = mentor.resetDecision?.required ? mentor.resetDecision : null;
+      const resetDisabled = Boolean(decisionWorking) || status?.configuration?.enabled === false;
 
       async function chooseReset(reset) {
-        if (!resetDecision || decisionWorking) return;
+        if (!resetDecision || resetDisabled) return;
         setDecisionWorking(reset ? 'reset' : 'carry');
         setDecisionError('');
         try {
@@ -222,8 +254,8 @@ window.__ModuleLoader__.load({
             h('p', { style: styles.body }, 'Reset gives the corrected trajectory a fresh allowance. Keep carries three strikes forward, so the next qualifying drift escalates immediately.'),
           ),
           h('div', { style: styles.actionRow, role: 'group', 'aria-label': 'Reset accumulated drift count' },
-            h('button', { type: 'button', style: { ...styles.button, borderColor: 'var(--dsw-alias-state-success-primary)' }, disabled: Boolean(decisionWorking), onClick: () => chooseReset(true) }, decisionWorking === 'reset' ? 'Resetting…' : 'Yes — reset to 0'),
-            h('button', { type: 'button', style: { ...styles.button, borderColor: 'var(--dsw-alias-state-warn-primary)' }, disabled: Boolean(decisionWorking), onClick: () => chooseReset(false) }, decisionWorking === 'carry' ? 'Saving…' : 'No — carry 3 forward'),
+            h('button', { type: 'button', style: { ...styles.button, borderColor: 'var(--dsw-alias-state-success-primary)' }, disabled: resetDisabled, onClick: () => chooseReset(true) }, decisionWorking === 'reset' ? 'Resetting…' : 'Yes — reset to 0'),
+            h('button', { type: 'button', style: { ...styles.button, borderColor: 'var(--dsw-alias-state-warn-primary)' }, disabled: resetDisabled, onClick: () => chooseReset(false) }, decisionWorking === 'carry' ? 'Saving…' : 'No — carry 3 forward'),
           ),
           decisionError ? h('p', { role: 'alert', style: styles.error }, decisionError) : null,
         ) : null,
@@ -336,9 +368,9 @@ window.__ModuleLoader__.load({
             ),
           ) : null,
           h('div', { style: styles.copy },
-            h('code', { style: styles.code }, 'qdev-trajectory-drift-soup · version 0.5.3'),
+            h('code', { style: styles.code }, 'qdev-trajectory-drift-soup · version 0.6.3'),
             h('a', {
-              href: 'https://github.com/l00p3rl00p/quatrus-scratchpad/tree/main/plugins/qdev-soup-drift',
+              href: 'https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift',
               target: '_blank', rel: 'noreferrer',
               style: { color: 'var(--dsw-alias-label-primary)', fontSize: 12, lineHeight: '18px' },
             }, 'Source repository'),
@@ -349,7 +381,7 @@ window.__ModuleLoader__.load({
         h('section', { style: styles.card, 'aria-labelledby': 'soup-master' },
           h('h3', { id: 'soup-master', style: styles.title }, 'Master control'),
           h(SettingRow, { label: 'Enable trajectory monitoring', hint: 'Stops observation and drift calculations when disabled.' },
-            h(Toggle, { label: 'Enable trajectory monitoring', checked: enabled, disabled: !writable, onChange: next => set(['enabled'], next) }),
+            h(Toggle, { label: 'Enable trajectory monitoring', checked: enabled, disabled: !writable, prominent: true, onChange: next => set(['enabled'], next) }),
           ),
         ),
         h('section', { style: styles.card, 'aria-labelledby': 'soup-detector' },
@@ -382,6 +414,172 @@ window.__ModuleLoader__.load({
       );
     }
 
+    const SESSION_SETTINGS_PATH = '/api/qdev-soup/session-settings';
+    const SESSION_FIELDS = [
+      ['enabled', 'Monitoring', 'boolean'],
+      ['detectorEnabled', 'Drift detector', 'boolean'],
+      ['reanchoring', 'Gentle Mentor', 'boolean'],
+      ['preset', 'Sensitivity', 'preset'],
+      ['baselineCount', 'Baseline messages', 'number'],
+      ['windowCount', 'Comparison window', 'number'],
+      ['python', 'Python interpreter', 'text'],
+    ];
+
+    function SessionField({ field, label, type, settings, disabled, mutate }) {
+      const overridden = Object.prototype.hasOwnProperty.call(settings.overrides, field);
+      const value = overridden ? settings.overrides[field] : settings.base[field];
+      const [draft, setDraft] = useState(String(value));
+      useEffect(() => setDraft(String(value)), [value]);
+      const display = item => typeof item === 'boolean' ? (item ? 'ON' : 'OFF') : String(item);
+      const controlLabel = `Chat ${label}`;
+      const source = overridden ? 'Chat override' : 'Inherited';
+      const comparison = `Global ${display(settings.base[field])} · Effective ${display(settings.effective[field])}`;
+      let control;
+      if (type === 'boolean') {
+        control = h(Toggle, { label: controlLabel, checked: value === true, disabled, prominent: field === 'enabled', compact: true, onChange: next => mutate('set', field, next) });
+      } else if (type === 'preset') {
+        control = h(React.Fragment, null,
+          h('input', {
+            type: 'range', min: 0, max: 4, step: 1, value, disabled, 'aria-label': controlLabel,
+            'aria-valuetext': `Position ${value + 1} of 5, KL threshold ${THRESHOLDS[value].toFixed(2)}`,
+            style: { width: 120 }, onChange: event => mutate('set', field, Number(event.target.value)),
+          }),
+          h('output', { style: styles.sourceBadge, 'aria-live': 'polite' }, `${value + 1} · ${THRESHOLDS[value].toFixed(2)}`),
+        );
+      } else {
+        control = h(React.Fragment, null,
+          h('input', {
+            type: type === 'number' ? 'number' : 'text', value: draft, disabled,
+            ...(type === 'number' ? { min: 1, max: 100, step: 1 } : {}),
+            'aria-label': controlLabel,
+            style: { ...styles.input, width: type === 'text' ? 'min(34vw, 320px)' : 64, padding: '4px 7px' },
+            onChange: event => setDraft(event.target.value),
+            onKeyDown: event => { if (event.key === 'Enter') mutate('set', field, type === 'number' ? Number(draft) : draft.trim()); },
+          }),
+          h('button', { type: 'button', style: styles.compactButton, disabled, 'aria-label': `Save ${label} for this chat`, onClick: () => mutate('set', field, type === 'number' ? Number(draft) : draft.trim()) }, 'Save'),
+        );
+      }
+      return h('div', { style: styles.compactRow },
+        h('div', { style: styles.compactMeta },
+          h('span', { style: styles.label }, label),
+          h('span', { style: styles.sourceBadge }, source),
+          h('span', { style: styles.inlineHint }, comparison),
+        ),
+        h('div', { style: styles.compactControls },
+          control,
+          h('button', {
+            type: 'button', style: styles.compactButton, disabled: disabled || !overridden,
+            'aria-label': `Use global for ${label}`, onClick: () => mutate('unset', field),
+          }, 'Use global'),
+        ),
+      );
+    }
+
+    function SessionSettingsView({ sessionId }) {
+      const [settings, setSettings] = useState(null);
+      const [loading, setLoading] = useState(false);
+      const [working, setWorking] = useState('');
+      const [error, setError] = useState('');
+      const scope = React.useRef({ id: sessionId, generation: 0, alive: true, busy: false, controller: null });
+      if (scope.current.id !== sessionId) {
+        scope.current.controller?.abort();
+        scope.current = { id: sessionId, generation: scope.current.generation + 1, alive: true, busy: false, controller: null };
+      }
+      const visible = settings?.sessionId === sessionId ? settings : null;
+      const disabled = loading || Boolean(working) || !visible?.writable || !visible?.masterEnabled;
+      const invalidate = () => { scope.current.controller?.abort(); scope.current.generation += 1; scope.current.busy = false; };
+      useEffect(() => {
+        scope.current.alive = true;
+        return () => { scope.current.alive = false; invalidate(); };
+      }, []);
+
+      async function request(operation) {
+        const owner = scope.current;
+        if (!owner.alive || owner.id !== sessionId || owner.busy) return;
+        if (operation && (!visible || disabled)) return;
+        owner.controller?.abort();
+        const controller = new AbortController();
+        owner.controller = controller;
+        const generation = ++owner.generation;
+        const current = () => owner === scope.current && owner.alive && owner.id === sessionId && owner.generation === generation && !controller.signal.aborted;
+        owner.busy = true;
+        setError('');
+        if (operation) setWorking(operation.field);
+        else { setLoading(true); setSettings(null); }
+        try {
+          const response = await fetch(operation ? SESSION_SETTINGS_PATH : `${SESSION_SETTINGS_PATH}?sessionId=${encodeURIComponent(sessionId)}`, {
+            credentials: 'same-origin', signal: controller.signal,
+            ...(operation ? {
+              method: 'POST', headers: { 'content-type': 'application/json', 'x-qdev-soup-action': 'session-settings' },
+              body: JSON.stringify({ sessionId, expectedRevision: visible.revision, ...operation }),
+            } : { headers: { accept: 'application/json' } }),
+          });
+          const payload = await response.json();
+          if (!current()) return;
+          if (payload.settings?.sessionId === sessionId) setSettings(payload.settings);
+          if (!response.ok || !payload.ok) throw new Error(payload.message || payload.error || `Session settings returned ${response.status}`);
+          if (payload.settings?.sessionId !== sessionId) throw new Error('Session settings response belongs to a different chat. Reload settings.');
+        } catch (cause) {
+          if (current()) setError(cause instanceof Error ? cause.message : String(cause));
+        } finally {
+          if (current()) { owner.busy = false; setLoading(false); setWorking(''); }
+        }
+      }
+      useEffect(() => {
+        void request();
+        return invalidate;
+      }, [sessionId]);
+      function mutate(op, field, value) {
+        if (scope.current.id !== sessionId || !scope.current.alive || scope.current.busy || disabled) return;
+        if (op === 'set') {
+          const type = SESSION_FIELDS.find(item => item[0] === field)?.[2];
+          const valid = type === 'boolean' ? typeof value === 'boolean'
+            : type === 'text' ? typeof value === 'string' && value.trim().length > 0
+              : Number.isInteger(value) && value >= (type === 'preset' ? 0 : 1) && value <= (type === 'preset' ? 4 : 100);
+          if (!valid) { setError(`${SESSION_FIELDS.find(item => item[0] === field)?.[1] ?? field}: enter a valid ${type === 'text' ? 'non-empty interpreter path' : 'whole number within the displayed bounds'}.`); return; }
+        }
+        return request({ op, field, ...(op === 'set' ? { value } : {}) });
+      }
+      const overrideCount = visible ? Object.keys(visible.overrides).length : 0;
+      const grouped = visible ? [
+        ['Controls', SESSION_FIELDS.slice(0, 3)],
+        ['Detection', SESSION_FIELDS.slice(3, 6)],
+        ['Runtime', SESSION_FIELDS.slice(6)],
+      ] : [];
+      return h('main', { style: styles.sessionView, 'aria-label': 'SOUP settings for this chat', 'aria-busy': loading },
+        h('header', { style: styles.sessionHeader },
+          h('div', { style: styles.sessionHeaderCopy },
+            h('h2', { style: styles.title }, 'SOUP settings'),
+            h('span', { style: styles.hint }, 'Only this chat'),
+            visible ? h('span', { style: styles.sourceBadge }, `${overrideCount} override${overrideCount === 1 ? '' : 's'}`) : null,
+          ),
+          h('button', { type: 'button', style: styles.compactButton, disabled: loading || Boolean(working), onClick: () => { void request(); } }, loading ? 'Loading…' : 'Reload'),
+        ),
+        h('div', { style: styles.sessionBody },
+          loading ? h('p', { role: 'status', style: styles.body }, 'Loading chat settings…') : null,
+          visible && !visible.masterEnabled ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Global monitoring is OFF. Chat settings are read-only and cannot bypass the global master switch.') : visible && !visible.writable ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Chat settings are read-only.') : null,
+          visible ? h('div', { style: styles.sessionGrid },
+            ...grouped.map(([title, fields]) => h('section', { key: title, style: title === 'Runtime' ? { ...styles.compactCard, gridColumn: '1 / -1' } : styles.compactCard, 'aria-label': `${title} settings` },
+              h('h3', { style: styles.compactCardTitle }, title),
+              ...fields.map(([field, label, type]) => h(SessionField, { key: field, field, label, type, settings: visible, disabled, mutate })),
+              title === 'Detection' ? h('div', { style: styles.compactRow },
+                h('div', { style: styles.compactMeta },
+                  h('span', { style: styles.label }, 'Effective KL threshold'),
+                  h('span', { style: styles.inlineHint }, 'Derived from sensitivity'),
+                ),
+                h('output', { 'aria-label': 'Chat effective KL threshold', 'aria-live': 'polite', style: styles.sourceBadge }, Number(visible.threshold).toFixed(2)),
+              ) : null,
+            )),
+          ) : null,
+          error ? h('p', { role: 'alert', style: { ...styles.error, marginTop: 10 } }, error) : null,
+        ),
+      );
+    }
+
+    function SessionSettingsTab({ sessionId }) {
+      return sessionId ? h(SessionSettingsView, { key: String(sessionId), sessionId: String(sessionId) }) : null;
+    }
+
     return {
       name: 'qdev-trajectory-drift-soup-settings',
       inject: ['slots', 'configForms'],
@@ -396,6 +594,9 @@ window.__ModuleLoader__.load({
           }, SoupConfig)));
           return () => { for (const dispose of disposers.reverse()) dispose(); };
         }, 'qdev-trajectory-drift-soup: native settings and plugin detail configuration');
+        ctx.slots.inject('conversation.view', () => ctx.slots.register({
+          name: 'conversation.view', id: 'soup-session-settings', order: 40, label: 'SOUP',
+        }, SessionSettingsTab));
       },
     };
   },
