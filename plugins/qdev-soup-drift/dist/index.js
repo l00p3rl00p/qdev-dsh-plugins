@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { createPluginRuntime, PRESETS } from '../runtime.mjs';
 const PACKAGE_NAME = 'qdev-trajectory-drift-soup';
 const VERSION = '0.5.3';
-const SOURCE = 'https://github.com/l00p3rl00p/quatrus-scratchpad/tree/main/plugins/qdev-soup-drift';
+const SOURCE = 'https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift';
 const STATUS_PATH = '/qdev-soup-drift/status';
 const MENTOR_STATE_DOMAIN = defineDomain({
     name: 'qdev_soup_drift_state',
@@ -23,7 +23,7 @@ const MENTOR_STATE_DOMAIN = defineDomain({
 export const name = PACKAGE_NAME;
 export const inject = ['agents', 'storageDomain', 'webServer', 'userQuestions'];
 export const Config = s.object({
-    python: s.string().default('/home/qdev/llm-runtime/tools/venvs/soup/bin/python')
+    python: s.string().default('python3')
         .description('Python interpreter containing the official soup-cli package.'),
     enabled: s.boolean().default(true).volatile().description('Master switch for trajectory observation and intervention.'),
     detectorEnabled: s.boolean().default(true).volatile().description('Run the official SOUP drift detector for observed assistant messages.'),
@@ -62,7 +62,9 @@ export async function apply(ctx, config = {}) {
     const mentorTable = mentorDomain.table('sessions');
     const initialMentorState = Object.fromEntries(mentorTable.entries());
     const resolved = {
-        python: config.python ?? process.env.SOUP_PYTHON ?? '/home/qdev/llm-runtime/tools/venvs/soup/bin/python',
+        // The schema default is 'python3', so config.python is never empty. An explicit setting wins;
+        // otherwise a deployment can point at its interpreter with SOUP_PYTHON.
+        python: config.python && config.python !== 'python3' ? config.python : (process.env.SOUP_PYTHON ?? 'python3'),
         enabled: config.enabled.get() ?? true,
         detectorEnabled: config.detectorEnabled.get() ?? true,
         reanchoring: config.reanchoring.get() ?? true,
