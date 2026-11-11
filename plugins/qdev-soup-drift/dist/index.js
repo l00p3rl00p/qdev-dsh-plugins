@@ -62,7 +62,9 @@ export async function apply(ctx, config = {}) {
     const mentorTable = mentorDomain.table('sessions');
     const initialMentorState = Object.fromEntries(mentorTable.entries());
     const resolved = {
-        python: config.python ?? process.env.SOUP_PYTHON ?? 'python3',
+        // The schema default is 'python3', so config.python is never empty. An explicit setting wins;
+        // otherwise a deployment can point at its interpreter with SOUP_PYTHON.
+        python: config.python && config.python !== 'python3' ? config.python : (process.env.SOUP_PYTHON ?? 'python3'),
         enabled: config.enabled.get() ?? true,
         detectorEnabled: config.detectorEnabled.get() ?? true,
         reanchoring: config.reanchoring.get() ?? true,
