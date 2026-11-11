@@ -1,6 +1,8 @@
 # ACC repair spec — for the implementing model
 
-Written 2026-11-11 on branch `solution/acc-rc2.2-diagnosis` (local only, not pushed).
+Written 2026-11-11. Lives on `main` at `plugins/dsh-auto-code-correct/ACC-FIX-SPEC.md`:
+https://github.com/l00p3rl00p/qdev-dsh-plugins/blob/main/plugins/dsh-auto-code-correct/ACC-FIX-SPEC.md
+(also on branch `solution/acc-rc2.2-diagnosis`).
 Scope: `plugins/dsh-auto-code-correct` only. Do not touch Telemetry Seams or SOUP.
 
 ## 0. Read this first
