@@ -18,6 +18,16 @@ export default defineConfig([
     platform: 'node',
     dts: true,
     clean: true,
+    deps: { neverBundle: [/^@deepseek-ai\\//] },
+  },
+  {
+    entry: { client: 'src/client/index.tsx' },
+    outDir: 'lib',
+    format: 'cjs',
+    platform: 'browser',
+    target: 'es2022',
+    clean: false,
+    dts: false,
     deps: { neverBundle: clientModules },
     outputOptions: {
       entryFileNames: 'client.js',
