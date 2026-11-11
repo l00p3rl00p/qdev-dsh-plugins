@@ -15,7 +15,6 @@ import { capabilityEnabled, languageForExtension } from './capabilities.js'
 import { registerAccCommands } from './commands.js'
 import { DEFAULT_HYGIENE, syncGitHygiene } from './hygiene-hook.js'
 import { configuredToolDirectories, findTool } from './discovery.js'
-import { AccReadinessService } from './readiness-service.js'
 import {
   ACC_RESULT_META_VERSION,
   type AccFileChange,
@@ -296,7 +295,6 @@ function validateCheckers(checkers: readonly CheckerConfig[]): void {
  */
 export function apply(ctx: Context, config: Config): void {
   registerAccCommands(ctx)
-  new AccReadinessService(ctx, config)
   validateCheckers([...config.fixers, ...config.checkers])
   const effectiveEnabled = (extension: string, name: string): boolean => {
     return capabilityEnabled(
