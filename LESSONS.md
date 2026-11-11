@@ -304,3 +304,28 @@ text in this repository that describes `prepare`, `allowBuilds`, or Git build ap
    `ENOENT` and its detector cannot run in QClean.
 10. **Still unverified:** Telemetry Seams' browser half still mounts its own remote (lesson 5 applies if its tab ever
     disappears), and none of this has been run against DSH 0.2.2-rc.2.
+
+## What an installable plugin commit must contain — checklist and check, November 11, 2026
+
+A plugin is installed with `dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/<dir>'`. That path copies the commit and runs **no build**. So the commit itself must be a runnable package. Every item below is required:
+
+| # | Must be true in the commit | Why |
+|---|---|---|
+| 1 | Every file named by `main`, `exports`, `bin` and `dsh.bundle.patch` exists **and is committed** (`lib/` or `dist/` included) | Without it the package installs and cannot start |
+| 2 | No `prepare`, `preinstall`, `install` or `postinstall` script | pnpm refuses them for Git packages: `ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED` |
+| 3 | Built output was produced from this same commit's source | Otherwise the Harness runs code that does not match the source |
+| 4 | Harness-owned packages (`@deepseek-ai/dsh-*`, `@deepseek-ai/cordis`, `react`) are `peerDependencies` marked optional, never `dependencies` | A bundled copy installs a second Harness runtime into the profile |
+| 5 | Each entry file is covered by the `files` list | A packed tarball would otherwise drop it |
+| 6 | `dsh.bundle.patch` is declared; if `./client` is exported, `dsh.client.platform` is `web` and the client file is in `window.__ModuleLoader__.load` format with `id` equal to the package name | The Harness cannot register the plugin or its browser half otherwise |
+| 7 | `pnpm-lock.yaml` matches `package.json` (`pnpm install --frozen-lockfile` succeeds) | A stale lockfile makes the build unreproducible |
+| 8 | The plugin works installed alone | Plugins are standalone; one must never rely on another being present |
+
+**Check before giving anyone a SHA.** Items 1, 2, 4, 5 and 6 are checked by one script with no dependencies:
+
+```sh
+node scripts/check-installable.mjs
+```
+
+It was run against three known states on 2026-11-11: `main` (3 of 3 pass), the SOUP 0.6.3 feature branch (pass), and the old ACC anchor commit that had no `lib/` (fails, naming each missing file). The same check is the manual GitHub workflow **Plugin installable from Git commit** (`.github/workflows/plugin-installable.yml`); tick `verify_fresh` to also rebuild and compare for item 3. The `verify_fresh` job has not yet been run in GitHub Actions. Items 7 and 8 are checked by building and by installing the plugin alone in QClean.
+
+**A second way work gets lost: version drift between repositories.** SOUP 0.6.3 (per-chat settings, human-accepted on 2026-11-07) lived only on two unpushed local branches of `quatrus-scratchpad`. The consolidation copied scratchpad's `main`, which was still 0.5.3, so a full feature silently disappeared. Before copying a plugin between repositories, list every local and remote branch that touches it and compare versions; push and tag feature branches the day they are accepted.
