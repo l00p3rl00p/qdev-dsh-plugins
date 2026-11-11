@@ -1,5 +1,8 @@
 # SOUP "CHAT 2.0" build spec — for the implementing model
 
+> **Superseded 2026-11-11 by `SOUP-CHAT2-BUILD-SPEC-v2.md`.** This version was written against SOUP 0.5.3, before 0.6.3 (which already has Feature 2) was recovered. Kept for history; do not build from it.
+
+
 Written 2026-11-11. Branch: `feature/soup-per-chat-20261111` (cut from `main` at tag `soup-v0.5.3`).
 Package: `qdev-trajectory-drift-soup`, directory `plugins/qdev-soup-drift`. Target Harness: DSH `0.2.2-rc.1`.
 Upstream engine (do not reimplement it): https://github.com/MakazhanAlpamys/Soup — used through `soup_worker.py`
