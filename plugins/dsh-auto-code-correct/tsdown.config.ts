@@ -18,7 +18,7 @@ export default defineConfig([
     platform: 'node',
     dts: true,
     clean: true,
-    deps: { neverBundle: [/^@deepseek-ai\\//] },
+    deps: { neverBundle: [/^@deepseek-ai[/]/] },
   },
   {
     entry: { client: 'src/client/index.tsx' },
