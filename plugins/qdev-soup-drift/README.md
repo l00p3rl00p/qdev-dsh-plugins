@@ -162,3 +162,7 @@ The deterministic worker/policy test drives three independent drift windows and 
 - `node_modules/`, `dist/`, generated tarballs, and `.pnpm-store/` are local install/build state and should remain untracked.
 
 The original experimental sources remain under `experiments/`. Treat 0.5.3 as operationally accepted only after the installed UI, live event intake, detector evaluation, native inbox delivery, and human clarification flow have been captured in the real Web profile.
+
+## Prebuilt install payload (added 2026-11-11)
+
+The GitHub install no longer builds on arrival. `dist/` is committed with the source and the `prepare` script was removed, because pnpm blocks Git-hosted build scripts (`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`). This supersedes the "Git build approval" and `prepare` paragraphs above: no `allowBuilds` entry is needed. After changing `src/`, run `pnpm run build` and commit the regenerated `dist/` in the same commit. Install a specific commit with `dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/qdev-soup-drift'`.

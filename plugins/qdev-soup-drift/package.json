@@ -53,8 +53,7 @@
     "test:worker": "node --test --test-name-pattern='direct SOUP Python worker' test/policy.test.mjs",
     "check:client": "node --check client.js && node scripts/check-client.mjs",
     "check:host": "node --input-type=module -e \"import('./dist/index.js').then(m => { if (m.name !== 'qdev-trajectory-drift-soup' || typeof m.apply !== 'function' || !m.Config) process.exit(1) })\"",
-    "verify": "pnpm run typecheck && pnpm run build && pnpm run check:host && pnpm run check:client && pnpm test",
-    "prepare": "pnpm run build && pnpm run check:host && pnpm run check:client"
+    "verify": "pnpm run typecheck && pnpm run build && pnpm run check:host && pnpm run check:client && pnpm test"
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "3.18.5",

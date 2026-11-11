@@ -83,7 +83,6 @@
     ]
   },
   "scripts": {
-    "prepare": "pnpm run build && pnpm run check:package",
     "build": "tsdown",
     "test": "vitest run",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.client.json --noEmit",

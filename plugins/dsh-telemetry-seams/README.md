@@ -137,3 +137,7 @@ validation, and recovery requirements. For the isolated QClean install/test,
 run `./qclean test-telemetry` from QDocker Compose (not from this plugin directory).
 Do not install directly into the production Web profile until the clean
 session/UI/probe results are verified.
+
+## Prebuilt install payload (added 2026-11-11)
+
+The GitHub install no longer builds on arrival. `lib/` is committed with the source and the `prepare` script was removed, because pnpm blocks Git-hosted build scripts (`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`). No `allowBuilds` entry is needed. After changing `src/`, run `pnpm run build` and commit the regenerated `lib/` in the same commit. Install a specific commit with `dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/dsh-telemetry-seams'`.
