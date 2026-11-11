@@ -209,3 +209,13 @@ Test with a known failure in a disposable repository. The hook should fail the c
 The real workflow is [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Before calling ACC fully implemented, inspect the current workflow run and validate: packaged plugin import, DSH native profile install, Auto-Correct language and capability off/on, LSP on/off and startup, Git hook invocation with staged-data pass/fail, and **persistence** across restart. CI currently defines build, lint, format, typecheck, Vitest and package checks; the complete three-group runtime acceptance sequence has **not** been proven by those declarations alone.
 
 `ACC_QDOCKER_READ_TOKEN` is the exact optional CI secret for the private QDev Code-and-Quality installer checkout. Without it, cross-repository inventory validation is skipped. See [ENVIRONMENT.md](ENVIRONMENT.md) for the exact source paths and environment flags.
+
+## Current install path (added 2026-11-11)
+
+The tarball steps above are historical. The current path is the native GitHub install of a commit that already contains `lib/`:
+
+```sh
+dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/dsh-auto-code-correct'
+```
+
+Restart the Harness once, hard-reload the browser, then check: plugin shows Running, the options section is on the ACC plugin page, the AutoCorrect tab is present. If the Host half fails, the Harness log prints `auto-code-correct (dsh-auto-code-correct): failed to import: ...`.

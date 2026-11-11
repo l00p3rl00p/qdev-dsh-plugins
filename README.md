@@ -35,7 +35,7 @@ A plugin's source can change and ship without requiring changes to the other plu
 
 | Plugin | Package | Version | Scope |
 | --- | --- | --- | --- |
-| **[Auto Code Correct (ACC)](plugins/dsh-auto-code-correct)** | `dsh-auto-code-correct` | 0.1.12 | Language tooling, bounded correction, readiness, and operation evidence |
+| **[Auto Code Correct (ACC)](plugins/dsh-auto-code-correct)** | `dsh-auto-code-correct` | 0.1.13 | Language tooling, bounded correction, readiness, and operation evidence |
 | **[SOUP Drift + Gentle Mentor](plugins/qdev-soup-drift)** | `qdev-trajectory-drift-soup` | 0.5.3 | Live trajectory drift detection and in-session intervention |
 | **[Telemetry Seams](plugins/dsh-telemetry-seams)** | `dsh-telemetry-seams` | 0.1.2 | Read-only inventory and health probes of native telemetry interfaces |
 

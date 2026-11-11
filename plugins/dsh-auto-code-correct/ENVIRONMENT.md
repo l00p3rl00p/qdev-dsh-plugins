@@ -8,6 +8,8 @@ The Scratchpad checkout at `/home/qdev/scratchpad/plugins/dsh-auto-code-correct`
 
 The client bundle uses the native DSH browser ModuleLoader, which does not resolve arbitrary Node dependencies. `tsdown.config.ts` must bundle unsupported imports and `scripts/check-package.mjs` is the CI packaging safeguard. See [shared safety lessons](https://github.com/l00p3rl00p/quatrus-scratchpad/blob/main/plugins/plugin-lessons.md) and [emergency recovery](RUNBOOK.md#emergency-recovery--bad-web-plugin). Do not remove all DSH profiles or the container to recover one plugin.
 
+> **Superseded 2026-11-11 (ACC 0.1.13):** the Typert readiness remote described below was removed. The client no longer mounts a remote; tool availability is reported by `/acc status`.
+
 **ACC readiness lifecycle (v0.1.9):** `src/client/index.tsx` mounts `TYPERT_REMOTE` and creates a child `ctx.inject(... 'remote.accReadiness' ...)` scope before accessing `scope.remote.accReadiness.snapshot`. The Host readiness service is defined in `src/readiness-service.ts`. `remote.accReadiness` is **not** a parent-level injection requirement; declaring it on the parent would block creation of its own service. Verify actual installed UI load and Refresh separately from package compilation. See [single plugin lessons authority](https://github.com/l00p3rl00p/quatrus-scratchpad/blob/main/plugins/plugin-lessons.md).
 
 ## Exact source files, settings and flags

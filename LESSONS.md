@@ -26,11 +26,15 @@ This is the shared installation contract for **ACC, Telemetry Seams, and SOUP**.
    - SOUP: `qdev-trajectory-drift-soup`
 6. **Do not confuse source verification with target verification.** Build/package checks can reject a bad artifact before installation, but the final proof is the native DSH install followed by the plugin-specific runtime checks in the real target profile.
 
+> **Superseded 2026-11-11:** the anchor below proved only the installer; that commit has no `lib/`, so it could not run. The working state is recorded in "Prebuilt payload verified for all three plugins" at the end of this file.
+
 ### ACC proven installation anchor
 
 On November 10, 2026, ACC source commit `83eaca804c39e91ba0cd6fea06698d3d7e1eeba7` was installed successfully by DSH 0.2.2 from its GitHub subdirectory source. It is preserved as branch `working-install/acc-0.1.12-20261110`.
 
 **Status of that anchor: WORKING INSTALL ONLY.** It proves package/source installation. It does **not** prove UI parity or feature completeness. In that installed build, the embedded plugin Web surface appears, while the expected native Options/Settings surface is absent.
+
+> **Superseded 2026-11-11:** completed in ACC 0.1.13 by removing the readiness remote, not by adding a second surface.
 
 ### Next ACC repair boundary
 
@@ -264,3 +268,39 @@ playwright-cli -s=<session-name> screenshot --filename=/tmp/output.png
 - Follow-up: keep the setting visible and local; do not turn it into continuous polling without explicit product approval.
 
 2026-11-11 — ACC removed its obsolete Typert readiness remote because it gated native options and conversation UI registration; `/acc status` remains the native tool-availability interface. Clean-container acceptance is pending.
+
+## Prebuilt payload verified for all three plugins — November 11, 2026
+
+**Scope:** ACC 0.1.13, Telemetry Seams 0.1.2, SOUP 0.5.3 on DSH 0.2.2-rc.1. Installed into the QClean profile from
+GitHub subdirectory commits and confirmed working in the Web UI by the owner. The entries below supersede any earlier
+text in this repository that describes `prepare`, `allowBuilds`, or Git build approval as part of the install.
+
+1. **One defect broke all three installs.** Each package pointed its entry at built output (`lib/` or `dist/`) that
+   was not in the repository and relied on a `prepare` script to create it. pnpm refuses Git-hosted build scripts
+   (`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`). Removing `prepare` without committing the output gives the opposite
+   failure: the package installs but has nothing to run.
+2. **The fix is the package, never the installer.** Commit the built output with the source, remove `prepare`, and
+   install the exact commit: `dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/<dir>'`.
+   Build in the clean container from the same commit, then rebuild and confirm the output is unchanged before committing.
+3. **"Installs" proves nothing about "runs".** A commit with no runtime installs cleanly. The acceptance bar is
+   installs → Running → the plugin's own UI works, checked in the real Web UI.
+4. **Read the Host log of the container you are testing.** A plugin whose Host half cannot start prints
+   `<id> (<package>): failed to import: ...` at boot. Older ACC builds printed exactly that for a missing
+   `@deepseek-ai/dsh-lsp-stdio` in QClean. Absence of that line after a restart is evidence the Host half imported;
+   it says nothing about the browser half.
+5. **Do not gate a plugin's whole UI on an optional service.** ACC registered its options page and its conversation
+   tab inside one child injection that waited on its own mounted remote, which only fed a diagnostics card. When that
+   service was unavailable nothing registered. ACC 0.1.13 removed the remote. No working third-party plugin in the
+   same Harness mounts its own remote for settings.
+6. **A new upstream feature can look like a plugin defect.** DSH 0.2.2 renders each package's README on its plugin
+   page (`BundleDetailSection`). It is not plugin code and a plugin cannot switch it off.
+7. **Keep the lockfile in step with `package.json`.** ACC's lockfile was stale after its SDK pins moved to
+   0.2.2-rc.1; `pnpm install --frozen-lockfile` failed and pnpm then resolved without it. The regenerated lockfile is
+   committed with the 0.1.13 payload.
+8. **After a restart, hard-reload the browser before judging the UI.** A page loaded before the restart can keep
+   showing the previous plugin state.
+9. **Known environment gaps in QClean, not plugin defects:** `ty` is not on `PATH` (ACC Python checks report
+   unavailable) and SOUP's configured Python interpreter path does not exist there, so SOUP's worker test fails with
+   `ENOENT` and its detector cannot run in QClean.
+10. **Still unverified:** Telemetry Seams' browser half still mounts its own remote (lesson 5 applies if its tab ever
+    disappears), and none of this has been run against DSH 0.2.2-rc.2.

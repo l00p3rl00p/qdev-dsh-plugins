@@ -247,3 +247,7 @@ The owner is the tester. Give them exactly one SHA and the frozen command. Do no
 - Upstream changes to `packages/api/gateway/src` between rc.5 and rc.1 (about 100 lines) were not read; they may bear on `$mount`.
 - No marketplace index is configured by default in DSH; the comparison in section 2 used the plugins installed in the live Harness instead.
 - Telemetry Seams and SOUP were not analysed.
+
+## Status — RESOLVED 2026-11-11
+
+ACC 0.1.13 implements revised Step 3 (readiness remote removed on Host and client) and ships a prebuilt `lib/`. The owner confirmed it working in QClean on DSH 0.2.2-rc.1. Step 1 and Step 4 were not needed. This file is kept as the record of the diagnosis; the durable lessons are in the root `LESSONS.md`.

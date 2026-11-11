@@ -61,6 +61,8 @@ docker restart quatrus-harness-deepseek-harness
 
 If ACC still loads, inspect `dsh --profile web --dump-config` and the effective profile/home Cordis patch for a separately configured ACC insertion; disable only that insertion through the native configuration path and restart once. Do **not** delete `~/.dsh`, clear sessions, remove other plugins, or rebuild the entire Docker stack. Full operator details: [ACC Runbook](RUNBOOK.md#emergency-recovery--bad-web-plugin) and [shared plugin lessons](https://github.com/l00p3rl00p/qdev-dsh-plugins/blob/main/plugins/plugin-lessons.md).
 
+> **Superseded 2026-11-11 (ACC 0.1.13):** the Typert readiness remote described below was removed. The client no longer mounts a remote; tool availability is reported by `/acc status`.
+
 ACC 0.1.9 also corrects the Environment readiness panel's native Remote-service injection. It reads the mounted `remote.accReadiness` namespace through an explicitly injected child Cordis scope. The verified package must show readiness on first load and after **Refresh**, without the `without inject` error. See [Runbook](RUNBOOK.md#confirm-installed-readiness-dashboard-acc-019) for live acceptance; CI covers the injection source contract but cannot substitute for an installed browser session.
 
 ## Browser safety and recovery
@@ -82,6 +84,8 @@ The equivalent native CLI command, if the Web UI is unavailable, is:
 ```sh
 dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#main&path:/plugins/dsh-auto-code-correct'
 ```
+
+> **Superseded 2026-11-11:** the build-on-install text below is historical. `prepare` was removed and the built runtime is committed with the source, so no `allowBuilds` entry or Git build approval is needed. See "Prebuilt install payload" at the end of this file.
 
 **Git build approval (native DSH Web):** First use **Plugins → Add plugin** with the Git spec above. If pnpm refuses the source `prepare` script, DSH's own Plugin Manager records the exact pending `allowBuilds` key and offers **Allow these scripts and retry**. Review the named source and approve **only the intended plugin**. DSH writes the approval into the active Web profile's `pnpm-workspace.yaml` and retries the install. You do **not** have to pre-edit YAML or install via a copied QClean tarball.
 
@@ -160,3 +164,9 @@ MIT; original attribution to [dsh-lens-lite](https://github.com/ben7am1n/dsh-len
 <div align="center"><sub>ACC · Native DeepSeek Harness code correction and verification</sub></div>
 
 2026-11-11 — ACC removed its obsolete Typert readiness remote because it gated native options and conversation UI registration; `/acc status` remains the native tool-availability interface. Clean-container acceptance is pending.
+
+## Prebuilt install payload (added 2026-11-11)
+
+The GitHub install no longer builds on arrival. `lib/` is committed with the source and ACC has no `prepare` script, because pnpm blocks Git-hosted build scripts (`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`). No `allowBuilds` entry is needed. After changing `src/`, run `pnpm run build` and commit the regenerated `lib/` in the same commit. Install a specific commit with `dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/dsh-auto-code-correct'`.
+
+ACC 0.1.13 removed the Environment readiness card and its Typert remote; use `/acc status <capability-id>` for tool availability.

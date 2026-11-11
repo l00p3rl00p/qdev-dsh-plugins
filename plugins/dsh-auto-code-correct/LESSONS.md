@@ -4,6 +4,8 @@
 
 The verified native DSH GitHub install path does not build ACC on arrival. ACC must include its built `lib/` runtime in the package/source revision before installation. Do **not** add a `prepare` hook to solve missing build output; Git-hosted build scripts are subject to pnpm `allowBuilds` policy and are not part of the proven installer contract.
 
+> **Superseded 2026-11-11:** resolved in ACC 0.1.13; the options page and AutoCorrect tab are back. See the root `LESSONS.md`.
+
 ## QClean install observation — November 10, 2026
 
 Observed in the clean DSH 0.2.2 test environment:
@@ -44,6 +46,8 @@ Treat this set as an **installation/merge recipe**, not permission to copy ACC's
 - A successful Host install is not proof the browser module can load. Inspect **emitted** client imports against the available DSH ModuleLoader modules.
 - Missing `@deepseek-ai/dsh-lsp-stdio` can break ACC setup; verify prerequisite availability and native load, rather than treating a successful package build as proof of readiness.
 - A visible ACC control is not proof of persistence. Save, reload and inspect the effective Host config, then perform a real supported edit and verify the correction result in the AutoCorrect tab.
+> **Superseded 2026-11-11 (ACC 0.1.13):** the Typert readiness remote described below was removed. The client no longer mounts a remote; tool availability is reported by `/acc status`.
+
 - ACC's `remote.accReadiness` service needs the correct child Cordis injection scope; an active Host plugin does not prove the Refresh action populates the readiness view.
 - A correction pass must remain bounded, visible, and nonblocking; avoid infinite retry/restart cycles.
 - Keep real integrations and run results as acceptance evidence; do not replace them with mocks.
