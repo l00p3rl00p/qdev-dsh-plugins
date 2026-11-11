@@ -60,7 +60,7 @@ Keep the proven install anchor intact. The next change is narrowly scoped to res
 4. **Change all sides of a remote API contract together.** When a Host method declares zero arguments, its browser caller, type declaration, generated-equivalent remote descriptor, and package/regression checks must all agree. In ACC, sending an `AbortSignal` as a positional argument to `accReadiness.snapshot()` produced `expected 0 argument(s), got 1`. Cancellation belongs in the caller's UI lifecycle, not as an undeclared serialized method argument. The first source fix exposed a stale package test still requiring the old call: update the test oracle when the contract changes, without weakening the assertion.
 5. **A green unit suite and successful bundle do not prove a releasable plugin.** ACC passed 32 unit tests and produced both bundles, then failed the package-contract gate. Required acceptance is: lint/format/types/tests → build → emitted bundle/package checks → native install → actual browser registration, click/action, session creation/reopen and reload. Record which gates genuinely ran; do not claim browser acceptance based on build output.
 
-**Code authority:** [ACC implementation](plugins/dsh-auto-code-correct/), its [package check](plugins/dsh-auto-code-correct/scripts/check-package.mjs), [build configuration](plugins/dsh-auto-code-correct/tsdown.config.ts), and [QClean recovery runbook](https://github.com/l00p3rl00p/qdocker-compose/blob/main/cleanbuild/RUNBOOK.md). The standalone ACC GitHub repository and Scratchpad ACC copy are deprecated; do not use them as sources for fixes or release artifacts.
+**Code authority:** [ACC implementation](plugins/dsh-auto-code-correct/), its [package check](plugins/dsh-auto-code-correct/scripts/check-package.mjs), [build configuration](plugins/dsh-auto-code-correct/tsdown.config.ts), and a private operations runbook (not required to use this repository). The standalone ACC GitHub repository and Scratchpad ACC copy are deprecated; do not use them as sources for fixes or release artifacts.
 
 ## Shared operational rules — reusable across every DSH plugin
 
@@ -84,8 +84,8 @@ These are universal acceptance boundaries. Put the plugin-specific button, servi
 **Mandatory escape:** DSH's native CLI must remain usable when the browser/plugin manager cannot load. From the Mac's terminal, remove *only the defective installed package* from the intended profile, then restart the Harness container **once**:
 
 ```sh
-docker exec -it quatrus-harness-deepseek-harness bash -lc 'dsh plugin --profile web remove ACTUAL_PLUGIN_PACKAGE_NAME'
-docker restart quatrus-harness-deepseek-harness
+docker exec -it <harness-container> bash -lc 'dsh plugin --profile web remove ACTUAL_PLUGIN_PACKAGE_NAME'
+docker restart <harness-container>
 ```
 
 Use the real package identity from that plugin's `package.json` (e.g. `dsh-auto-code-correct` or `qdev-trajectory-drift-soup`). **Every plugin README must include the actual, copyable commands with its name**, not just link to this document—even a non-Web plugin should document its removal path. If the installed package is absent or removal fails, diagnose the active profile instead of deleting files speculatively.
@@ -244,7 +244,7 @@ playwright-cli -s=<session-name> screenshot --filename=/tmp/output.png
 - Use `playwright-cli -s=<name> find "text"` to verify elements are present before clicking.
 - Grafana and OpenSearch Dashboards require authentication; credentials live in the Mac keyring (`GRAFANA_ADMIN_PASSWORD`, `OPENSEARCH_ADMIN_PASSWORD`) and are not injected into the harness container.
 
-**Verified:** Firefox successfully navigated to Prometheus and captured a live graph screenshot at `/tmp/prometheus-graph.png` showing `container_memory_usage_total_bytes{container_name="quatrus-harness-deepseek-harness"}` over 1h.
+**Verified:** Firefox successfully navigated to Prometheus and captured a live graph screenshot at `/tmp/prometheus-graph.png` showing `container_memory_usage_total_bytes{container_name="<harness-container>"}` over 1h.
 
 ## 8. Known backlog items (dsh-telemetry-seams, v0.2.0)
 
@@ -271,7 +271,7 @@ playwright-cli -s=<session-name> screenshot --filename=/tmp/output.png
 
 ## Prebuilt payload verified for all three plugins — November 11, 2026
 
-**Scope:** ACC 0.1.13, Telemetry Seams 0.1.2, SOUP 0.5.3 on DSH 0.2.2-rc.1. Installed into the QClean profile from
+**Scope:** ACC 0.1.13, Telemetry Seams 0.1.2, SOUP 0.5.3 on DSH 0.2.2-rc.1. Installed into a clean test Harness profile from
 GitHub subdirectory commits and confirmed working in the Web UI by the owner. The entries below supersede any earlier
 text in this repository that describes `prepare`, `allowBuilds`, or Git build approval as part of the install.
 
@@ -286,7 +286,7 @@ text in this repository that describes `prepare`, `allowBuilds`, or Git build ap
    installs → Running → the plugin's own UI works, checked in the real Web UI.
 4. **Read the Host log of the container you are testing.** A plugin whose Host half cannot start prints
    `<id> (<package>): failed to import: ...` at boot. Older ACC builds printed exactly that for a missing
-   `@deepseek-ai/dsh-lsp-stdio` in QClean. Absence of that line after a restart is evidence the Host half imported;
+   `@deepseek-ai/dsh-lsp-stdio` in the clean test Harness. Absence of that line after a restart is evidence the Host half imported;
    it says nothing about the browser half.
 5. **Do not gate a plugin's whole UI on an optional service.** ACC registered its options page and its conversation
    tab inside one child injection that waited on its own mounted remote, which only fed a diagnostics card. When that
@@ -299,9 +299,9 @@ text in this repository that describes `prepare`, `allowBuilds`, or Git build ap
    committed with the 0.1.13 payload.
 8. **After a restart, hard-reload the browser before judging the UI.** A page loaded before the restart can keep
    showing the previous plugin state.
-9. **Known environment gaps in QClean, not plugin defects:** `ty` is not on `PATH` (ACC Python checks report
+9. **Known environment gaps in the clean test Harness, not plugin defects:** `ty` is not on `PATH` (ACC Python checks report
    unavailable) and SOUP's configured Python interpreter path does not exist there, so SOUP's worker test fails with
-   `ENOENT` and its detector cannot run in QClean.
+   `ENOENT` and its detector cannot run in the clean test Harness.
 10. **Still unverified:** Telemetry Seams' browser half still mounts its own remote (lesson 5 applies if its tab ever
     disappears), and none of this has been run against DSH 0.2.2-rc.2.
 
@@ -326,6 +326,27 @@ A plugin is installed with `dsh plugin --profile web add 'github:l00p3rl00p/qdev
 node scripts/check-installable.mjs
 ```
 
-It was run against three known states on 2026-11-11: `main` (3 of 3 pass), the SOUP 0.6.3 feature branch (pass), and the old ACC anchor commit that had no `lib/` (fails, naming each missing file). The same check is the manual GitHub workflow **Plugin installable from Git commit** (`.github/workflows/plugin-installable.yml`); tick `verify_fresh` to also rebuild and compare for item 3. The `verify_fresh` job has not yet been run in GitHub Actions. Items 7 and 8 are checked by building and by installing the plugin alone in QClean.
+It was run against three known states on 2026-11-11: `main` (3 of 3 pass), the SOUP 0.6.3 feature branch (pass), and the old ACC anchor commit that had no `lib/` (fails, naming each missing file). The same check is the manual GitHub workflow **Plugin installable from Git commit** (`.github/workflows/plugin-installable.yml`); tick `verify_fresh` to also rebuild and compare for item 3. The `verify_fresh` job has not yet been run in GitHub Actions. Items 7 and 8 are checked by building and by installing the plugin alone in a clean test Harness.
 
-**A second way work gets lost: version drift between repositories.** SOUP 0.6.3 (per-chat settings, human-accepted on 2026-11-07) lived only on two unpushed local branches of `quatrus-scratchpad`. The consolidation copied scratchpad's `main`, which was still 0.5.3, so a full feature silently disappeared. Before copying a plugin between repositories, list every local and remote branch that touches it and compare versions; push and tag feature branches the day they are accepted.
+**A second way work gets lost: version drift between repositories.** SOUP 0.6.3 (per-chat settings, human-accepted on 2026-11-07) lived only on two unpushed local branches of another repository. The consolidation copied that repository's `main`, which was still 0.5.3, so a full feature silently disappeared. Before copying a plugin between repositories, list every local and remote branch that touches it and compare versions; push and tag feature branches the day they are accepted.
+
+## Corrections after review — November 11, 2026
+
+A read-through of this file against what was actually proven found statements that are wrong, out of date, or do not belong in a public repository. They are corrected here; the original text above is kept for history.
+
+| Earlier statement | Correction |
+|---|---|
+| "One authoritative lessons document… Do not create plugin-specific lessons files" | Out of date. Each plugin has its own `LESSONS.md`. Rule now: this file holds lessons shared by all plugins; a plugin's file holds only plugin-specific ones. |
+| "Preserve a proven install anchor" and the ACC anchor commit | Misleading. That anchor had no built output and could not run. An anchor is only worth keeping if it passes `scripts/check-installable.mjs` **and** was seen Running with its UI working. Use the release tags instead. |
+| "Browser-load and package health are mandatory GitHub Actions gates" | Out of date. Every workflow here is manual (`workflow_dispatch`). They are checks to run before handing out a SHA, not automatic gates. |
+| "Remote namespace lifecycle" pattern (mount your own remote, read it from a child injection scope) | Do not use as a default. ACC removed its remote because it gated the whole UI on an optional service. Prefer the Harness's existing channels; mount a remote only when a feature truly needs one, and never let settings or tabs depend on it. |
+| "Git build approval" / `allowBuilds` guidance in older sections and READMEs | Wrong for this repository now. Plugins ship prebuilt; nothing builds on install. |
+| Emergency removal commands naming one specific container | Replaced with `<harness-container>`. Container names are deployment-specific. |
+| Sections 6 (Playwright in a specific container) and 8 (deployment backlog) | Describe one private deployment. Kept for history; they are not portable guidance and new notes of that kind belong in private operations docs. |
+| References to a "clean" test environment by a private tool name, and links to a private operations runbook | Not usable by public readers. Read them as "a clean, disposable Harness profile". The linked private runbook is not required to use anything here. |
+
+**Public-repository rules now live in [AGENTS.md](AGENTS.md).** In short: no secrets, no personal or machine-specific details, no dependency on private repositories, and every plugin standalone.
+
+**Standalone was proven for ACC, not yet for the other two.** ACC 0.1.13 was installed by itself on a Harness and worked. Telemetry Seams and SOUP have been verified alongside other plugins but not each installed alone.
+
+**Known standalone violations still in the code** (tracked in `BACKLOG.md`): SOUP defaults its Python interpreter to a fixed path from one machine; ACC's `hooks.json` and `check.sh` assume one home directory; ACC's own CI workflow checks out a private repository.
