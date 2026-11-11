@@ -158,3 +158,5 @@ Before declaring ACC production-ready, reconcile code, manifest, native host ent
 MIT; original attribution to [dsh-lens-lite](https://github.com/ben7am1n/dsh-lens-lite) is preserved. See [LICENSE](LICENSE) and the upstream project for original copyright and license terms.
 
 <div align="center"><sub>ACC · Native DeepSeek Harness code correction and verification</sub></div>
+
+2026-11-11 — ACC removed its obsolete Typert readiness remote because it gated native options and conversation UI registration; `/acc status` remains the native tool-availability interface. Clean-container acceptance is pending.
