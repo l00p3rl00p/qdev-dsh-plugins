@@ -262,3 +262,5 @@ playwright-cli -s=<session-name> screenshot --filename=/tmp/output.png
 - Behavior: one probe per tab mount, cancelled on unmount, no background polling. The preference is persisted in browser localStorage.
 - Overhead: at most one probe per tab open (normal probe timeout is ~4s); disabled by default until the user opts in.
 - Follow-up: keep the setting visible and local; do not turn it into continuous polling without explicit product approval.
+
+2026-11-11 — ACC removed its obsolete Typert readiness remote because it gated native options and conversation UI registration; `/acc status` remains the native tool-availability interface. Clean-container acceptance is pending.
