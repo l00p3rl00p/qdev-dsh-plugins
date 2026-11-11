@@ -137,3 +137,11 @@ How it is used: read-only glance by the human; the agent is not involved.
 - Live-drift proof needs the main Harness; QClean has no SOUP Python.
 - History is memory-only and empties on restart.
 - A chat in the owner's screenshot failed to load with "not marked ignorable; refusing to interpret". Not investigated; out of scope here.
+
+## 7. Owner correction — 2026-11-11 (overrides sections 4 and 6 where they differ)
+
+- **Placement is settled: SOUP lives in its own tab in the chat's tab row, right beside Trajectory.** That tab already exists and the owner confirmed it in QClean on 0.6.3 (tab row: Chat, Trajectory, AutoCorrect, Telemetry Seams, SOUP). Do not move it and do not change how it registers.
+- **Do not build the compact Trajectory card.** Drop everything in Feature 3 about `conversation.composer.dock`, the card's one-line content, and the card tests. `conversation.composer.dock` is removed from the allowed-seams list for this work.
+- **Feature 3 is now only:** the `Settings | Live & Mentor` switch inside the existing SOUP tab, with the live section (Feature 7 data) and the Gentle Mentor section (Feature 4).
+- Open point "Card position" in section 6 is closed.
+- SOUP 0.6.3 (commit `da279a3` code) is installed on the main Harness as of this date, so live-drift checks can run there.
