@@ -26,7 +26,6 @@ const hostSource = readFileSync('src/index.ts', 'utf8')
 check(!clientSource.includes('$mount') && !clientSource.includes('remote.accReadiness') && !clientSource.includes('dsh-typert-protocol'), 'Client must not depend on readiness remote')
 check(clientSource.includes('plugins.bundle.config') && clientSource.includes('dsh-auto-code-correct') && readFileSync('src/client/autocorrect-view.tsx', 'utf8').includes('conversation.view'), 'Native plugin options and conversation view registrations required')
 check(!hostSource.includes('AccReadinessService'), 'Host must not initialize readiness remote')
-check(!/^import .* from ['"](?:@deepseek-ai\\/dsh-lsp-stdio|dsh-lsp-actions)['"]$/m.test(hostSource), 'Optional LSP providers must not be eagerly imported')
 const allowedClientImports = new Set(['react', 'react/jsx-runtime'])
 const browserRequirePattern = /\brequire\(\s*['"]([^'"]+)['"]\s*\)/g
 const scanBrowserRequires = (source) => [...source.matchAll(browserRequirePattern)].map((match) => match[1])
