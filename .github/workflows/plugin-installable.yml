@@ -1,0 +1,50 @@
+name: Plugin installable from Git commit
+
+# Manual only. Run it from the Actions tab (or `gh workflow run plugin-installable.yml --ref <branch>`)
+# before handing anyone a commit SHA to install.
+on:
+  workflow_dispatch:
+    inputs:
+      verify_fresh:
+        description: Also rebuild each plugin and fail if the committed built output differs
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  installable:
+    name: Committed package can run without a build step
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # No dependencies to install: the script reads package.json and asks git what is committed.
+      - run: node scripts/check-installable.mjs
+
+  fresh:
+    name: Committed built output matches the source
+    if: ${{ inputs.verify_fresh }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: [dsh-auto-code-correct, dsh-telemetry-seams, qdev-soup-drift]
+    defaults:
+      run:
+        working-directory: plugins/${{ matrix.plugin }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      # A stale lib/ or dist/ means the commit would install code that does not match its source.
+      - run: git diff --exit-code -- lib dist
