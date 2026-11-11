@@ -66,7 +66,7 @@ test('stale asynchronous drift is suppressed instead of reattributed to a later 
 test('direct SOUP Python worker: three independent windows cause 2 reminders and one escalation',async()=>{
  const injected=[],humans=[],notices=[],errors=[];
  let resolveComplete;const complete=new Promise(resolve=>resolveComplete=resolve);
- const p=createPluginRuntime({python:process.env.SOUP_PYTHON||'/home/qdev/llm-runtime/tools/venvs/soup/bin/python',baselineCount:1,windowCount:1,
+ const p=createPluginRuntime({python:process.env.SOUP_PYTHON||'python3',baselineCount:1,windowCount:1,
   inject:x=>injected.push(x),escalate:x=>humans.push(x),
   notify:x=>{notices.push(x);if(notices.length===3)resolveComplete()},onError:e=>{errors.push(e);resolveComplete()}});
  p.observe('s',{type:'turn/start',data:{turn:1}});

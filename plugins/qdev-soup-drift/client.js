@@ -338,7 +338,7 @@ window.__ModuleLoader__.load({
           h('div', { style: styles.copy },
             h('code', { style: styles.code }, 'qdev-trajectory-drift-soup · version 0.5.3'),
             h('a', {
-              href: 'https://github.com/l00p3rl00p/quatrus-scratchpad/tree/main/plugins/qdev-soup-drift',
+              href: 'https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift',
               target: '_blank', rel: 'noreferrer',
               style: { color: 'var(--dsw-alias-label-primary)', fontSize: 12, lineHeight: '18px' },
             }, 'Source repository'),

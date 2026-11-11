@@ -4,7 +4,7 @@
       "id": "auto-code-correct",
       "event": "post-tool",
       "tools": ["edit", "write"],
-      "command": "sh /home/qdev/.dsh/auto-code-correct/check.sh",
+      "command": "sh \"${DSH_HOME:-$HOME/.dsh}/auto-code-correct/check.sh\"",
       "timeoutMs": 60000
     }
   ]

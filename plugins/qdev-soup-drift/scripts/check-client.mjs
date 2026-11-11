@@ -7,8 +7,10 @@ const text = readFileSync('client.js', 'utf8')
 const requires = [...text.matchAll(/\brequire\(\s*['"]([^'"]+)['"]\s*\)/g)].map((match) => match[1])
 const unsupported = [...new Set(requires.filter((value) => value !== 'react'))]
 const errors = []
-const prepare = 'pnpm run build && pnpm run check:host && pnpm run check:client'
-if (pkg.scripts?.prepare !== prepare) errors.push('SOUP GitHub install must build Host and verify Host/Web through prepare')
+// Git installs run no build: pnpm blocks lifecycle scripts, so dist/ ships committed instead.
+for (const name of ['prepare', 'preinstall', 'install', 'postinstall']) {
+  if (pkg.scripts?.[name]) errors.push(`SOUP must not define a ${name} script; the Git install cannot run it`)
+}
 const packedFiles = ['dist/index.js', 'client.js', 'locale/en.json', 'icon.svg',
   'drift.mjs', 'reanchor.mjs', 'runtime.mjs', 'soup_worker.py', 'cordis.patch.yml']
 for (const file of packedFiles) {

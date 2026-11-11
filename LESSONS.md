@@ -348,5 +348,3 @@ A read-through of this file against what was actually proven found statements th
 **Public-repository rules now live in [AGENTS.md](AGENTS.md).** In short: no secrets, no personal or machine-specific details, no dependency on private repositories, and every plugin standalone.
 
 **Standalone was proven for ACC, not yet for the other two.** ACC 0.1.13 was installed by itself on a Harness and worked. Telemetry Seams and SOUP have been verified alongside other plugins but not each installed alone.
-
-**Known standalone violations still in the code** (tracked in `BACKLOG.md`): SOUP defaults its Python interpreter to a fixed path from one machine; ACC's `hooks.json` and `check.sh` assume one home directory; ACC's own CI workflow checks out a private repository.

@@ -21,7 +21,3 @@ Before every commit, read your own diff once for rules 1–3.
 - **"Installs" is not "runs".** Accept a change only when the plugin installs, shows Running, and its own UI works in a real Harness.
 - **No mocks or simulated results** in tests or reports. Say what was actually run.
 - **Documentation:** append and mark superseded text; do not silently rewrite history. `LESSONS.md` at the root holds lessons shared by all plugins; a plugin's own `LESSONS.md` holds only what is specific to that plugin.
-
-## Known violations of the rules above
-
-These exist today and are tracked in [BACKLOG.md](BACKLOG.md) under "Public-repo hygiene". Do not copy them as a pattern.

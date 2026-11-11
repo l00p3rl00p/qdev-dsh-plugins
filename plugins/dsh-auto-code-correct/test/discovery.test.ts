@@ -77,7 +77,6 @@ describe('Docker installer ↔ ACC capability coverage', () => {
   it('the real Docker installer still declares the exact tool inventory', () => {
     if (!source) return
     for (const tool of dockerTools) expect(source, `Docker installer changed: ${tool}`).toContain(tool)
-    expect(source).toContain('ROOT=/home/qdev/llm-runtime')
   })
   it('ACC accounts for all Docker-installed helper executables', () => {
     expect(dockerTools.filter((tool) => !accTools.has(tool))).toEqual([])
