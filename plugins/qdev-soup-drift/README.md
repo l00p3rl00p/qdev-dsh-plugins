@@ -32,8 +32,8 @@ The global master controls observation and interventions. The existing reminder,
 If the SOUP plugin breaks DSH Web during load, remove **only SOUP v3** from the installed Web profile. From the Mac Terminal:
 
 ```sh
-docker exec -it quatrus-harness-deepseek-harness bash -lc 'dsh plugin --profile web remove qdev-trajectory-drift-soup'
-docker restart quatrus-harness-deepseek-harness
+docker exec -it <harness-container> dsh plugin --profile web remove qdev-trajectory-drift-soup
+docker restart <harness-container>
 ```
 
 If it still loads, inspect `dsh --profile web --dump-config` for a separate SOUP Cordis patch insertion and disable only that insertion through native profile configuration before restarting once. Preserve other plugins, sessions, and DSH data. See [shared plugin lessons](../plugin-lessons.md).
