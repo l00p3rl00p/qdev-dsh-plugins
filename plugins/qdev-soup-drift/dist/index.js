@@ -40,6 +40,7 @@ const LIVE_HISTORY_DOMAIN = defineDomain({
             history: z.array(z.object({ at: z.number(), kl: z.number(), threshold: z.number(), drift: z.boolean() })).max(50),
             markers: z.array(z.object({ at: z.number(), kind: z.enum(['crossing', 'reminder', 'escalation', 'clarification']) })).max(50),
             tools: z.array(z.object({ callId: z.string(), name: z.string(), startedAt: z.number(), endedAt: z.number().nullable(), error: z.boolean(), reason: z.string().optional() })).max(200).optional(),
+            decisions: z.array(z.object({ at: z.number(), kind: z.string(), detail: z.string() })).max(200).optional(),
         })),
     },
 });
@@ -127,6 +128,29 @@ export async function apply(ctx, config = {}) {
     const reasonText = (content) => (Array.isArray(content)
         ? content.map((block) => (block && typeof block.text === 'string' ? block.text : '')).join(' ')
         : '').replace(/\s+/g, ' ').trim().slice(0, 160);
+    const liveDecisions = new Map();
+    const observeDecision = (id, event) => {
+        const data = event.data;
+        let record = null;
+        // The SDK's SessionEvent union omits these two types, so compare as string.
+        const type = event.type;
+        if (type === 'plan/mode') {
+            record = { at: event.time, kind: 'plan mode', detail: data.active === true ? 'turned on' : 'turned off' };
+        }
+        else if (type === 'hook/result') {
+            const exit = typeof data.exitCode === 'number' ? ` (exit ${data.exitCode})` : '';
+            const stderr = typeof data.stderrSummary === 'string' ? ` · ${data.stderrSummary.slice(0, 120)}` : '';
+            record = { at: event.time, kind: 'hook', detail: `${String(data.decision)}${exit}${stderr}` };
+        }
+        if (record === null)
+            return;
+        const list = liveDecisions.get(id) ?? [...(initialLive[id]?.decisions ?? [])];
+        list.push(record);
+        if (list.length > 200)
+            list.splice(0, list.length - 200);
+        liveDecisions.set(id, list);
+        persistLive(id, ensureSessionLive(id));
+    };
     const observeTool = (id, event) => {
         const data = event.data;
         const list = liveTools.get(id) ?? [...(initialLive[id]?.tools ?? [])];
@@ -275,7 +299,7 @@ export async function apply(ctx, config = {}) {
     };
     // Write the chat's history and markers to its own storage row. Failures are recorded, never thrown.
     const persistLive = (id, live) => {
-        void liveTable.put(id, { history: live.history, markers: live.markers, tools: liveTools.get(id) ?? initialLive[id]?.tools ?? [] })
+        void liveTable.put(id, { history: live.history, markers: live.markers, tools: liveTools.get(id) ?? initialLive[id]?.tools ?? [], decisions: liveDecisions.get(id) ?? initialLive[id]?.decisions ?? [] })
             .catch((error) => recordError(error, { phase: 'live-history-persist', sessionId: id }));
     };
     const sessionLiveView = (id, attached = agents.has(id)) => {
@@ -303,6 +327,7 @@ export async function apply(ctx, config = {}) {
             sessionId: id,
             version: VERSION,
             tools: liveTools.get(id) ?? initialLive[id]?.tools ?? [],
+            decisions: liveDecisions.get(id) ?? initialLive[id]?.decisions ?? [],
             attached,
             effective: {
                 enabled: active,
@@ -706,6 +731,9 @@ export async function apply(ctx, config = {}) {
         }
         if (event.type === 'tool/call' || event.type === 'tool/result')
             observeTool(sessionId, event);
+        const type = event.type;
+        if (type === 'plan/mode' || type === 'hook/result')
+            observeDecision(sessionId, event);
         const runtime = runtimes.get(sessionId) ?? activateSession(sessionId, event);
         runtime?.observe(sessionId, event);
     });

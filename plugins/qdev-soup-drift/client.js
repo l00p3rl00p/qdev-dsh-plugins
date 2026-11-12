@@ -685,6 +685,21 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // Decision evidence (Appendix 11.4): plan-mode switches and hook decisions recorded by the Host from DSH's own session events.
+    function DecisionEvidenceSection({ decisions, chosen }) {
+      const from = chosen.slice[0].at;
+      const to = chosen.slice[chosen.slice.length - 1].at;
+      const inWindow = (decisions ?? []).filter((d) => d.at >= from && d.at <= to);
+      return h('section', { style: styles.compactCard, 'aria-label': 'Decisions in this window' },
+        h('span', { style: styles.label }, 'Decisions in this window'),
+        inWindow.length
+          ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, inWindow.map((d, i) => h('li', { key: `${d.at}-${i}`, style: styles.body },
+            h('strong', null, d.kind), ` · ${new Date(d.at).toLocaleTimeString()} · ${d.detail}`,
+          )))
+          : h('p', { style: styles.hint }, 'No decisions in this window.'),
+      );
+    }
+
     const CONVERGENCE_WINDOW = 5;
     const QUADRANT_NOTES = {
       'FOCUSED/LOW': 'Coherent and below the boundary: calm, or riding near the limit (see distance from the boundary).',
@@ -956,7 +971,7 @@ window.__ModuleLoader__.load({
           : h('p', { style: styles.body }, items.length
             ? `No qualified convergence. Each candidate rests on one source: ${items.map((item) => item.event.toLowerCase()).join('; ')}.`
             : 'No qualified convergence. No candidate event has evidence yet.'),
-        h('p', { style: styles.hint }, 'Verifying a candidate needs evidence outside these sources, such as decisions and test outcomes, which are not built yet.'),
+        h('p', { style: styles.hint }, 'Verifying a candidate needs evidence outside these sources, such as test outcomes, which are not built yet.'),
       );
     }
 
@@ -1056,6 +1071,7 @@ window.__ModuleLoader__.load({
           h('p', { style: styles.hint }, 'The detector is unchanged. Its binary decision is shown as crossings above.'),
         ) : null,
         chosen ? h(ToolEvidenceSection, { tools: live?.tools ?? [], chosen }) : null,
+        chosen ? h(DecisionEvidenceSection, { decisions: live?.decisions ?? [], chosen }) : null,
         h(OutlierClustersSection, { history, threshold }),
         h(SpcSection, { history }),
         h(RepeatedFailuresSection, { tools: live?.tools ?? [] }),
@@ -1064,7 +1080,7 @@ window.__ModuleLoader__.load({
         h(QualifiedConvergenceSection, { history, tools: live?.tools ?? [], threshold, spc: spcAnalysis(history) }),
         chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Evidence available' },
           h('span', { style: styles.label }, 'Evidence available'),
-          h('p', { style: styles.hint }, 'SOUP calculations only. Tool calls, decisions, test outcomes and outlier subsets are not in this data yet.'),
+          h('p', { style: styles.hint }, 'SOUP calculations, tool calls and decisions (plan mode, hooks). Test outcomes and outlier subsets are not in this data yet.'),
         ) : null,
       );
     }

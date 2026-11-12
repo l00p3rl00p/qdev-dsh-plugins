@@ -230,3 +230,15 @@ Telemetry to OTEL is parked. The OTEL path is a DSH method for SOUP to emit tele
 - **Judgment step:** concept blindness, the final reading of what remains, stays with a human or agent.
 - **Open:** the outlier and normalization numbers (threshold maps to 0.5; outlier distance 0.2; cluster gap 0.05) need your confirmation.
 - **Not part of this close-out:** the release and gotchas notebooks, which are out of scope per your instruction.
+
+
+### 9c. Decision log and Appendix 11 status (2026-11-12)
+
+- **Decision evidence (11.4, partial):** the Host records two DSH session events per chat: `plan/mode` (turned on or off) and `hook/result` (decision, exit code, stderr summary). The log is saved with the chat's history row and survives a Host restart. The Convergence view lists the decisions in the selected window. Test-suite result: 93 of 93 pass, including a Host restart test for decisions.
+- **Wording:** the "Evidence available" note and the qualified-convergence note now name decisions as built. Test outcomes are still listed as not built.
+- **Appendix 11 status as of this section:**
+  - Built: magnitude and focus axes, coherence 1 − 2σ, separate raw/statistical/interpretation sections, clickable four-quadrant points, outlier clusters, control chart, tool and decision evidence in the window, qualified convergence with source families.
+  - Partial: boundary proximity and persistence (shown as text, not as quadrant attributes); drill-down for contradictory observations; independence of points derived from one source.
+  - Not built: test-outcome evidence, the event relationship graph, outlier subsets on the quadrant, domain-specific meaning text (11.5 examples), and tests for Appendix 11 Examples A, B and C.
+  - Human or agent step: concept blindness judgment (11.6).
+- **Not yet installed:** the decision-log change is not in the Harness. The installed build is still 623fac8.

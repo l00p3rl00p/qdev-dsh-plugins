@@ -472,7 +472,7 @@ test('Convergence tab: four-quadrant view, separated evidence sections, qualifie
     assert.match(h.text(), /Statistical measures/)
     assert.match(h.text(), /Interpretation \(hypothesis, not a verified event\)/)
     assert.match(h.text(), /Qualified near-boundary signal/)
-    assert.match(h.text(), /SOUP calculations only/)
+    assert.match(h.text(), /SOUP calculations, tool calls and decisions \(plan mode, hooks\)\. Test outcomes/)
     assert.doesNotMatch(h.text(), /Gentle Mentor/)
   } finally { h.dispose() }
 })
