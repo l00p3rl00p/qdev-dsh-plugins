@@ -315,6 +315,8 @@ text in this repository that describes `prepare`, `allowBuilds`, or Git build ap
   restart, so Host activation, the Web tab and the Live & Mentor view are not yet verified in the live Harness.
 - **Built output is what tests run.** The Host suite loads `dist/`, so rebuild and commit it before every test run that
   matters. A passing run on stale `dist/` proves nothing.
+- **Install by full SHA only.** A short SHA failed in `dsh plugin add` with a misleading `prepare`/allowBuilds message.
+- **Every Host import must ship.** A file the Host imports but `package.files` omits makes the installed Host fail to import. A policy test now checks this.
 - **One version source.** The release number lives only in `package.json`. The Host reads it at load; docs and
   code comments describe features, not numbers. Hand-maintained copies drifted across about ten places before this.
 - **Storage writes are not evidence by count.** Raw change counts include every domain; assert on the domain you mean.
