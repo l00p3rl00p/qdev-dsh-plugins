@@ -320,6 +320,7 @@ text in this repository that describes `prepare`, `allowBuilds`, or Git build ap
 - **One version source.** The release number lives only in `package.json`. The Host reads it at load; docs and
   code comments describe features, not numbers. Hand-maintained copies drifted across about ten places before this.
 - **Never read an undeclared service.** A plugin that reads a service it did not declare in `inject` (for example `ctx.uiConversation` without it in the list) throws, and activation fails with "did not activate". Declare the service first, and keep a test context that throws on access, as DSH does. A test that passes `undefined` for a missing service hides this.
+- **A Studio container is its own environment.** Packages installed there do not come from the image, and other notebooks on the server share them. Record what a notebook needs, and sync and check through a script (plugins/qdev-soup-drift/scripts/sync-convergence-notebook.sh), not by hand.
 - **Storage writes are not evidence by count.** Raw change counts include every domain; assert on the domain you mean.
 - **Test policy.** Tests that encode a removed UI move with their assertions, rather than being deleted. Tests that
   assert a privacy boundary narrow the boundary to the field that now carries the data (for example, the captured
