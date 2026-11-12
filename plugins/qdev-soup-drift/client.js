@@ -668,6 +668,54 @@ window.__ModuleLoader__.load({
     // Convergence: a SOUP tab. A four-quadrant view of rolling windows over this chat's calculations.
     // Navigational and read-only: quadrants describe the pattern, they do not decide an event.
     // Measurements are normalized so the decision threshold sits at 0.5 (the appendix boundary): r = min(1, KL / (2 * threshold)).
+    // Tool evidence (Appendix 11.4): DSH's own tool/call and tool/result session events, read through a uiConversation
+    // event definition (the same seam the Trajectory client uses). SOUP records nothing itself.
+    const SOUP_TOOLS_TARGET = 'soup-tools';
+    let soupUiConversation = null;
+    const soupToolDefinition = {
+      kind: 'soup-tool-call',
+      target: SOUP_TOOLS_TARGET,
+      match: (event) => {
+        if (event.type === 'tool/call') return { id: String(event.data.callId), role: 'start' };
+        if (event.type === 'tool/result') return { id: String(event.data.message?.source?.callId), role: 'update' };
+        return null;
+      },
+      start: (_context, match) => ({ callId: String(match.event.data.callId), name: match.event.data.name, startedAt: match.event.time, endedAt: null, error: false }),
+      update: (context, match) => ({ ...context.state, endedAt: match.event.time, error: match.event.data.message?.isError === true }),
+      publication: () => 'none',
+    };
+    function soupToolRecords(sessionId) {
+      try {
+        const snapshot = soupUiConversation?.binding(sessionId)?.target(SOUP_TOOLS_TARGET)?.getSnapshot();
+        if (snapshot === undefined || snapshot === null) return null;
+        const list = Array.isArray(snapshot) ? snapshot : Object.values(snapshot);
+        return list.filter((record) => record && typeof record.startedAt === 'number');
+      } catch (cause) {
+        return null;
+      }
+    }
+    function ToolEvidenceSection({ sessionId, chosen }) {
+      const from = chosen.slice[0].at;
+      const to = chosen.slice[chosen.slice.length - 1].at;
+      const records = soupToolRecords(sessionId);
+      if (records === null) {
+        return h('section', { style: styles.compactCard, 'aria-label': 'Tool calls in this window' },
+          h('span', { style: styles.label }, 'Tool calls in this window'),
+          h('p', { style: styles.hint }, 'Tool evidence is not available in this view yet.'),
+        );
+      }
+      const inWindow = records.filter((record) => record.startedAt >= from && record.startedAt <= to);
+      return h('section', { style: styles.compactCard, 'aria-label': 'Tool calls in this window' },
+        h('span', { style: styles.label }, 'Tool calls in this window'),
+        inWindow.length
+          ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, inWindow.map((record, i) => h('li', { key: `${record.callId}-${i}`, style: styles.body },
+            h('strong', null, record.name), ` · ${new Date(record.startedAt).toLocaleTimeString()}`,
+            record.error ? h('span', { style: styles.error }, ' · failed') : null,
+          )))
+          : h('p', { style: styles.hint }, 'No tool calls in this window.'),
+      );
+    }
+
     const CONVERGENCE_WINDOW = 5;
     const QUADRANT_NOTES = {
       'FOCUSED/LOW': 'Coherent and below the boundary: calm, or riding near the limit (see distance from the boundary).',
@@ -808,6 +856,7 @@ window.__ModuleLoader__.load({
             : null,
           h('p', { style: styles.hint }, 'The detector is unchanged. Its binary decision is shown as crossings above.'),
         ) : null,
+        chosen ? h(ToolEvidenceSection, { sessionId, chosen }) : null,
         h(OutlierClustersSection, { history, threshold }),
         chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Evidence available' },
           h('span', { style: styles.label }, 'Evidence available'),
@@ -931,8 +980,10 @@ window.__ModuleLoader__.load({
 
     return {
       name: 'qdev-trajectory-drift-soup-settings',
-      inject: ['slots', 'configForms'],
+      inject: ['slots', 'configForms', 'uiConversation'],
       apply(ctx) {
+        soupUiConversation = ctx.uiConversation ?? null;
+        ctx.uiConversation?.events?.register(soupToolDefinition);
         ctx.slots.inject('settings.section', () => ctx.slots.register({
           name: 'settings.section', id: 'soup-trajectory-drift', order: 18, label: 'SOUP Drift',
           inject: () => ({ source: ctx.configForms.get(ENTRY) }),

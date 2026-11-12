@@ -192,7 +192,7 @@ This section records what the branch `feature/soup-feature3-live-mentor` actuall
 | 11.1 Dimensions | Partly: magnitude, focus, boundary distance, persistence | Outlier convergence and event interpretation need other evidence |
 | 11.2 Mathematics | Built as illustrative: `r = min(1, KL / (2·threshold))`, `σ`, `1 − 2σ` | The threshold maps to 0.5 for this view only; the detector is unchanged |
 | 11.3 Four-quadrant view | Built over rolling windows of five calculations | Outlier subsets are not built |
-| 11.4 Click to investigate | Built for SOUP calculations only | Tool calls, decisions, test outcomes and an event graph need an evidence source SOUP does not have yet |
+| 11.4 Click to investigate | Partly: SOUP calculations, and tool calls and results in each window read from DSH's own session events through the uiConversation seam (not verified in the live Harness) | Decisions, test outcomes and the event graph are not built |
 | 11.5 Human meaning | Partly: hypothesis labels and the qualified near-boundary note | Event-specific interpretation needs the evidence in 11.4 |
 | 11.6 Concept blindness | Not built | Needs the same evidence sources |
 | 11.7 Integration | Preserved: the detector, the Gentle Mentor intervention and the existing telemetry path are unchanged | — |

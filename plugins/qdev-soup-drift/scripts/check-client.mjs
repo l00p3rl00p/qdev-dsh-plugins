@@ -23,7 +23,7 @@ if (!text.includes("method: 'POST'") || !text.includes("'x-qdev-soup-action': 'r
 if (!text.includes('averageKlDivergence') || !text.includes('averageThresholdRatio') || !text.includes('KL is the difference between recent output and the baseline')) {
   errors.push('Missing human-readable average drift readout')
 }
-if (!text.includes("ctx.slots.inject('settings.section'") || !text.includes("id: 'soup-trajectory-drift'") || !text.includes("inject: ['slots', 'configForms']") || !text.includes('ctx.configForms.get(ENTRY)')) {
+if (!text.includes("ctx.slots.inject('settings.section'") || !text.includes("id: 'soup-trajectory-drift'") || !text.includes("inject: ['slots', 'configForms'") || !text.includes('ctx.configForms.get(ENTRY)')) {
   errors.push('Missing native DSH Settings section or direct configForms.get() wiring')
 }
 if (text.includes('qdev-soup-drift#qdev-trajectory-drift-soup')) {
