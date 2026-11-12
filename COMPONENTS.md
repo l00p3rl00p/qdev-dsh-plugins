@@ -4,9 +4,9 @@ The authoritative cross-plugin inventory. Detailed behavior belongs to each plug
 
 | Component | Identity | Source version | Capability | Source authority |
 | --- | --- | --- | --- | --- |
-| [Auto Code Correct](plugins/dsh-auto-code-correct) | `dsh-auto-code-correct` | 0.1.13 | Correction, language readiness and operation evidence | [ACC repository](https://github.com/l00p3rl00p/dsh-auto-code-correct) |
-| [SOUP Drift + Gentle Mentor](plugins/qdev-soup-drift) | `qdev-trajectory-drift-soup` | 0.5.3 | Live trajectory drift detection and intervention | [Scratchpad SOUP](https://github.com/l00p3rl00p/quatrus-scratchpad/tree/main/plugins/qdev-soup-drift) |
-| [Telemetry Seams](plugins/dsh-telemetry-seams) | `dsh-telemetry-seams` | 0.1.2 | Read-only telemetry seam inventory, health probes and UI | [Scratchpad Telemetry](https://github.com/l00p3rl00p/quatrus-scratchpad/tree/main/plugins/dsh-telemetry-seams) |
+| [Auto Code Correct](plugins/dsh-auto-code-correct) | `dsh-auto-code-correct` | 0.1.13 | Correction, language readiness and operation evidence | the deprecated standalone ACC repository |
+| [SOUP Drift + Gentle Mentor](plugins/qdev-soup-drift) | `qdev-trajectory-drift-soup` | 0.5.3 | Live trajectory drift detection and intervention | a private source repository |
+| [Telemetry Seams](plugins/dsh-telemetry-seams) | `dsh-telemetry-seams` | 0.1.2 | Read-only telemetry seam inventory, health probes and UI | a private source repository |
 
 ## Ownership
 

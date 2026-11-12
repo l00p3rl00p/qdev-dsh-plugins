@@ -4,7 +4,7 @@ Thanks for your interest in improving **dsh-auto-code-correct**, the DeepSeek Ha
 
 This is a small maintainer-led project with **limited review capacity**. Please keep contributions focused and reviewable. A proposed change may not be accepted or reviewed immediately.
 
-Every Web-capable ACC change must satisfy the [single all-plugin lessons authority](https://github.com/l00p3rl00p/quatrus-scratchpad/blob/main/plugins/plugin-lessons.md), including its recorded ACC-specific findings. The GitHub Actions packager's emitted-bundle import check is mandatory even for UI-only changes. Browser mounting, persistence and actual edit behavior remain separate live acceptance gates; do not present a Host-only green CI run as proof of Web health.
+Every Web-capable ACC change must satisfy a private source repository, including its recorded ACC-specific findings. The GitHub Actions packager's emitted-bundle import check is mandatory even for UI-only changes. Browser mounting, persistence and actual edit behavior remain separate live acceptance gates; do not present a Host-only green CI run as proof of Web health.
 
 ## Before you contribute
 

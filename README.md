@@ -94,7 +94,7 @@ qdev-dsh-plugins/
         └── LESSONS.md
 ```
 
-**Current ownership:** This repository is the **only active development, build, and release source** for ACC, SOUP, and Telemetry Seams. ACC lives at [`plugins/dsh-auto-code-correct/`](plugins/dsh-auto-code-correct/). The former standalone `l00p3rl00p/dsh-auto-code-correct` repository and Scratchpad plugin copies are **deprecated archives**. Plugin directories are ordinary Git-tracked directories in this repo, not functioning Git submodules; do not install from or push fixes to the deprecated repos.
+**Current ownership:** This repository is the **only active development, build, and release source** for ACC, SOUP, and Telemetry Seams. ACC lives at [`plugins/dsh-auto-code-correct/`](plugins/dsh-auto-code-correct/). The former standalone ACC repository and private source plugin copies are **deprecated archives**. Plugin directories are ordinary Git-tracked directories in this repo, not functioning Git submodules; do not install from or push fixes to the deprecated repos.
 
 ## Lessons and release discipline
 

@@ -31,11 +31,11 @@ dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#main&path:/plug
 
 > **Superseded 2026-11-11:** the build-on-install text below is historical. `prepare` was removed and the built runtime is committed with the source, so no `allowBuilds` entry or Git build approval is needed. See "Prebuilt install payload" at the end of this file.
 
-**Git build approval (native DSH Web):** First use **Plugins → Add plugin** with the Git spec above. If pnpm refuses the source `prepare` script, DSH's own Plugin Manager records the exact pending `allowBuilds` key and offers **Allow these scripts and retry**. Review the named source and approve **only the intended plugin**. DSH writes the approval into the active Web profile's `pnpm-workspace.yaml` and retries the install. You do **not** have to pre-edit YAML or install via a copied QClean tarball.
+**Git build approval (native DSH Web):** First use **Plugins → Add plugin** with the Git spec above. If pnpm refuses the source `prepare` script, DSH's own Plugin Manager records the exact pending `allowBuilds` key and offers **Allow these scripts and retry**. Review the named source and approve **only the intended plugin**. DSH writes the approval into the active Web profile's `pnpm-workspace.yaml` and retries the install. You do **not** have to pre-edit YAML or install via a tarball from the clean test Harness.
 
 As an alternative when the Web approval control is unavailable, use the exact key printed by the failed installer and explicitly add it under the *existing* profile `allowBuilds:` mapping (preserve other entries). The current pnpm 12 documentation permits a repository-wide `<package-name>@git+https://github.com/l00p3rl00p/qdev-dsh-plugins.git` key even for `github:` shorthand downloaded from `codeload.github.com`, but an exact commit key is narrower and preferred for a one-time approval. An approved `prepare` script runs on your machine with the profile user's permissions. Never use `pnpm approve-builds --all`, `dangerouslyAllowAllBuilds`, or `--ignore-scripts` to bypass this check.
 
-This repository is a **monorepo**. The `&path:/plugins/...` fragment selects the actual installable package; omitting it would install the wrong root. The package's `prepare` script builds `lib/` from source during Git installation. The source package's reviewed build-tool policy is committed with the plugin; the parent profile's Git build approval is separate. Git installs do not use the QClean tarball, and the installed Git dependency remains in the profile across restarts. Restart DSH after replacing an existing Host plugin and verify the browser and plugin capability. If the original QDev launcher controls this profile, it must not overwrite this source on startup.
+This repository is a **monorepo**. The `&path:/plugins/...` fragment selects the actual installable package; omitting it would install the wrong root. The package's `prepare` script builds `lib/` from source during Git installation. The source package's reviewed build-tool policy is committed with the plugin; the parent profile's Git build approval is separate. Git installs do not use the clean test Harness tarball, and the installed Git dependency remains in the profile across restarts. Restart DSH after replacing an existing Host plugin and verify the browser and plugin capability. If the original QDev launcher controls this profile, it must not overwrite this source on startup.
 
 ---
 
@@ -93,7 +93,7 @@ not prove data reached the collector. That honest gap is by design.
 
 ## Configuration
 
-Defaults are set in `cordis.patch.yml` and match the QDev `quatrus-network`:
+Defaults are set in `cordis.patch.yml` and match the QDev `<deployment-network>`:
 
 ```yaml
 collector:
@@ -110,9 +110,9 @@ includeInternal: true   # show internal DSH interfaces not publicly exported
 ## Emergency removal — if the Web UI fails to load
 
 ```sh
-docker exec -it quatrus-harness-deepseek-harness bash -lc \
+docker exec -it <harness-container> bash -lc \
   'dsh plugin --profile web remove dsh-telemetry-seams'
-docker restart quatrus-harness-deepseek-harness
+docker restart <harness-container>
 ```
 
 If the row persists: `dsh --profile web --dump-config` and remove only the
@@ -135,8 +135,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md), [ENVIRONMENT.md](ENVIRONMENT.md),
 and [RUNBOOK.md](RUNBOOK.md) for full technical detail.
 
 See [shared plugin lessons](../../LESSONS.md) for browser loader, package
-validation, and recovery requirements. For the isolated QClean install/test,
-run `./qclean test-telemetry` from QDocker Compose (not from this plugin directory).
+validation, and recovery requirements. For isolated installation testing, use a clean, disposable Harness profile configured through the deployment's own startup tooling.
 Do not install directly into the production Web profile until the clean
 session/UI/probe results are verified.
 

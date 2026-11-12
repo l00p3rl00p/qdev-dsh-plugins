@@ -6,7 +6,7 @@ The verified native DSH GitHub install path does not build ACC on arrival. ACC m
 
 > **Superseded 2026-11-11:** resolved in ACC 0.1.13; the options page and AutoCorrect tab are back. See the root `LESSONS.md`.
 
-## QClean install observation — November 10, 2026
+## the clean test Harness install observation — November 10, 2026
 
 Observed in the clean DSH 0.2.2 test environment:
 

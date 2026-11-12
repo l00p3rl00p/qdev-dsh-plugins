@@ -3,7 +3,7 @@
 # Reads one JSON line on stdin: {"args":{"path":...},"cwd":...}. Writes findings to
 # $DSH_HOME/auto-code-correct/findings.txt. Always exits 0: a post-tool hook cannot block.
 set -u
-DSH_DIR="${DSH_HOME:-/home/qdev/.dsh}"
+DSH_DIR="${DSH_HOME:-$HOME/.dsh}"
 OUT="$DSH_DIR/auto-code-correct/findings.txt"
 mkdir -p "$(dirname "$OUT")"
 
