@@ -1,5 +1,8 @@
 # Feature 3 handoff — compact per-chat live trajectory card (work in progress)
 
+> **Superseded (current build, 0.8.0):** the card described below was removed from Settings and is not built. Feature 3 is now the Live and Mentor tabs, with Details and Convergence beside them. See SOUP-CHAT2-BUILD-SPEC-v2.md section 9 for the status as built.
+
+
 Status: **unfinished, not accepted, not installed.** Ported onto SOUP 0.6.3 without a version bump.
 Typecheck, build and the full suite pass (76 tests, real Python workers). Nothing here has been run in a live Harness.
 
