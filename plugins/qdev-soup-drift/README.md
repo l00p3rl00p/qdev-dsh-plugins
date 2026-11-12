@@ -9,55 +9,14 @@ The package identity is `qdev-trajectory-drift-soup`. The source directory remai
 **📖 [What is SOUP? Understanding drift detection →](SOUP_CONCEPTS.md)**  
 **🔧 [Development lessons and discovered seams →](LESSONS.md)**
 
-## Baseline runtime-settings repair (0.5.4)
+## Current behavior and evidence
 
-The accepted Settings UI persists configuration, but a live OFF test on 2026-11-06 found that 0.5.3 kept observing: its Host copied volatile values only at startup. Native Loader commits volatile references without remounting, so persistence alone is not runtime-application proof.
+- **0.5.4 — runtime settings:** native volatile configuration updates reconfigure the detector without remounting; OFF cancels work and fences stale callbacks. [Baseline verification](BASELINE_VERIFICATION.md).
+- **0.5.5 — Settings:** native master ON/OFF control, accessible state feedback, threshold/window controls, and reset actions. [Baseline verification](BASELINE_VERIFICATION.md).
+- **0.6.2 — per-chat:** inherited global settings, sparse persistent overrides, per-chat isolation, and an authenticated Host route. [Feature 2 verification](FEATURE2_VERIFICATION.md).
+- **0.6.3 — lazy startup:** plugin mount does not enumerate retained agents or replay transcripts; the first subsequent committed chat event activates only that chat. Earlier local verification reported 70/70 tests; **this branch's interpreter changes require a fresh run before deployment**. [Baseline verification](BASELINE_VERIFICATION.md).
 
-The runtime now supports detector reconfiguration, cancels obsolete workers, rejects late results across OFF/ON, and preserves the same Mentor instance and three-count guard. Sensitivity/window changes discard the unfinished comparison and reseed the fixed reference from committed history; they do not reset Mentor strikes. Four new deterministic regression tests pass alongside the eight existing policy/official-worker tests.
-
-The Host now consumes the native owning-fiber `loader/volatile-update` event, rereads committed references, updates status, and reconfigures the detector without remounting. Master OFF stops the session feed/replay and reset writes, aborts pending human questions, and fences late answers after ON. Status reads remain available; already-delivered inbox messages are not retracted. The ordinary Python interpreter field retains the native remount behavior.
-
-Four native Loader/Host/real-Python integration tests also pass, for **16 total tests**. They verify actual threshold/window changes, same-fiber updates without duplicate subscriptions, OFF suppression, pending-question cancellation, stale-result rejection, and preservation of the three-count guard.
-
-The 0.5.4 repair was committed, SHA-verified, installed through native Plugin Manager, and verified in the existing profile: master OFF froze counters and rejected reset writes; ON resumed observation/detection without remounting or duplicating subscriptions. The installed 0.5.5 follow-up passes 35 tests, and the human confirmed the colored ON state is visible. See [baseline evidence](BASELINE_VERIFICATION.md) for exact verification limits. **Human scope decision:** SOUP receipt verification in ClickHouse and any telemetry redesign are DEFERRED and NON-BLOCKING for this phase, not PASS; leave that path unchanged and perform no further receipt/export/credential work under this scope. Feature 2 per-chat settings are installed and human-accepted in 0.6.2 as described below. Live authenticated writes, A/B isolation, remount persistence, the native order-40 SOUP tab, requested density and direct Reload all pass; the temporary Chat A test override was removed afterward. Later features have not been implemented.
-
-## Lazy startup activation (0.6.3)
-
-The human disabled 0.6.2 after it could halt container startup. The Host was eagerly enumerating every retained live agent during plugin mount and synchronously replaying each session snapshot before the container finished starting. That is not an acceptable background lifecycle.
-
-Version 0.6.3 mounts only storage, routes, and event subscriptions. It does **not** enumerate agents, read session snapshots, construct per-chat runtimes, or launch SOUP workers at startup. Global setting changes also update only already-activated runtimes. A chat activates on its first subsequent committed session event; at that boundary, SOUP resolves only that chat, replays only events before the triggering event, then observes the trigger exactly once. Explicit settings reads may check live-agent existence but never replay a transcript or create a runtime. This preserves monitoring accuracy without putting retained-session work on the container critical path.
-
-A native Loader/Host test mounts with retained agents, proves zero agent enumeration and zero snapshot reads through startup and a volatile settings update, then proves the first event activates and replays only its own chat. Full local verification passes 70/70 tests, including existing real-worker, OFF/ON, persistence, isolation, Mentor and Client coverage. The exact 0.6.3 artifact is installed; immediate remount verification shows zero activated agents, replayed events, evaluations or errors. Keep the internal SOUP master OFF until a real container restart is accepted.
-
-**Commit/audit limitation (2026-11-06):** The shared pre-commit hook invokes `npm audit` although this package uses a pnpm lockfile; it fails with `ENOLOCK`. A separate `pnpm audit --audit-level=high` reports the already-pinned Zod 4.4.3 advisory [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5), also present through pinned DSH dependencies. This repair does not upgrade those shared dependencies or claim the audit passes. The human approved one-time bypasses for scoped SOUP commits after explicit secret/diff/tests checks; the shared hook remains unchanged and package/live acceptance is separate.
-
-## Settings control audit and master visibility (0.5.5)
-
-The master control is now a larger native button/switch with visible **ON/OFF** text, a high-contrast text-colored thumb, and distinct native success/warning outlines and tinted backgrounds. Text and thumb position distinguish states without relying on color alone; native keyboard focus is not suppressed. Both reset buttons and their handlers are disabled while the master is OFF, matching the Host's rejection rule. No new settings surface or intervention policy was introduced.
-
-The full local verification passes **35 tests**:
-
-| Existing page control | Executed verification |
-| --- | --- |
-| Master | Installed 0.5.4 OFF/ON observation/detection check; native Loader cancellation/guard tests; component mutation and ON/OFF state styling |
-| Detector | Real worker pauses while native session/assistant counters continue; ON resumes with the same Mentor allowance |
-| Global reanchoring | Real detections continue with no reminder/question while OFF; ON resumes at the retained strike count |
-| Five sensitivity positions | Native form paths/revisions and actual Python-worker thresholds 0.05/0.10/0.20/0.30/0.40 |
-| Baseline/window counts | Input commit/invalid-draft behavior; real worker batching at bounds 1 and 100; rejected native invalid candidates retain prior effective config |
-| Reset Yes/No | Same-origin POST handlers, busy/OFF guards, Host storage-write payloads, and fresh-count versus carried-count next-turn behavior |
-| About/source link/status | Disclosure handlers, current explanatory values, source-link properties, polling cleanup, and errors |
-
-Twelve Client tests execute the shipped ModuleLoader/slots/components/handlers with small React/form/fetch scheduling stand-ins. Eleven Host tests use real native Loader/Session and official Python workers with in-memory external services; eight established policy tests and four deterministic runtime tests remain. These tests are **not** proof of real-browser rendering/navigation, keyboard operation, computed contrast, or profile-disk durability. The Python interpreter is ordinary Cordis configuration, not an editable field on this custom page. Installed visual confirmation remains required; restore any settings changed during manual testing.
-
-## Per-chat inherited settings (0.6.2, Feature 2)
-
-A compact native **SOUP** Conversation tab registers directly after Telemetry and presents all seven existing settings in dense cards. Reload stays in the tab header, there is no separate Close action, and each field keeps its control and **Use global** reset together on one row. Each field initially follows the current global value. Saving creates a sparse, revisioned override for that chat; **Use global** removes only that field so it immediately follows later global changes. Explicit `false`, preset `0`, and values equal to the global default remain real overrides. The global master is a hard cap and makes chat settings read-only while OFF.
-
-SOUP stores only the sparse override record in the native `storageDomain` facility. It does not modify session headers, append invented events, read transcripts, or create/activate agents. The authenticated native Connection owner route validates the session, revision, field, bounds, content type, action header, and durable commit before applying settings. The existing reset action now also uses native Connection authentication when that optional service is mounted. The monitoring core still boots without the optional chat UI services.
-
-Each live chat has an isolated detector/runtime generation and Mentor state. Changing A cancels/reseeds only A's detector work, preserves A's strikes, and does not change B. Global changes reconfigure only inherited fields. The original SOUP detector, Mentor message policy, third-count guard, and telemetry path remain byte-unchanged.
-
-Local verification passes **69 tests**: the established 35 baseline tests, 14 sparse-store tests, 10 Client call-chain tests, and 10 native integration tests using real Cordis Loader/Session, official Python worker, native Connection owner admission, and native JSON storage close/reopen. The integration suite proves A/B isolation, current-global inheritance, individual reset, false/zero/equal-default presence, revision conflicts, durable cold-session reopen, global-master cancellation, per-chat question isolation, Python interpreter selection, core operation without optional UI services, and native route cleanup. Browser rendering/focus and installed-profile behavior remain separate live-acceptance steps; see [Feature 2 evidence](FEATURE2_VERIFICATION.md).
+The global master controls observation and interventions. The existing reminder, third-strike clarification, and qualified telemetry behavior remain unchanged. Historical build narratives and acceptance evidence live in the linked verification records, not in the install procedure.
 
 ## Package contents
 
@@ -94,7 +53,7 @@ If a bad SOUP Web client makes DSH inaccessible, recover without the browser usi
    ```
 
    This package ships with committed `dist/`; no build-on-install, `prepare`, or `allowBuilds` approval is required. Use the SHA containing the tested 0.6.3 build, not a moving branch.
-2. The plugin defaults to `python3`. To enable drift detection, ensure the chosen interpreter has official `soup-cli` installed. If it does not, configure the plugin's `python` setting with the appropriate interpreter. `SOUP_PYTHON` is an optional override; it is **not required to install**.
+2. The plugin defaults to `python3`. To enable drift detection, ensure the chosen interpreter has official `soup-cli` installed. If it does not, configure the plugin's `python` setting with the appropriate interpreter. No environment variable is required; the plugin's own `python` setting is authoritative.
 3. After installation or replacement, restart the existing DSH Web process once. Confirm the plugin and its per-chat UI load, then observe an actual SOUP drift evaluation. Installation success or `--dump-config` alone is insufficient.
 
 **If changing source:** Run `pnpm install`, `pnpm run verify` (including the full 0.6.3 test suite), and `pnpm run build` from `plugins/qdev-soup-drift`. Commit regenerated `dist/` in the same change. A changed runtime must pass its checks before deployment.
@@ -190,32 +149,3 @@ The deterministic worker/policy test drives three independent drift windows and 
 - `node_modules/`, `dist/`, generated tarballs, and `.pnpm-store/` are local install/build state and should remain untracked.
 
 The original experimental sources remain under `experiments/`. Version 0.6.3 preserves the human-accepted Feature 2 UI, isolation and persistence while removing eager retained-session replay from container startup. Feature 3 and later remain separate increments and are paused until the lazy-start repair is installed and restart-accepted.
-
-<details>
-<summary>Historical 0.6.3 local tarball workflow — superseded for Git installs</summary>
-
-The following records the earlier local packaging workflow. It is not the current Git-install procedure and must not be used as an instruction to install onto the main Harness.
-
-## Build, test, and install
-
-Inside the DSH container, using an earlier local source checkout:
-
-```sh
-cd <repository-checkout>/plugins/qdev-soup-drift
-pnpm install --ignore-scripts
-SOUP_PYTHON=<path-to-soup-python> pnpm run verify
-# Review and commit only intended source, tests, and documentation before packaging.
-pnpm pack --pack-destination /tmp
-sha256sum /tmp/qdev-trajectory-drift-soup-0.6.3.tgz
-# Verify that digest against the recorded approved artifact, then install that exact file.
-dsh plugin --profile web add /tmp/qdev-trajectory-drift-soup-0.6.3.tgz
-dsh --profile web --dump-config
-```
-
-QDev's dedicated interpreter contains official `soup-cli==0.77.1`. Other environments must set `SOUP_PYTHON` to an interpreter containing `soup_cli` and configure the same interpreter in the plugin settings or `cordis.patch.yml`. CI uses `python` after installing the pinned SOUP package.
-
-Install into the profile actually used by DSH Web. After adding or updating the package, restart the existing DSH Web process and open its token-bearing URL. Do not start a replacement Web server to validate this plugin.
-
-`pnpm run verify` typechecks, builds, and runs the package tests. A successful build, package installation, or `--dump-config` row proves only static packaging and Loader registration. It does **not** prove that the browser client rendered, session events reached the host, SOUP evaluated a live trajectory, an injected message entered the agent inbox, or a human escalation completed.
-
-</details>

@@ -9,7 +9,7 @@ import { Session } from '@deepseek-ai/dsh-session'
 // Cordis's FiberState is a TypeScript const enum, erased from JavaScript exports.
 const ACTIVE = 2
 const HOST_URL = new URL('../dist/index.js', import.meta.url)
-const PYTHON = process.env.SOUP_PYTHON || 'python3'
+const PYTHON = 'python3'
 const STATUS_PATH = '/qdev-soup-drift/status'
 const BASELINE = 'keep following the original implementation plan'
 const DRIFT = 'different unrelated output topic'

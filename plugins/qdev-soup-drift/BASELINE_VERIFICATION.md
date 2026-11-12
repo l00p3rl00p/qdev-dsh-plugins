@@ -25,7 +25,7 @@ The worktree was clean after the second commit. No push was requested or perform
 
 ## Executed validation
 
-`PYTHONDONTWRITEBYTECODE=1 SOUP_PYTHON=/home/qdev/llm-runtime/tools/venvs/soup/bin/python pnpm run verify` passed:
+`pnpm run verify` (historical run used a deployment-specific interpreter; its path is intentionally omitted) passed:
 
 - TypeScript typecheck and build.
 - Host import/export check.

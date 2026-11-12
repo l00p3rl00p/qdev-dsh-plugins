@@ -35,10 +35,10 @@ Build order: **6 → 5 → 4 → 7 → 3**. Each depends only on the ones before
 
 ## 3. Test and install commands (use exactly these)
 
-The repo is visible inside the main Harness container, which has the real SOUP Python. Run tests there; it does not touch the Harness install.
+Run verification in an environment where the configured `python` interpreter can import the official `soup_cli` package. Running tests does not install the plugin.
 
 ```sh
-docker exec <main-harness-container> bash -lc 'cd <repo-path-in-container>/plugins/qdev-soup-drift && PYTHONDONTWRITEBYTECODE=1 SOUP_PYTHON=<path-to-soup-python> pnpm run verify'
+docker exec <main-harness-container> bash -lc 'cd <repo-path-in-container>/plugins/qdev-soup-drift && PYTHONDONTWRITEBYTECODE=1 pnpm run verify'
 ```
 
 Pass = typecheck, build, host check, client check, and `fail 0`. Paste the `tests / pass / fail` lines in your report.
@@ -59,7 +59,7 @@ Then confirm the Host half loaded (no output = good):
 docker logs --since 60s <clean-harness-container> 2>&1 | grep -i "failed to import"
 ```
 
-the clean test Harness has no SOUP Python, so **live drift cannot be shown there**; the clean test Harness proves install, load and UI only. Live drift is checked on the main Harness, and only after the owner says to install there (same `add` command with container `<main-harness-container>`; never `remove` first, never restart it without ACC installed).
+The clean test Harness may not have the required SOUP Python, so **live drift cannot be shown there**; the clean test Harness proves install, load and UI only. Live drift is checked on the main Harness, and only after the owner says to install there (same `add` command with container `<main-harness-container>`; never `remove` first, never restart it without ACC installed).
 
 Tell the owner to hard-reload the browser after a restart. The owner confirms every UI check; do not mark one passed yourself.
 
