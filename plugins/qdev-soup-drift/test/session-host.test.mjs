@@ -25,7 +25,7 @@ const STATUS_PATH = '/qdev-soup-drift/status'
 const A = 'soup_feature2_A'
 const B = 'soup_feature2_B'
 const COLD = 'soup_feature2_cold'
-// Live & Mentor history (0.7.0) writes per calculation, so raw change counts are not evidence of mentor or settings writes.
+// Live & Mentor history writes per calculation, so raw change counts are not evidence of mentor or settings writes.
 const mentorWrites = (f) => f.changes.filter((change) => change.domain === 'qdev_soup_drift_state').length
 const durableWrites = (f) => f.changes.filter((change) => change.domain !== 'qdev_soup_live_history').length
 const BASELINE = 'keep following the original implementation plan'
@@ -873,7 +873,7 @@ test('live per-chat progress, worker completion, latest KL and first/second Ment
   assert.equal(a.mentor.decisionPending, true)
   assert.equal(a.mentor.escalated, true)
   assert.equal(f.questions.length, 1)
-  // Feature 3 (0.7.0): the per-chat view carries the last 50 calculations and markers, and nothing else as an array.
+  // Feature 3: the per-chat view carries the last 50 calculations and markers, and nothing else as an array.
   assert.deepEqual(Object.keys(a.detector).filter(key => Array.isArray(a.detector[key])).sort(), ['history', 'markers'], 'live endpoint exposed unexpected array fields')
   assert.ok(a.detector.history.every(point => Object.keys(point).sort().join(',') === 'at,drift,kl,threshold'), 'history carries fields beyond measurements')
   assert.ok(a.detector.markers.every(marker => ['crossing', 'reminder', 'escalation', 'clarification'].includes(marker.kind)), 'marker kind outside the allowed set')

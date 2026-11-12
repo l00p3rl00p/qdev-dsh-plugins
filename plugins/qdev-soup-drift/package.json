@@ -1,6 +1,6 @@
 {
   "name": "qdev-trajectory-drift-soup",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "description": "SOUP-powered trajectory drift detection and Gentle Mentor reanchoring for DeepSeek Harness sessions",
   "license": "MIT",
   "type": "module",

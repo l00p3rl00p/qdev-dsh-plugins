@@ -1,4 +1,4 @@
-// Feature 5 (0.7.0): the first qualifying drift injects exactly this sentence and nothing else.
+// Feature 5: the first qualifying drift injects exactly this sentence and nothing else.
 export const FIRST_DRIFT_MESSAGE = 'I think what you are doing is interesting; however, I would like to return focus to the current plan.'
 // The Gentle Mentor message used by the second qualifying drift. Editable per chat in Feature 4.
 export const GENTLE_MENTOR_MESSAGE = "I noticed you might be drifting slightly off plan. Can you use this to get back on track and help me succeed? If you have questions for me, need clarification, or would like me to clarify anything, I'm happy to help so we can both succeed."

@@ -10,7 +10,7 @@
 - **Drift visualization:** threshold graph and intervention/event history per chat.
 - **Persistent native settings:** retain effective configuration across reopen and restart.
 
-Status: 0.7.0 delivers the per-chat Live & Mentor view (card, KL chart, reset decision, read-only Gentle Mentor). Editing of the Gentle Mentor context remains open.
+Status (this branch): the per-chat Live & Mentor view (card, KL chart, reset decision), persisted history, and editable Gentle Mentor context are built. Current version: package.json.
 
 ## Open items
 

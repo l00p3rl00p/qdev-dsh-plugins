@@ -1,4 +1,4 @@
-// Feature 4 (0.7.0): per-chat Gentle Mentor context. A missing key means "use the default".
+// Feature 4: per-chat Gentle Mentor context. A missing key means "use the default".
 // The Host reads this record at each second-drift intervention, so an edit changes the prompt actually sent.
 import { z } from 'zod'
 

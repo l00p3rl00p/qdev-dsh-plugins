@@ -1,4 +1,5 @@
 import { createUserMessage } from '@deepseek-ai/dsh-llm';
+import { readFileSync } from 'node:fs';
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain';
 import s from '@deepseek-ai/schemastery';
 import { z } from 'zod';
@@ -12,7 +13,8 @@ import { applyMentorEdit, MentorContextRecord } from '../mentor-context.mjs';
 // @ts-expect-error JavaScript module has no declaration file.
 import { GENTLE_MENTOR_MESSAGE } from '../reanchor.mjs';
 const PACKAGE_NAME = 'qdev-trajectory-drift-soup';
-const VERSION = '0.7.0';
+// The single source of the release number is package.json. Nothing else in the plugin states it.
+const VERSION = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
 const SOURCE = 'https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift';
 const STATUS_PATH = '/qdev-soup-drift/status';
 const SESSION_SETTINGS_PATH = '/api/qdev-soup/session-settings';
@@ -272,6 +274,7 @@ export async function apply(ctx, config = {}) {
                     : record?.mentorActivity ?? 'ready';
         return {
             sessionId: id,
+            version: VERSION,
             attached,
             effective: {
                 enabled: active,

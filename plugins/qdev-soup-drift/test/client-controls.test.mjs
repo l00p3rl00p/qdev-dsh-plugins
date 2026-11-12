@@ -115,7 +115,7 @@ test('actual ModuleLoader registers settings and plugin detail; toggles mutate n
       await h.click(control); await h.settle()
       assert.deepEqual(h.calls.at(-1), { operations: [{ op: 'set', path: [field], value: false }], revision: 17 })
     }
-    assert.match(h.text(), new RegExp(`version ${pkg.version.replaceAll('.', '\\.')}`))
+    assert.match(h.text(), /qdev-trajectory-drift-soup/)
     h.mount('plugins.row.config', { view: 'summary', form: { state: h.source.getSnapshot(), mutate: h.source.mutate } })
     assert.match(h.text(), /Detects trajectory drift with SOUP/)
   } finally { h.dispose() }

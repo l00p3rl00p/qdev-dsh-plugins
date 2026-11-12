@@ -224,7 +224,7 @@ window.__ModuleLoader__.load({
             ),
           ) : null,
           h('div', { style: styles.copy },
-            h('code', { style: styles.code }, 'qdev-trajectory-drift-soup · version 0.7.0'),
+            h('code', { style: styles.code }, 'qdev-trajectory-drift-soup'),
             h('a', {
               href: 'https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift',
               target: '_blank', rel: 'noreferrer',
@@ -485,6 +485,7 @@ window.__ModuleLoader__.load({
       return h('div', { style: styles.sessionBody },
         h('div', { style: styles.liveHeader },
           h('h3', { style: styles.compactCardTitle }, 'Live & Mentor'),
+          live?.version ? h('span', { style: styles.sourceBadge }, `version ${live.version}`) : null,
           h('button', { type: 'button', style: styles.compactButton, onClick: () => sessionLive.refresh() }, 'Refresh'),
         ),
         h(SessionLiveCard, { live, error: sessionLive.error, onChanged: sessionLive.refresh }),

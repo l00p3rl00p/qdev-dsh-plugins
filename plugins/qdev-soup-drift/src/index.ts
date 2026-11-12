@@ -6,6 +6,7 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-host-webserver'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
+import { readFileSync } from 'node:fs'
 import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-user-questions'
 import s from '@deepseek-ai/schemastery'
@@ -21,7 +22,8 @@ import { applyMentorEdit, MentorContextRecord } from '../mentor-context.mjs'
 import { GENTLE_MENTOR_MESSAGE } from '../reanchor.mjs'
 
 const PACKAGE_NAME = 'qdev-trajectory-drift-soup'
-const VERSION = '0.7.0'
+// The single source of the release number is package.json. Nothing else in the plugin states it.
+const VERSION: string = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version
 const SOURCE = 'https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift'
 const STATUS_PATH = '/qdev-soup-drift/status'
 const SESSION_SETTINGS_PATH = '/api/qdev-soup/session-settings'
@@ -415,6 +417,7 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
           : record?.mentorActivity ?? 'ready'
     return {
       sessionId: id,
+      version: VERSION,
       attached,
       effective: {
         enabled: active,
