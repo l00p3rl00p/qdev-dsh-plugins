@@ -2,7 +2,6 @@
     - id: qdev-trajectory-drift-soup
       name: qdev-trajectory-drift-soup
       config:
-        python: /home/qdev/llm-runtime/tools/venvs/soup/bin/python
         enabled: true
         detectorEnabled: true
         reanchoring: true
