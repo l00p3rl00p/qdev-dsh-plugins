@@ -472,7 +472,7 @@ test('Convergence tab: four-quadrant view, separated evidence sections, qualifie
     assert.match(h.text(), /Statistical measures/)
     assert.match(h.text(), /Interpretation \(hypothesis, not a verified event\)/)
     assert.match(h.text(), /Qualified near-boundary signal/)
-    assert.match(h.text(), /SOUP calculations, tool calls and decisions \(plan mode, hooks\)\. Test outcomes/)
+    assert.match(h.text(), /SOUP calculations, tool calls, decisions \(plan mode, hooks\) and test outcomes read from shell output text/)
     assert.doesNotMatch(h.text(), /Gentle Mentor/)
   } finally { h.dispose() }
 })
@@ -564,5 +564,50 @@ test('Convergence: qualified convergence needs two independent sources; a recurr
     assert.match(h.text(), /corroborated · The same failure keeps recurring: request timed out after # seconds/)
     assert.match(h.text(), /Independent sources: tool telemetry \+ calculations/)
     assert.match(h.text(), /Verifying a candidate needs evidence outside these sources/)
+  } finally { h.dispose() }
+})
+
+test('Convergence drill-down: point titles carry distance and persistence; contradicting readings, test outcomes and the relationship graph are shown for the window', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.2
+  const kls = [0.05, 0.05, 0.05, 0.05, 0.21]
+  live.detector.history = kls.map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: kl >= 0.2 }))
+  live.tools = [{ callId: 'b1', name: 'bash', startedAt: 1700000003000, endedAt: 1700000005000, error: false, outcome: { result: 'failed', summary: '5 passed, 2 failed in 0.4s' } }]
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /same quadrant for 1 window/, 'quadrant point title lacks persistence')
+    assert.match(h.text(), /Readings that contradict this window/)
+    assert.match(h.text(), /crossed the boundary in a low window/)
+    assert.match(h.text(), /These readings come from one KL series/)
+    assert.match(h.text(), /Test outcomes in this window/)
+    assert.match(h.text(), /failed · bash/)
+    assert.match(h.text(), /5 passed, 2 failed in 0\.4s/)
+    assert.match(h.text(), /Read from shell tool output text, not from a test runner/)
+    assert.match(h.text(), /A test run failed: 5 passed, 2 failed in 0\.4s/)
+    assert.match(h.text(), /Independent sources: test outcomes \+ calculations/)
+    assert.match(h.text(), /Evidence relationships/)
+    assert.match(h.text(), /Test outcomes 1 \(1 failed\)/)
+  } finally { h.dispose() }
+})
+
+test('Convergence: a focused cluster just under the boundary, persisting over several windows, is described as boundary-hugging', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.2
+  const kls = [0.19, 0.19, 0.19, 0.19, 0.19, 0.19, 0.19, 0.19]
+  live.detector.history = kls.map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: false }))
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /repeatedly approaches the operating boundary without crossing it/)
+    assert.match(h.text(), /same quadrant for 4 windows/)
   } finally { h.dispose() }
 })

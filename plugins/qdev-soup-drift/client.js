@@ -685,6 +685,73 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // Drill-down helpers (Appendix 11.1, 11.4, 11.5). All read the same single KL series, so none of them is an independent source by itself.
+    function pointTitle(point) {
+      return `Window ending ${new Date(point.at).toLocaleTimeString()}: mean ${point.mean.toFixed(3)} · distance from boundary ${point.distance.toFixed(3)} · coherence ${point.coherence.toFixed(3)} · same quadrant for ${point.persistence} window${point.persistence === 1 ? '' : 's'}`;
+    }
+    // Readings that go against the window's pattern: crossings in a low window, readings below the boundary in a high window, and readings more than two sigma from the mean.
+    function ContradictionSection({ chosen }) {
+      const rows = [];
+      chosen.slice.forEach((point, i) => {
+        const value = chosen.values[i];
+        if (chosen.magnitude === 'LOW' && point.drift) rows.push({ at: point.at, value, reason: 'crossed the boundary in a low window' });
+        else if (chosen.magnitude === 'HIGH' && !point.drift) rows.push({ at: point.at, value, reason: 'below the boundary in a high window' });
+        else if (chosen.sigma > 0 && Math.abs(value - chosen.mean) > 2 * chosen.sigma) rows.push({ at: point.at, value, reason: 'more than 2σ from the window mean' });
+      });
+      return h('section', { style: styles.compactCard, 'aria-label': 'Readings that contradict this window' },
+        h('span', { style: styles.label }, 'Readings that contradict this window'),
+        rows.length
+          ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, rows.map((row, i) => h('li', { key: `${row.at}-${i}`, style: styles.body },
+            h('strong', null, row.value.toFixed(3)), ` · ${new Date(row.at).toLocaleTimeString()} · ${row.reason}`,
+          )))
+          : h('p', { style: styles.hint }, 'None in this window.'),
+        h('p', { style: styles.hint }, 'These readings come from one KL series. They describe the same source, not independent evidence.'),
+      );
+    }
+    // Test outcomes from shell tool output text (Appendix 11.4). Read from text, not from a test runner, so each one stays a hypothesis.
+    function TestOutcomeSection({ tools, chosen }) {
+      const from = chosen.slice[0].at;
+      const to = chosen.slice[chosen.slice.length - 1].at;
+      const inWindow = (tools ?? []).filter((tool) => tool.outcome && tool.startedAt >= from && tool.startedAt <= to);
+      return h('section', { style: styles.compactCard, 'aria-label': 'Test outcomes in this window' },
+        h('span', { style: styles.label }, 'Test outcomes in this window'),
+        inWindow.length
+          ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, inWindow.map((tool, i) => h('li', { key: `${tool.callId}-${i}`, style: styles.body },
+            h('strong', null, tool.outcome.result), ` · ${tool.name} · ${new Date(tool.startedAt).toLocaleTimeString()}`,
+            h('div', { style: styles.hint }, tool.outcome.summary),
+          )))
+          : h('p', { style: styles.hint }, 'No test outcomes in this window.'),
+        h('p', { style: styles.hint }, 'Read from shell tool output text, not from a test runner. Treat as a hypothesis until verified.'),
+      );
+    }
+    // Evidence relationships for the selected window (Appendix 11.4): one centre, one spoke per evidence family. Solid spoke = evidence present.
+    function RelationshipGraph({ chosen, tools, decisions }) {
+      const from = chosen.slice[0].at;
+      const to = chosen.slice[chosen.slice.length - 1].at;
+      const inRange = (at) => at >= from && at <= to;
+      const toolsIn = (tools ?? []).filter((tool) => inRange(tool.startedAt));
+      const failedIn = toolsIn.filter((tool) => tool.error).length;
+      const decisionsIn = (decisions ?? []).filter((d) => inRange(d.at)).length;
+      const testsIn = toolsIn.filter((tool) => tool.outcome);
+      const testsFailed = testsIn.filter((tool) => tool.outcome.result === 'failed').length;
+      const spokes = [
+        { label: `Calculations ${chosen.slice.length}`, count: chosen.slice.length, x: 60, y: 40 },
+        { label: `Tool calls ${toolsIn.length} (${failedIn} failed)`, count: toolsIn.length, x: 240, y: 40 },
+        { label: `Decisions ${decisionsIn}`, count: decisionsIn, x: 60, y: 150 },
+        { label: `Test outcomes ${testsIn.length} (${testsFailed} failed)`, count: testsIn.length, x: 240, y: 150 },
+      ];
+      return h('section', { style: styles.compactCard, 'aria-label': 'Evidence relationships' },
+        h('span', { style: styles.label }, 'Evidence relationships'),
+        h('svg', { viewBox: '0 0 300 190', role: 'img', 'aria-label': 'Evidence relationships for the selected window', style: { width: '100%', height: 'auto', display: 'block', marginTop: 6 } },
+          spokes.map((spoke) => h('line', { key: spoke.label, x1: 150, y1: 95, x2: spoke.x, y2: spoke.y, stroke: 'currentColor', strokeWidth: 1.5, strokeDasharray: spoke.count > 0 ? undefined : '4 3', opacity: spoke.count > 0 ? 0.8 : 0.3 })),
+          h('circle', { cx: 150, cy: 95, r: 22, fill: 'var(--dsw-alias-border-l2)', stroke: 'currentColor' }),
+          h('text', { x: 150, y: 99, textAnchor: 'middle', fill: 'currentColor', fontSize: 9 }, chosen.focus.toLowerCase()),
+          spokes.map((spoke) => h('text', { key: `t-${spoke.label}`, x: spoke.x, y: spoke.y, textAnchor: 'middle', fill: 'currentColor', fontSize: 10 }, spoke.label)),
+        ),
+        h('p', { style: styles.hint }, 'Calculations are one source family. Each other spoke is a separate source family.'),
+      );
+    }
+
     // Decision evidence (Appendix 11.4): plan-mode switches and hook decisions recorded by the Host from DSH's own session events.
     function DecisionEvidenceSection({ decisions, chosen }) {
       const from = chosen.slice[0].at;
@@ -954,6 +1021,11 @@ window.__ModuleLoader__.load({
         if (elevated) sources.push('calculations');
         candidates.push({ event: `The same failure keeps recurring: ${group.type}`, sources, contradicted: elevated ? null : 'the calculations were not elevated while it happened' });
       }
+      for (const tool of (tools ?? []).filter((t) => t.outcome?.result === 'failed')) {
+        const end = tool.endedAt ?? tool.startedAt;
+        const elevated = limit !== null && history.some((point) => point.at >= tool.startedAt && point.at <= end && point.kl >= 0.5 * limit);
+        candidates.push({ event: `A test run failed: ${tool.outcome.summary}`, sources: elevated ? ['test outcomes', 'calculations'] : ['test outcomes'], contradicted: null });
+      }
       const levelOf = (count) => (count >= 3 ? 'convergent' : count === 2 ? 'corroborated' : 'observed');
       return candidates.map((c) => ({ ...c, level: levelOf(new Set(c.sources).size) }));
     }
@@ -971,7 +1043,7 @@ window.__ModuleLoader__.load({
           : h('p', { style: styles.body }, items.length
             ? `No qualified convergence. Each candidate rests on one source: ${items.map((item) => item.event.toLowerCase()).join('; ')}.`
             : 'No qualified convergence. No candidate event has evidence yet.'),
-        h('p', { style: styles.hint }, 'Verifying a candidate needs evidence outside these sources, such as test outcomes, which are not built yet.'),
+        h('p', { style: styles.hint }, 'Verifying a candidate needs evidence outside these sources, such as a verified test-runner result, which is not built yet.'),
       );
     }
 
@@ -1042,7 +1114,7 @@ window.__ModuleLoader__.load({
               r: 4 + Math.min(4, point.crossings), fill: colorOf(point), stroke: chosen && chosen.index === point.index ? 'currentColor' : 'none', strokeWidth: 2,
               style: { cursor: 'pointer' }, role: 'button', 'aria-label': `window ending ${new Date(point.at).toLocaleTimeString()}`,
               onClick: () => setSelected(point.index),
-            })),
+            }, h('title', null, pointTitle(point)))),
           ),
         ),
         chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Raw measurements' },
@@ -1068,10 +1140,16 @@ window.__ModuleLoader__.load({
           chosen.focus === 'FOCUSED' && chosen.magnitude === 'LOW' && chosen.distance < 0.05
             ? h('p', { style: styles.body }, 'Qualified near-boundary signal: focused and just below the boundary. It needs evidence beyond these numbers before it means anything.')
             : null,
+          chosen.focus === 'FOCUSED' && chosen.magnitude === 'LOW' && chosen.distance < 0.05 && chosen.persistence >= 3
+            ? h('p', { style: styles.body }, 'The chat repeatedly approaches the operating boundary without crossing it. The pattern is concentrated and persistent.')
+            : null,
           h('p', { style: styles.hint }, 'The detector is unchanged. Its binary decision is shown as crossings above.'),
         ) : null,
         chosen ? h(ToolEvidenceSection, { tools: live?.tools ?? [], chosen }) : null,
         chosen ? h(DecisionEvidenceSection, { decisions: live?.decisions ?? [], chosen }) : null,
+        chosen ? h(TestOutcomeSection, { tools: live?.tools ?? [], chosen }) : null,
+        chosen ? h(ContradictionSection, { chosen }) : null,
+        chosen ? h(RelationshipGraph, { chosen, tools: live?.tools ?? [], decisions: live?.decisions ?? [] }) : null,
         h(OutlierClustersSection, { history, threshold }),
         h(SpcSection, { history }),
         h(RepeatedFailuresSection, { tools: live?.tools ?? [] }),
@@ -1080,7 +1158,7 @@ window.__ModuleLoader__.load({
         h(QualifiedConvergenceSection, { history, tools: live?.tools ?? [], threshold, spc: spcAnalysis(history) }),
         chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Evidence available' },
           h('span', { style: styles.label }, 'Evidence available'),
-          h('p', { style: styles.hint }, 'SOUP calculations, tool calls and decisions (plan mode, hooks). Test outcomes and outlier subsets are not in this data yet.'),
+          h('p', { style: styles.hint }, 'SOUP calculations, tool calls, decisions (plan mode, hooks) and test outcomes read from shell output text. Not verified by a test runner. Outlier subsets come from the same readings and are not independent sources.'),
         ) : null,
       );
     }

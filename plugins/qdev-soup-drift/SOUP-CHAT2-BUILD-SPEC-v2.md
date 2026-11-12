@@ -242,3 +242,21 @@ Telemetry to OTEL is parked. The OTEL path is a DSH method for SOUP to emit tele
   - Not built: test-outcome evidence, the event relationship graph, outlier subsets on the quadrant, domain-specific meaning text (11.5 examples), and tests for Appendix 11 Examples A, B and C.
   - Human or agent step: concept blindness judgment (11.6).
 - **Not yet installed:** the decision-log change is not in the Harness. The installed build is still 623fac8.
+
+### 9d. Appendix 11 gap round (2026-11-12)
+
+- **Test outcomes (11.4):** the Host reads shell-like tool output (bash, shell, exec, run, command, terminal) for pytest-style "N failed" and node-style "# fail N" lines. The result is stored per tool call with its summary line. It is a text pattern, not a test runner's verified result, and the UI says so. Covered by a Host test that also checks a non-shell tool is ignored and the outcome survives a restart.
+- **Boundary proximity and persistence (11.1):** each quadrant point's title now gives its mean, distance from the boundary, coherence and same-quadrant window count.
+- **Contradicting readings (11.4):** the selected window lists readings that go against its pattern: crossings in a low window, readings below the boundary in a high window, and readings more than 2σ from the mean. The list states that all readings come from one KL series.
+- **Evidence relationships (11.4):** a small graph shows the selected window with one spoke per evidence family (calculations, tool calls, decisions, test outcomes). Solid means evidence is present.
+- **Qualified convergence (11.4, 11.5):** a failed test outcome is a candidate. It counts as "test outcomes" plus "calculations" when a reading was elevated during the run.
+- **Boundary-hugging wording (11.5):** a focused, low window just under the boundary that persists for three or more windows gets the sentence from the Appendix 11.5 agent example.
+- **Tests:** 96 of 96 pass (real SOUP worker, local Python with soup_cli on PYTHONPATH).
+
+**Still not built:**
+- Appendix 11.2 Examples A, B and C are not reproduced by the view. The view uses a 5-reading window and the examples use 3 readings, so the examples are checked by formula only, not by a test.
+- Outlier subsets are shown in their own section, not on the quadrant (11.3 allows this).
+- Test outcomes come from text patterns. A verified test-runner source is not built.
+- Domain-specific meaning text (aircraft, creative writing) is not built.
+- Concept blindness judgment (11.6) stays a human or agent step.
+- The decision and outcome changes are not installed in the Harness.

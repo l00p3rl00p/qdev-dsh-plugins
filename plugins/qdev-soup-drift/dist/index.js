@@ -39,7 +39,7 @@ const LIVE_HISTORY_DOMAIN = defineDomain({
         sessions: domainTable(z.object({
             history: z.array(z.object({ at: z.number(), kl: z.number(), threshold: z.number(), drift: z.boolean() })).max(50),
             markers: z.array(z.object({ at: z.number(), kind: z.enum(['crossing', 'reminder', 'escalation', 'clarification']) })).max(50),
-            tools: z.array(z.object({ callId: z.string(), name: z.string(), startedAt: z.number(), endedAt: z.number().nullable(), error: z.boolean(), reason: z.string().optional() })).max(200).optional(),
+            tools: z.array(z.object({ callId: z.string(), name: z.string(), startedAt: z.number(), endedAt: z.number().nullable(), error: z.boolean(), reason: z.string().optional(), outcome: z.object({ result: z.enum(['passed', 'failed']), summary: z.string().max(200) }).optional() })).max(200).optional(),
             decisions: z.array(z.object({ at: z.number(), kind: z.string(), detail: z.string() })).max(200).optional(),
         })),
     },
@@ -151,6 +151,32 @@ export async function apply(ctx, config = {}) {
         liveDecisions.set(id, list);
         persistLive(id, ensureSessionLive(id));
     };
+    // Counts from pytest-style "3 failed" and node-style "# fail 1" lines. Only shell-like tools are read.
+    const testOutcome = (name, content) => {
+        if (!/bash|shell|exec|run|command|terminal/i.test(name) || !Array.isArray(content))
+            return undefined;
+        const text = content.map((part) => (part && typeof part === 'object' && typeof part.text === 'string' ? part.text : '')).join('\n');
+        const lineOf = (index) => {
+            const start = text.lastIndexOf('\n', index) + 1;
+            const end = text.indexOf('\n', index);
+            return text.slice(start, end === -1 ? undefined : end).trim();
+        };
+        let passed = 0;
+        let failed = 0;
+        let summary = '';
+        for (const m of text.matchAll(/(\d+)\s+(passed|failed)\b|#\s*(pass|fail)\s+(\d+)/gi)) {
+            const count = Number(m[1] ?? m[4]);
+            const kind = (m[2] ?? m[3]).toLowerCase();
+            if (kind.startsWith('fail'))
+                failed += count;
+            else
+                passed += count;
+            summary = summary || lineOf(m.index ?? 0);
+        }
+        if (failed === 0 && passed === 0)
+            return undefined;
+        return { result: failed > 0 ? 'failed' : 'passed', summary: summary.slice(0, 160) };
+    };
     const observeTool = (id, event) => {
         const data = event.data;
         const list = liveTools.get(id) ?? [...(initialLive[id]?.tools ?? [])];
@@ -167,6 +193,9 @@ export async function apply(ctx, config = {}) {
                 record.error = data.message?.isError === true;
                 if (record.error)
                     record.reason = reasonText(data.message?.content);
+                const outcome = testOutcome(record.name, data.message?.content);
+                if (outcome)
+                    record.outcome = outcome;
             }
         }
         liveTools.set(id, list);

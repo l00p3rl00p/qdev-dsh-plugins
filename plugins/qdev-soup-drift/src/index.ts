@@ -45,10 +45,12 @@ const MENTOR_CONTEXT_DOMAIN = defineDomain({
 })
 
 // Per-chat Live & Mentor history: last 50 calculations and markers, restored across Harness restarts.
+// Test outcome read from shell tool output text. It is a text pattern, not a test runner's verified result.
+type TestOutcome = { result: 'passed' | 'failed'; summary: string }
 type LiveHistoryStored = {
   history: Array<{ at: number; kl: number; threshold: number; drift: boolean }>
   markers: Array<{ at: number; kind: 'crossing' | 'reminder' | 'escalation' | 'clarification' }>
-  tools?: Array<{ callId: string; name: string; startedAt: number; endedAt: number | null; error: boolean; reason?: string }>
+  tools?: Array<{ callId: string; name: string; startedAt: number; endedAt: number | null; error: boolean; reason?: string; outcome?: TestOutcome }>
   decisions?: Array<{ at: number; kind: string; detail: string }>
 }
 const LIVE_HISTORY_DOMAIN = defineDomain({
@@ -59,7 +61,7 @@ const LIVE_HISTORY_DOMAIN = defineDomain({
     sessions: domainTable<string, LiveHistoryStored>(z.object({
       history: z.array(z.object({ at: z.number(), kl: z.number(), threshold: z.number(), drift: z.boolean() })).max(50),
       markers: z.array(z.object({ at: z.number(), kind: z.enum(['crossing', 'reminder', 'escalation', 'clarification']) })).max(50),
-      tools: z.array(z.object({ callId: z.string(), name: z.string(), startedAt: z.number(), endedAt: z.number().nullable(), error: z.boolean(), reason: z.string().optional() })).max(200).optional(),
+      tools: z.array(z.object({ callId: z.string(), name: z.string(), startedAt: z.number(), endedAt: z.number().nullable(), error: z.boolean(), reason: z.string().optional(), outcome: z.object({ result: z.enum(['passed', 'failed']), summary: z.string().max(200) }).optional() })).max(200).optional(),
       decisions: z.array(z.object({ at: z.number(), kind: z.string(), detail: z.string() })).max(200).optional(),
     })),
   },
@@ -258,7 +260,7 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
   const runtimes = new Map<string, ReturnType<typeof createPluginRuntime>>()
   const sessionLive = new Map<string, SessionLiveRecord>()
   // Tool calls per chat, read from DSH's own tool/call and tool/result session events. Memory only; last 200.
-  type ToolRecord = { callId: string; name: string; startedAt: number; endedAt: number | null; error: boolean; reason?: string }
+  type ToolRecord = { callId: string; name: string; startedAt: number; endedAt: number | null; error: boolean; reason?: string; outcome?: TestOutcome }
   const liveTools = new Map<string, ToolRecord[]>()
   // The short reason a failed result gives, from its text blocks. Used to group failures by type.
   const reasonText = (content: unknown): string => (Array.isArray(content)
@@ -286,6 +288,28 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
     liveDecisions.set(id, list)
     persistLive(id, ensureSessionLive(id))
   }
+  // Counts from pytest-style "3 failed" and node-style "# fail 1" lines. Only shell-like tools are read.
+  const testOutcome = (name: string, content: unknown): TestOutcome | undefined => {
+    if (!/bash|shell|exec|run|command|terminal/i.test(name) || !Array.isArray(content)) return undefined
+    const text = content.map((part) => (part && typeof part === 'object' && typeof (part as { text?: unknown }).text === 'string' ? (part as { text: string }).text : '')).join('\n')
+    const lineOf = (index: number): string => {
+      const start = text.lastIndexOf('\n', index) + 1
+      const end = text.indexOf('\n', index)
+      return text.slice(start, end === -1 ? undefined : end).trim()
+    }
+    let passed = 0
+    let failed = 0
+    let summary = ''
+    for (const m of text.matchAll(/(\d+)\s+(passed|failed)\b|#\s*(pass|fail)\s+(\d+)/gi)) {
+      const count = Number(m[1] ?? m[4])
+      const kind = (m[2] ?? m[3]).toLowerCase()
+      if (kind.startsWith('fail')) failed += count
+      else passed += count
+      summary = summary || lineOf(m.index ?? 0)
+    }
+    if (failed === 0 && passed === 0) return undefined
+    return { result: failed > 0 ? 'failed' : 'passed', summary: summary.slice(0, 160) }
+  }
   const observeTool = (id: string, event: SessionEvent): void => {
     const data = event.data as unknown as { callId?: unknown; name?: unknown; message?: { source?: { callId?: unknown }; isError?: unknown; content?: unknown } }
     const list = liveTools.get(id) ?? [...(initialLive[id]?.tools ?? [])]
@@ -299,6 +323,8 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
         record.endedAt = event.time
         record.error = data.message?.isError === true
         if (record.error) record.reason = reasonText(data.message?.content)
+        const outcome = testOutcome(record.name, data.message?.content)
+        if (outcome) record.outcome = outcome
       }
     }
     liveTools.set(id, list)
