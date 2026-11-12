@@ -1309,28 +1309,15 @@ window.__ModuleLoader__.load({
     }
 
     const SOUP_PANE_ID = 'soup-sidebar';
-    const SOUP_SHORTCUT_ID = 'soup.sidebar.open';
     function SoupSidebarTab({ sessionId }) {
       return sessionId ? h(SessionSettingsView, { key: `pane-${sessionId}`, sessionId: String(sessionId), defaultTab: 'convergence' }) : null;
     }
 
+    // No hot key here: reading an undeclared service (ctx.shortcuts) blocks activation. The user creates the hot key.
     return {
       name: 'qdev-trajectory-drift-soup-settings',
-      inject: ['slots', 'configForms', 'shortcuts'],
+      inject: ['slots', 'configForms'],
       apply(ctx) {
-        if (ctx.shortcuts?.register) ctx.effect(() => ctx.shortcuts.register({
-          id: SOUP_SHORTCUT_ID,
-          label: () => 'Open SOUP sidebar',
-          aliases: ['soup', 'convergence', 'open soup'],
-          defaults: {
-            'desktop:macos': { code: 'Space', modifiers: ['primary', 'shift'] },
-            'desktop:windows': { code: 'Space', modifiers: ['primary', 'shift'] },
-            'desktop:linux': { code: 'Space', modifiers: ['primary', 'shift'] },
-            'web:macos': { code: 'Space', modifiers: ['primary', 'shift'] },
-            'web:windows': { code: 'Space', modifiers: ['primary', 'shift'] },
-            'web:linux': { code: 'Space', modifiers: ['primary', 'shift'] },
-          },
-        }), 'qdev-trajectory-drift-soup: sidebar hot key');
         ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
           name: 'sidebar.right.pane.tab', key: SOUP_PANE_ID,
         }, SoupSidebarTab));

@@ -57,7 +57,7 @@ function harness({ value = {}, writable = true, status = 'ready', mutate, fetch:
     return response(options.method === 'POST' ? { ok: true } : live)
   } }, { filename: 'qdev-soup-client.js' })
   assert.equal(module.name, 'qdev-trajectory-drift-soup-settings')
-  assert.deepEqual(plain(module.inject), ['slots', 'configForms', 'shortcuts'])
+  assert.deepEqual(plain(module.inject), ['slots', 'configForms'])
   const cleanups = []
   module.apply({
     configForms: { get(entry) { assert.equal(entry, pkg.name); return source } },
