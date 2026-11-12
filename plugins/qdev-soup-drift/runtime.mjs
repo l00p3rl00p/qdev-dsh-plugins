@@ -96,6 +96,9 @@ export function createPluginRuntime({
     mentorState(id) {
       return mentor.snapshot(id)
     },
+    originalPlan(id) {
+      return mentor.plan(id)
+    },
     dispose() {
       disposed = true
       generation += 1

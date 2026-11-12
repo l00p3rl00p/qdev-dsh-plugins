@@ -109,6 +109,10 @@ export function createReanchor({
     snapshot(id) {
       return publicState(id)
     },
+    // Read-only: the captured original plan text for the Live & Mentor view. Never edited here.
+    plan(id) {
+      return textOf(get(id).intent)
+    },
     dispose() {
       state.clear()
     },

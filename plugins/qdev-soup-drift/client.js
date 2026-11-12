@@ -138,157 +138,6 @@ window.__ModuleLoader__.load({
       }));
     }
 
-    function useLiveStatus() {
-      const [status, setStatus] = useState(null);
-      const [error, setError] = useState('');
-      const [refreshKey, setRefreshKey] = useState(0);
-      useEffect(() => {
-        let active = true;
-        let controller;
-        async function refresh() {
-          controller?.abort();
-          controller = new AbortController();
-          try {
-            const response = await fetch('/qdev-soup-drift/status', {
-              signal: controller.signal, credentials: 'same-origin', headers: { accept: 'application/json' },
-            });
-            if (!response.ok) throw new Error(`Status endpoint returned ${response.status}`);
-            const next = await response.json();
-            if (active) { setStatus(next); setError(''); }
-          } catch (cause) {
-            if (active && cause?.name !== 'AbortError') setError(cause instanceof Error ? cause.message : String(cause));
-          }
-        }
-        refresh();
-        const timer = window.setInterval(refresh, 4000);
-        return () => { active = false; window.clearInterval(timer); controller?.abort(); };
-      }, [refreshKey]);
-      return { status, error, refresh: () => setRefreshKey(value => value + 1) };
-    }
-
-    function Metric({ label, value }) {
-      return h('div', { style: styles.metric },
-        h('span', { style: styles.hint }, label),
-        h('strong', { style: styles.metricValue }, String(value)),
-      );
-    }
-
-    function formatTime(value) {
-      if (typeof value !== 'number') return 'Waiting for session activity';
-      return new Date(value).toLocaleString();
-    }
-
-    function DeliveryEvidence({ record }) {
-      const details = [
-        record.state,
-        record.attempt == null ? null : `attempt ${record.attempt}`,
-        record.eventSeq == null ? null : `inbox event ${record.eventSeq}`,
-        record.messageId ? `message ${record.messageId}` : null,
-      ].filter(Boolean).join(' · ');
-      return h('li', { style: styles.body },
-        h('strong', { style: styles.label }, record.kind),
-        ` — ${details}`,
-        record.error ? h('span', { style: styles.error }, ` — ${record.error}`) : null,
-      );
-    }
-
-    function StatusPanel() {
-      const { status, error, refresh } = useLiveStatus();
-      const [decisionWorking, setDecisionWorking] = useState('');
-      const [decisionError, setDecisionError] = useState('');
-      const trajectory = status?.trajectory ?? {};
-      const detector = status?.detector ?? {};
-      const mentor = status?.mentor ?? {};
-      const deliveries = [...(mentor.reminders ?? []), ...(mentor.escalation ? [mentor.escalation] : [])];
-      const delivered = deliveries.filter(item => item.state === 'delivered' || item.state === 'answered').length;
-      const result = detector.lastResult;
-      const kl = typeof result?.klDivergence === 'number' ? result.klDivergence.toFixed(4) : '—';
-      const average = typeof detector.averageKlDivergence === 'number' ? detector.averageKlDivergence.toFixed(4) : '—';
-      const ratio = typeof detector.averageThresholdRatio === 'number' ? detector.averageThresholdRatio : null;
-      const ratioLabel = ratio == null ? 'Waiting for enough output' : `${ratio.toFixed(1)}× the active threshold`;
-      const summary = detector.humanSummary ?? 'Waiting for measurements';
-      const meterColor = summary === 'Stable'
-        ? 'var(--dsw-alias-state-success-primary)'
-        : summary === 'Approaching threshold'
-          ? 'var(--dsw-alias-state-warn-primary)'
-          : 'var(--dsw-alias-state-error-primary)';
-      const hostErrors = Array.isArray(status?.errors) ? status.errors : [];
-      const resetDecision = mentor.resetDecision?.required ? mentor.resetDecision : null;
-      const resetDisabled = Boolean(decisionWorking) || status?.configuration?.enabled === false;
-
-      async function chooseReset(reset) {
-        if (!resetDecision || resetDisabled) return;
-        setDecisionWorking(reset ? 'reset' : 'carry');
-        setDecisionError('');
-        try {
-          const response = await fetch('/qdev-soup-drift/status', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'content-type': 'application/json', 'x-qdev-soup-action': 'reset-drift-count' },
-            body: JSON.stringify({ action: 'reset-drift-count', sessionId: resetDecision.sessionId, reset }),
-          });
-          const payload = await response.json();
-          if (!response.ok || !payload.ok) throw new Error(payload.error || payload.result?.reason || `Reset action returned ${response.status}`);
-          refresh();
-        } catch (cause) {
-          setDecisionError(cause instanceof Error ? cause.message : String(cause));
-        } finally {
-          setDecisionWorking('');
-        }
-      }
-
-      return h('section', { style: styles.card, 'aria-labelledby': 'soup-live-status' },
-        h('p', { style: styles.sectionLabel }, 'Trajectory monitor'),
-        h('h3', { id: 'soup-live-status', style: styles.title }, 'What SOUP sees right now'),
-        h('div', { style: styles.hero },
-          h('div', { style: styles.copy },
-            h('strong', { style: { ...styles.metricValue, marginTop: 0, fontSize: 24 } }, summary),
-            h('p', { style: styles.body }, ratio == null
-              ? 'SOUP is collecting a stable baseline before it compares live output.'
-              : `Average KL divergence is ${average}, which is ${ratioLabel}. KL is the difference between recent output and the baseline: 0 means closely aligned, larger values mean more change, and a value above the threshold counts as drift.`),
-            h('div', { style: styles.meter, role: 'meter', 'aria-label': 'Average drift versus threshold', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': ratio == null ? 0 : Math.min(100, Math.round(ratio * 100)) },
-              h('span', { style: { display: 'block', width: `${ratio == null ? 0 : Math.min(100, ratio * 100)}%`, height: '100%', background: meterColor, transition: 'width 180ms ease' } }),
-            ),
-          ),
-          h('div', { style: styles.copy },
-            h('span', { style: styles.sectionLabel }, 'Accountability'),
-            h('strong', { style: { ...styles.metricValue, marginTop: 0 } }, `${mentor.driftCount ?? 0} qualifying drift${mentor.driftCount === 1 ? '' : 's'}`),
-            h('span', { style: styles.hint }, `${mentor.carriedDrifts ?? 0} carried across turns · two reminders, then escalation`),
-          ),
-        ),
-        resetDecision ? h('div', { style: { ...styles.hero, borderColor: 'var(--dsw-alias-state-warn-primary)' } },
-          h('div', { style: styles.copy },
-            h('strong', { style: styles.label }, 'Reset the drift count?'),
-            h('p', { style: styles.body }, 'Reset gives the corrected trajectory a fresh allowance. Keep carries three strikes forward, so the next qualifying drift escalates immediately.'),
-          ),
-          h('div', { style: styles.actionRow, role: 'group', 'aria-label': 'Reset accumulated drift count' },
-            h('button', { type: 'button', style: { ...styles.button, borderColor: 'var(--dsw-alias-state-success-primary)' }, disabled: resetDisabled, onClick: () => chooseReset(true) }, decisionWorking === 'reset' ? 'Resetting…' : 'Yes — reset to 0'),
-            h('button', { type: 'button', style: { ...styles.button, borderColor: 'var(--dsw-alias-state-warn-primary)' }, disabled: resetDisabled, onClick: () => chooseReset(false) }, decisionWorking === 'carry' ? 'Saving…' : 'No — carry 3 forward'),
-          ),
-          decisionError ? h('p', { role: 'alert', style: styles.error }, decisionError) : null,
-        ) : null,
-        h('div', { style: styles.statusGrid },
-          h(Metric, { label: 'Session events', value: trajectory.sessionEvents ?? '—' }),
-          h(Metric, { label: 'Assistant messages', value: trajectory.assistantMessages ?? '—' }),
-          h(Metric, { label: 'SOUP calculations', value: detector.evaluations ?? '—' }),
-          h(Metric, { label: 'Average KL', value: average }),
-          h(Metric, { label: 'Latest KL', value: kl }),
-          h(Metric, { label: 'Inbox deliveries', value: status ? delivered : '—' }),
-        ),
-        h('p', { style: styles.hint }, `Trajectory ${trajectory.state ?? 'unavailable'} · Detector ${detector.state ?? 'unavailable'} · Mentor ${mentor.state ?? 'unavailable'} · Latest activity ${formatTime(trajectory.lastEventAt)}`),
-        result ? h('p', { style: styles.body }, `Latest calculation: ${result.driftDetected ? 'drift detected' : 'within threshold'} at KL ${kl} / ${Number(result.threshold).toFixed(2)}${result.singleTurn ? ' in one turn' : ' across turns'}.`) : null,
-        mentor.lastOutcome ? h('p', { role: 'status', style: styles.body }, mentor.lastOutcome) : null,
-        deliveries.length ? h('div', null,
-          h('h4', { style: styles.title }, 'Delivery evidence'),
-          h('ul', { style: { margin: '8px 0 0', paddingLeft: 20 } }, deliveries.map((record, index) => h(DeliveryEvidence, { key: `${record.kind}-${record.requestedAt}-${index}`, record }))),
-        ) : h('p', { style: styles.hint }, 'No mentor delivery has been requested in this runtime.'),
-        error ? h('p', { role: 'alert', style: styles.error }, `Live status unavailable: ${error}`) : null,
-        hostErrors.length ? h('div', { role: 'alert' },
-          h('h4', { style: styles.title }, 'Recent host errors'),
-          h('ul', { style: { margin: '8px 0 0', paddingLeft: 20 } }, hostErrors.map((item, index) => h('li', { key: `${item.at}-${index}`, style: styles.error }, `${formatTime(item.at)} · ${item.phase ?? 'runtime'} · ${item.message}`))),
-        ) : null,
-      );
-    }
-
     function usePageForm(source) {
       const subscribe = useCallback(listener => source ? source.subscribe(listener) : () => {}, [source]);
       const state = useSyncExternalStore(subscribe, () => source?.getSnapshot(), () => source?.getSnapshot());
@@ -417,7 +266,6 @@ window.__ModuleLoader__.load({
             h(Toggle, { label: 'Enable Gentle Mentor reanchoring', checked: reanchoring, disabled: !writable || !enabled || !detectorEnabled, onChange: next => set(['reanchoring'], next) }),
           ),
         ),
-        h(StatusPanel),
       );
     }
 
@@ -468,6 +316,12 @@ window.__ModuleLoader__.load({
       return { live, error, refresh: () => setRefreshKey(value => value + 1) };
     }
 
+    // Human-readable timestamp for the per-chat card; waits until the chat has activity.
+    function formatTime(value) {
+      if (typeof value !== 'number') return 'Waiting for session activity';
+      return new Date(value).toLocaleString();
+    }
+
     function SessionLiveMetric({ label, value, current, target }) {
       const percent = Number.isFinite(current) && Number.isFinite(target) && target > 0
         ? Math.min(100, Math.round((current / target) * 100)) : null;
@@ -477,6 +331,42 @@ window.__ModuleLoader__.load({
         percent == null ? null : h('div', { style: styles.liveMeter, role: 'progressbar', 'aria-label': label, 'aria-valuemin': 0, 'aria-valuemax': target, 'aria-valuenow': Math.min(current, target) },
           h('span', { style: { display: 'block', width: `${percent}%`, height: '100%', background: 'var(--dsw-alias-brand-primary)' } }),
         ),
+      );
+    }
+
+    // Human decision after escalation: reset the qualifying-drift count or carry three strikes forward.
+    // Posts to the Host's reset-drift-count action, scoped to this chat's sessionId.
+    function ResetDecision({ sessionId, disabled }) {
+      const [working, setWorking] = useState('');
+      const [error, setError] = useState('');
+      async function choose(reset) {
+        if (working || disabled) return;
+        setWorking(reset ? 'reset' : 'carry');
+        setError('');
+        try {
+          const response = await fetch('/qdev-soup-drift/status', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'content-type': 'application/json', 'x-qdev-soup-action': 'reset-drift-count' },
+            body: JSON.stringify({ action: 'reset-drift-count', sessionId, reset }),
+          });
+          const payload = await response.json();
+          if (!response.ok || !payload.ok) throw new Error(payload.error || payload.result?.reason || `Reset action returned ${response.status}`);
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : String(cause));
+        } finally {
+          setWorking('');
+        }
+      }
+      return h('div', { style: { ...styles.hero, borderColor: 'var(--dsw-alias-state-warn-primary)' } },
+        h('div', { style: styles.copy },
+          h('strong', { style: styles.label }, 'Reset the drift count?'),
+          h('p', { style: styles.body }, 'Reset gives the corrected trajectory a fresh allowance. Keep carries three strikes forward, so the next qualifying drift escalates immediately.'),
+        ),
+        h('div', { style: styles.actionRow, role: 'group', 'aria-label': 'Reset accumulated drift count' },
+          h('button', { type: 'button', style: { ...styles.button, borderColor: 'var(--dsw-alias-state-success-primary)' }, disabled: Boolean(working) || disabled, onClick: () => choose(true) }, 'Yes — reset to 0'),
+          h('button', { type: 'button', style: { ...styles.button, borderColor: 'var(--dsw-alias-state-warn-primary)' }, disabled: Boolean(working) || disabled, onClick: () => choose(false) }, 'No — carry 3 forward'),
+        ),
+        error ? h('p', { role: 'alert', style: styles.error }, error) : null,
       );
     }
 
@@ -524,6 +414,11 @@ window.__ModuleLoader__.load({
           h(SessionLiveMetric, { label: 'Mentor', value: `${mentor.driftCount ?? 0} drift${mentor.driftCount === 1 ? '' : 's'} · ${mentor.state ?? 'unavailable'}` }),
         ),
         h('span', { style: { ...styles.inlineHint, whiteSpace: 'normal' } }, `${detector.evaluations ?? 0} calculation${detector.evaluations === 1 ? '' : 's'} · ${detector.drifts ?? 0} qualifying drift${detector.drifts === 1 ? '' : 's'} · latest activity ${formatTime(trajectory.lastEventAt)}`),
+        h('span', { style: { ...styles.inlineHint, whiteSpace: 'normal' } }, `Accountability: ${mentor.driftCount ?? 0} qualifying drift${mentor.driftCount === 1 ? '' : 's'} · ${mentor.carry ?? 0} carried across turns · two reminders, then escalation`),
+        h('p', { style: styles.hint }, 'KL is the difference between recent output and the baseline: 0 means closely aligned, larger values mean more change, and a value above the threshold counts as drift.'),
+        detector.averageKlDivergence == null ? null : h('span', { style: { ...styles.inlineHint, whiteSpace: 'normal' } }, `Average KL ${detector.averageKlDivergence.toFixed(4)} · ${detector.averageThresholdRatio.toFixed(1)}× the active threshold`),
+        mentor.decisionPending ? h(ResetDecision, { sessionId: live.sessionId, disabled: live.effective?.enabled === false }) : null,
+        result ? h('span', { style: { ...styles.inlineHint, whiteSpace: 'normal' } }, `Latest calculation: ${result.driftDetected ? 'drift detected' : 'within threshold'} at KL ${kl}`) : null,
         error ? h('p', { role: 'alert', style: styles.error }, error) : null,
       );
     }

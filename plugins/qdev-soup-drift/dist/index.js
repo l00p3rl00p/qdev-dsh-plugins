@@ -76,7 +76,6 @@ export async function apply(ctx, config = {}) {
     ctx.effect(() => () => settingsDomain.close());
     const readConfiguration = () => ({
         // The configured interpreter is authoritative; python3 is the portable default.
-
         python: config.python ?? 'python3',
         enabled: config.enabled.get() ?? true,
         detectorEnabled: config.detectorEnabled.get() ?? true,
@@ -209,6 +208,9 @@ export async function apply(ctx, config = {}) {
             pending: false,
             evaluations: 0,
             drifts: 0,
+            klTotal: 0,
+            history: [],
+            markers: [],
         };
         sessionLive.set(id, created);
         return created;
@@ -259,6 +261,9 @@ export async function apply(ctx, config = {}) {
                 pending: record?.pending ?? false,
                 evaluations: record?.evaluations ?? 0,
                 drifts: record?.drifts ?? 0,
+                history: record?.history ?? [],
+                markers: record?.markers ?? [],
+                ...(record && record.evaluations > 0 ? { averageKlDivergence: record.klTotal / record.evaluations, averageThresholdRatio: record.klTotal / record.evaluations / PRESETS[effective.preset] } : {}),
                 ...(record?.lastStartedAt === undefined ? {} : { lastStartedAt: record.lastStartedAt }),
                 ...(record?.lastCompletedAt === undefined ? {} : { lastCompletedAt: record.lastCompletedAt }),
                 ...(record?.lastResult === undefined ? {} : { lastResult: record.lastResult }),
@@ -271,6 +276,7 @@ export async function apply(ctx, config = {}) {
                 carry: mentor.carry,
                 decisionPending: mentor.decisionPending,
                 escalated: mentor.escalated,
+                originalPlan: runtimes.get(id)?.originalPlan(id) ?? null,
                 ...(record?.mentorError === undefined ? {} : { lastError: record.mentorError }),
             },
         };
@@ -428,6 +434,14 @@ export async function apply(ctx, config = {}) {
                 live.evaluations += 1;
                 if (result.drift_detected)
                     live.drifts += 1;
+                live.klTotal += result.kl_divergence;
+                live.history.push({ at: Date.now(), kl: result.kl_divergence, threshold: result.threshold, drift: result.drift_detected });
+                if (live.history.length > 50)
+                    live.history.splice(0, live.history.length - 50);
+                if (result.drift_detected)
+                    live.markers.push({ at: Date.now(), kind: 'crossing' });
+                if (live.markers.length > 50)
+                    live.markers.splice(0, live.markers.length - 50);
                 live.lastCompletedAt = Date.now();
                 live.lastResult = {
                     sessionId,
@@ -601,8 +615,13 @@ export async function apply(ctx, config = {}) {
                 record.eventSeq = Number(event.seq);
                 pendingMessages.delete(String(inserted.id));
                 const deliveredLive = sessionLive.get(record.sessionId);
-                if (deliveredLive)
+                if (deliveredLive) {
                     deliveredLive.mentorActivity = 'ready';
+                    // Delivered reminders, escalations and clarifications appear as markers on the chart.
+                    deliveredLive.markers.push({ at: Date.now(), kind: record.kind });
+                    if (deliveredLive.markers.length > 50)
+                        deliveredLive.markers.splice(0, deliveredLive.markers.length - 50);
+                }
                 status.mentor.lastOutcome = `${record.kind} delivered in native agent inbox event ${String(event.seq)}.`;
             }
         }

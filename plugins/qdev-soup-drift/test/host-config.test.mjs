@@ -9,7 +9,8 @@ import { Session } from '@deepseek-ai/dsh-session'
 // Cordis's FiberState is a TypeScript const enum, erased from JavaScript exports.
 const ACTIVE = 2
 const HOST_URL = new URL('../dist/index.js', import.meta.url)
-const PYTHON = 'python3'
+// Configured interpreter only (main eb44a23): the worker needs the soup-cli venv, not the system python3.
+const PYTHON = process.env.SOUP_PYTHON || '/home/qdev/llm-runtime/tools/venvs/soup/bin/python'
 const STATUS_PATH = '/qdev-soup-drift/status'
 const BASELINE = 'keep following the original implementation plan'
 const DRIFT = 'different unrelated output topic'
