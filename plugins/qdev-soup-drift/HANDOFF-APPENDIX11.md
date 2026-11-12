@@ -22,7 +22,7 @@ Commits in order: `63d9341` (decision log), `ffdad12` (Appendix 11 gaps), `642f7
 
 ## Open items (in order)
 
-1. **Decision needed: Example B focus.** The spec says "magnitude without focus" (scattered). The view uses coherence ≥ 0.5 as FOCUSED, and Example B's coherence is 0.639, so the view says FOCUSED/HIGH. Options: keep the threshold and say so in the spec, or change the focus rule. Changing it changes the quadrant for every chat, so get approval first.
+1. **Focus rule (resolved, commit 9ee6823).** Selectable in the Convergence view: coherence ≥ 0.5 (default), coherence ≥ 0.7, or dispersion σ ≤ 0.10. The default is unchanged. The choice is not stored between page loads. See spec 9f. Example B is tested under each rule.
 2. **Live check of the drill-down.** Generate readings (see below), then open Convergence and confirm the new sections appear. Not yet seen on screen.
 3. **Domain-meaning text (11.5)**: aircraft, creative writing and governance wording. Not built; wording only.
 4. **Verified test-runner source.** Not built. Current outcomes are text patterns.
