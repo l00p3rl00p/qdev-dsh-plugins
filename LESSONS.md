@@ -313,6 +313,9 @@ text in this repository that describes `prepare`, `allowBuilds`, or Git build ap
   steps. Keep the rollback spec in hand before removing, and add the new revision immediately after.
 - **Install is not run.** Config shows `qdev-trajectory-drift-soup` enabled. The Host log has no SOUP line until a
   restart, so Host activation, the Web tab and the Live & Mentor view are not yet verified in the live Harness.
+- **Built output is what tests run.** The Host suite loads `dist/`, so rebuild and commit it before every test run that
+  matters. A passing run on stale `dist/` proves nothing.
+- **Storage writes are not evidence by count.** Raw change counts include every domain; assert on the domain you mean.
 - **Test policy.** Tests that encode a removed UI move with their assertions, rather than being deleted. Tests that
   assert a privacy boundary narrow the boundary to the field that now carries the data (for example, the captured
   plan in the Gentle Mentor field only).

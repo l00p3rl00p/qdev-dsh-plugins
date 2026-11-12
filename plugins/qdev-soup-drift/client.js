@@ -494,7 +494,6 @@ window.__ModuleLoader__.load({
         ),
         history.length ? h(KlChart, { history, markers, threshold }) : h('p', { role: 'status', style: styles.hint }, 'Waiting for measurements'),
         h(GentleMentorSection, { plan: live?.mentor?.originalPlan ?? null }),
-        h('p', { style: styles.hint }, 'History resets when the Harness restarts.'),
       );
     }
 

@@ -128,7 +128,8 @@ async function fixture(t, config = {}, saved = {}) {
       assert.equal(fiber.config[key], ref, `configuration reference replaced: ${key}`)
     }
     assert.equal((await status()).lifecycle.startedAt, startedAt, 'Host remounted inside the same fiber')
-    assert.equal(calls.open, 2)
+    // Mentor state, session settings and Live & Mentor history (0.7.0).
+    assert.equal(calls.open, 3)
     assert.equal(calls.close, 0)
     assert.equal(calls.register, 1)
     assert.equal(calls.unregister, 0)

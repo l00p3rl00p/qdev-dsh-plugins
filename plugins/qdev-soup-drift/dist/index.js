@@ -19,6 +19,17 @@ const SESSION_SETTINGS_DOMAIN = defineDomain({
     layout: 'per-record',
     tables: { sessions: domainTable(SessionSettingsRecord) },
 });
+const LIVE_HISTORY_DOMAIN = defineDomain({
+    name: 'qdev_soup_live_history',
+    version: 1,
+    layout: 'per-record',
+    tables: {
+        sessions: domainTable(z.object({
+            history: z.array(z.object({ at: z.number(), kl: z.number(), threshold: z.number(), drift: z.boolean() })).max(50),
+            markers: z.array(z.object({ at: z.number(), kind: z.enum(['crossing', 'reminder', 'escalation', 'clarification']) })).max(50),
+        })),
+    },
+});
 const MENTOR_STATE_DOMAIN = defineDomain({
     name: 'qdev_soup_drift_state',
     version: 1,
@@ -72,6 +83,10 @@ export async function apply(ctx, config = {}) {
     ctx.effect(() => () => mentorDomain.close());
     const mentorTable = mentorDomain.table('sessions');
     const initialMentorState = Object.fromEntries(mentorTable.entries());
+    const liveDomain = await ctx.storageDomain.open(LIVE_HISTORY_DOMAIN);
+    ctx.effect(() => () => liveDomain.close());
+    const liveTable = liveDomain.table('sessions');
+    const initialLive = Object.fromEntries(liveTable.entries());
     const settingsDomain = await ctx.storageDomain.open(SESSION_SETTINGS_DOMAIN);
     ctx.effect(() => () => settingsDomain.close());
     const readConfiguration = () => ({
@@ -209,11 +224,16 @@ export async function apply(ctx, config = {}) {
             evaluations: 0,
             drifts: 0,
             klTotal: 0,
-            history: [],
-            markers: [],
+            history: initialLive[id]?.history ?? [],
+            markers: initialLive[id]?.markers ?? [],
         };
         sessionLive.set(id, created);
         return created;
+    };
+    // Write the chat's history and markers to its own storage row. Failures are recorded, never thrown.
+    const persistLive = (id, live) => {
+        void liveTable.put(id, { history: live.history, markers: live.markers })
+            .catch((error) => recordError(error, { phase: 'live-history-persist', sessionId: id }));
     };
     const sessionLiveView = (id, attached = agents.has(id)) => {
         const effective = effectiveSettings(id);
@@ -261,8 +281,8 @@ export async function apply(ctx, config = {}) {
                 pending: record?.pending ?? false,
                 evaluations: record?.evaluations ?? 0,
                 drifts: record?.drifts ?? 0,
-                history: record?.history ?? [],
-                markers: record?.markers ?? [],
+                history: record?.history ?? initialLive[id]?.history ?? [],
+                markers: record?.markers ?? initialLive[id]?.markers ?? [],
                 ...(record && record.evaluations > 0 ? { averageKlDivergence: record.klTotal / record.evaluations, averageThresholdRatio: record.klTotal / record.evaluations / PRESETS[effective.preset] } : {}),
                 ...(record?.lastStartedAt === undefined ? {} : { lastStartedAt: record.lastStartedAt }),
                 ...(record?.lastCompletedAt === undefined ? {} : { lastCompletedAt: record.lastCompletedAt }),
@@ -442,6 +462,7 @@ export async function apply(ctx, config = {}) {
                     live.markers.push({ at: Date.now(), kind: 'crossing' });
                 if (live.markers.length > 50)
                     live.markers.splice(0, live.markers.length - 50);
+                persistLive(sessionId, live);
                 live.lastCompletedAt = Date.now();
                 live.lastResult = {
                     sessionId,
@@ -621,6 +642,7 @@ export async function apply(ctx, config = {}) {
                     deliveredLive.markers.push({ at: Date.now(), kind: record.kind });
                     if (deliveredLive.markers.length > 50)
                         deliveredLive.markers.splice(0, deliveredLive.markers.length - 50);
+                    persistLive(record.sessionId, deliveredLive);
                 }
                 status.mentor.lastOutcome = `${record.kind} delivered in native agent inbox event ${String(event.seq)}.`;
             }

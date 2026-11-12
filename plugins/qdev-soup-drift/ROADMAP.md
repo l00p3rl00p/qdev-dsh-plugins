@@ -14,7 +14,8 @@ Status: 0.7.0 delivers the per-chat Live & Mentor view (card, KL chart, reset de
 
 ## Open items
 
-- **Persist the Live & Mentor history across Harness restarts.** Today the last 50 calculations and the markers are memory only, and the view says "History resets when the Harness restarts." Options: (1) store them per chat in SOUP's `storageDomain`, the same pattern as the Gentle Mentor state, and drop the reset footnote; (2) send each calculation to OTEL as evidence, which needs a read path back into the plugin. Recommended: option 1 first.
+- **Done in this branch:** the Live & Mentor history (last 50 calculations and markers) is stored per chat in the `qdev_soup_live_history` storage domain and restored after a Host restart. The reset footnote is removed.
+- **Parked:** OTEL telemetry. SOUP should emit telemetry through a DSH method, not through a plugin read path. Not started.
 
 ## Future feature — separate scope
 

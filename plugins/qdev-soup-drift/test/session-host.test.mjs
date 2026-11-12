@@ -25,6 +25,9 @@ const STATUS_PATH = '/qdev-soup-drift/status'
 const A = 'soup_feature2_A'
 const B = 'soup_feature2_B'
 const COLD = 'soup_feature2_cold'
+// Live & Mentor history (0.7.0) writes per calculation, so raw change counts are not evidence of mentor or settings writes.
+const mentorWrites = (f) => f.changes.filter((change) => change.domain === 'qdev_soup_drift_state').length
+const durableWrites = (f) => f.changes.filter((change) => change.domain !== 'qdev_soup_live_history').length
 const BASELINE = 'keep following the original implementation plan'
 const DRIFT = 'different unrelated output topic'
 const FIELDS = ['python', 'enabled', 'detectorEnabled', 'reanchoring', 'preset', 'baselineCount', 'windowCount']
@@ -530,7 +533,7 @@ test('hard global master freezes both chats and rejects mutations without changi
   assert.equal((await f.status()).detector.state, 'running')
   await f.update({ enabled: false })
   const disabled = await f.status()
-  const changes = f.changes.length
+  const changes = durableWrites(f)
   for (const id of [A, B]) {
     const snapshot = await f.settings(id)
     assert.equal(snapshot.masterEnabled, false)
@@ -547,7 +550,7 @@ test('hard global master freezes both chats and rejects mutations without changi
   }
   await delay(100)
   sames(await f.status(), disabled)
-  assert.equal(f.changes.length, changes, 'OFF wrote settings or mentor state')
+  assert.equal(durableWrites(f), changes, 'OFF wrote settings or mentor state')
   assert.deepEqual((await f.settings(A)).overrides, saved)
   assert.equal(f.injected.length, 0)
   assert.equal(f.questions.length, 0)
@@ -675,7 +678,7 @@ test('same-id agent disposal fences the old worker and resume retains two strike
   const before = await f.evaluate(A)
   assert.deepEqual(f.injected.map(({ message }) => message.source.attempt), [1, 2])
   assert.equal(f.questions.length, 0)
-  const writes = f.changes.length
+  const writes = mentorWrites(f)
   const oldAgent = f.live.get(A)
   const fiber = f.entry.fiber
   f.assistant(A)
@@ -709,7 +712,7 @@ test('same-id agent disposal fences the old worker and resume retains two strike
   assert.equal(f.injected.length, 2)
   assert.equal(replacement.received.length, 0, 'old generation injected into the resumed agent')
   assert.equal(f.questions.length, 0)
-  assert.equal(f.changes.length, writes, 'old generation persisted an escalation into the resumed session')
+  assert.equal(mentorWrites(f), writes, 'old generation persisted an escalation into the resumed session')
   const fresh = await f.evaluate(A)
   assert.equal(fresh.detector.evaluations, before.detector.evaluations + 1)
   assert.equal(fresh.detector.lastResult.threshold, 0.3, 'resumed worker ignored closed-chat global save')
@@ -746,13 +749,13 @@ test('accepted reset retires Q1 so a late answer cannot reset Q2 guard after mas
   assert.equal(q2.request.signal.aborted, true)
   await f.update({ enabled: true })
   const before = await f.status()
-  const writes = f.changes.length
+  const writes = mentorWrites(f)
   const deliveries = f.injected.length
   q1.resolve({ answers: [{ id: 'trajectory-clarification', selected: [], custom: 'obsolete Q1 answer' },
     { id: 'reset-drift-count', selected: ['Yes — reset to 0'] }] })
   await delay(50)
   assert.equal(f.injected.length, deliveries, 'late retired Q1 delivered clarification after re-enable')
-  assert.equal(f.changes.length, writes, 'late retired Q1 reset the newer durable guard')
+  assert.equal(mentorWrites(f), writes, 'late retired Q1 reset the newer durable guard')
   assert.deepEqual(mentor.get(A), { carry: 3, decisionPending: true })
   assert.equal((await f.status()).mentor.driftCount, before.mentor.driftCount)
   await f.evaluate(A)
@@ -970,11 +973,11 @@ test('live global/chat OFF states freeze only their proper scope and resume curr
     assert.equal(s.mentor.state, 'disabled')
     frozen.set(id, s)
   }
-  const writes = f.changes.length
+  const writes = durableWrites(f)
   for (const id of [A, B]) { f.assistant(id); f.append(id, 'turn/start', { turn: 2 }) }
   await delay(50)
   for (const id of [A, B]) assert.deepEqual(await f.liveStatus(id), frozen.get(id), 'global OFF still updated live state')
-  assert.equal(f.changes.length, writes)
+  assert.equal(durableWrites(f), writes)
   await f.update({ enabled: true })
   assert.equal((await f.liveStatus(A)).detector.state, 'disabled', 'ON ignored A detector override')
   assert.equal((await f.liveStatus(B)).effective.enabled, true)
@@ -1026,4 +1029,28 @@ test('Host core boots without optional Connection and sessionPersistence', async
   const s = await f.evaluate(A)
   assert.equal(s.detector.lastResult.threshold, 0.2)
   assert.equal(s.detector.lastResult.driftDetected, true)
+})
+
+test('Live & Mentor history survives a Host restart from its own storage row', async (t) => {
+  const root = await temporaryRoot(t)
+  const f = await fixture(t, { root, liveIds: [A] })
+  await f.mutate(A, 'preset', 0)
+  await f.mutate(A, 'baselineCount', 2)
+  await f.mutate(A, 'windowCount', 2)
+  f.start(A)
+  f.assistant(A, BASELINE)
+  f.assistant(A, BASELINE)
+  f.assistant(A)
+  f.assistant(A)
+  const before = await f.untilLive(A, (s) => s.detector.evaluations === 1, 'first Python result never reached live GET')
+  assert.equal(before.detector.history.length, 1)
+  // Storage writes are fire-and-forget; let the row land before the Host is closed.
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  await f.close()
+  // The chat still exists after a Harness restart; only in-memory state is gone.
+  const reopened = await fixture(t, { root, liveIds: [A] })
+  const after = await reopened.liveStatus(A)
+  assert.deepEqual(after.detector.history, before.detector.history, `history was not restored from the storage row after restart; restored=${after.detector.history.length} errors=${JSON.stringify(after.errors ?? []).slice(0, 400)}`)
+  assert.equal(after.detector.markers.some((marker) => marker.kind === 'crossing'), true, 'drift crossing marker was not restored')
+  await reopened.close()
 })
