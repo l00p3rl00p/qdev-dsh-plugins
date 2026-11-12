@@ -475,7 +475,8 @@ window.__ModuleLoader__.load({
     }
 
     // Live & Mentor: a read-only per-chat glance. It polls only while this view is mounted (every 5 s).
-    function LiveMentorView({ sessionId }) {
+    // part: 'live' shows the trajectory view; 'mentor' shows the Gentle Mentor prompt. Both poll only while mounted.
+    function LiveMentorView({ sessionId, part }) {
       const sessionLive = useSessionLiveStatus(sessionId);
       const live = sessionLive.live;
       const history = live?.detector?.history ?? [];
@@ -484,17 +485,17 @@ window.__ModuleLoader__.load({
       const threshold = live?.effective?.threshold;
       return h('div', { style: styles.sessionBody },
         h('div', { style: styles.liveHeader },
-          h('h3', { style: styles.compactCardTitle }, 'Live & Mentor'),
+          h('h3', { style: styles.compactCardTitle }, part === 'mentor' ? 'Mentor' : 'Live'),
           live?.version ? h('span', { style: styles.sourceBadge }, `version ${live.version}`) : null,
           h('button', { type: 'button', style: styles.compactButton, onClick: () => sessionLive.refresh() }, 'Refresh'),
         ),
-        h(SessionLiveCard, { live, error: sessionLive.error, onChanged: sessionLive.refresh }),
-        h('div', { style: styles.liveMetrics },
+        part === 'live' ? h(SessionLiveCard, { live, error: sessionLive.error, onChanged: sessionLive.refresh }) : null,
+        part === 'live' ? h('div', { style: styles.liveMetrics },
           h(SessionLiveMetric, { label: 'Current drift score (KL)', value: latest == null ? '—' : latest.toFixed(4) }),
           h(SessionLiveMetric, { label: 'Effective threshold', value: threshold == null ? '—' : Number(threshold).toFixed(2) }),
-        ),
-        history.length ? h(KlChart, { history, markers, threshold }) : h('p', { role: 'status', style: styles.hint }, 'Waiting for measurements'),
-        h(GentleMentorSection, { sessionId, live, onSaved: sessionLive.refresh }),
+        ) : null,
+        part === 'live' ? (history.length ? h(KlChart, { history, markers, threshold }) : h('p', { role: 'status', style: styles.hint }, 'Waiting for measurements')) : null,
+        part === 'mentor' ? h(GentleMentorSection, { sessionId, live, onSaved: sessionLive.refresh }) : null,
       );
     }
 
@@ -678,9 +679,10 @@ window.__ModuleLoader__.load({
         h('div', null,
           h('div', { role: 'group', 'aria-label': 'SOUP view', style: { display: 'flex', gap: 8, marginBottom: 10 } },
             h('button', { type: 'button', 'aria-pressed': view === 'settings', style: styles.compactButton, onClick: () => setView('settings') }, 'Settings'),
-            h('button', { type: 'button', 'aria-pressed': view === 'live', style: styles.compactButton, onClick: () => setView('live') }, 'Live & Mentor'),
+            h('button', { type: 'button', 'aria-pressed': view === 'live', style: styles.compactButton, onClick: () => setView('live') }, 'Live'),
+            h('button', { type: 'button', 'aria-pressed': view === 'mentor', style: styles.compactButton, onClick: () => setView('mentor') }, 'Mentor'),
           ),
-          view === 'live' ? h(LiveMentorView, { sessionId }) : h('div', { style: styles.sessionBody },
+          view === 'live' || view === 'mentor' ? h(LiveMentorView, { sessionId, part: view }) : h('div', { style: styles.sessionBody },
           loading ? h('p', { role: 'status', style: styles.body }, 'Loading chat settings…') : null,
           visible && !visible.masterEnabled ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Global monitoring is OFF. Chat settings are read-only and cannot bypass the global master switch.') : visible && !visible.writable ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Chat settings are read-only.') : null,
           visible ? h('div', { style: styles.sessionGrid },
