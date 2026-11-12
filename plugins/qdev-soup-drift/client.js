@@ -948,14 +948,15 @@ window.__ModuleLoader__.load({
       const groups = failureGroups(tools);
       const repeated = groups.filter((group) => group.list.length >= 2);
       const times = (tools ?? []).map((tool) => tool.startedAt);
+      const plainType = (type) => type.replace(/^error:\s*/i, '').replace(/#+\s*/g, '').trim() || 'Unnamed failure';
       return h('section', { style: styles.compactCard, 'aria-label': 'Repeated failures' },
-        h('span', { style: styles.label }, 'Repeated failures by type'),
-        groups.length ? h(FailureScatter, { groups: groups.slice(0, FAILURE_LANE_LIMIT), times }) : null,
+        h('span', { style: styles.label }, 'Repeated failures'),
         repeated.length
-          ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, repeated.map((group) => h('li', { key: group.type, style: styles.body },
-            `${group.type}: ${group.list.length} times (${[...new Set(group.list.map((tool) => tool.name))].join(', ')}). The same mistake is repeating.`,
+          ? h('ul', { style: { margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: 8 } }, repeated.map((group) => h('li', { key: group.type, style: { padding: '8px 10px', borderLeft: '3px solid var(--dsw-alias-state-error-primary)', borderRadius: 6, background: 'var(--dsw-alias-bg-layer-2)' } },
+            h('strong', { style: { display: 'block', color: 'var(--dsw-alias-label-primary)', fontSize: 13, lineHeight: '18px' } }, `${plainType(group.type)} · ${group.list.length} times`),
+            h('span', { style: { ...styles.hint, display: 'block', marginTop: 2 } }, `Tools: ${[...new Set(group.list.map((tool) => tool.name))].join(', ')}`),
           )))
-          : h('p', { style: styles.hint }, groups.length ? 'Every failure type happened once so far.' : 'No failed tool calls in this chat.'),
+          : h('p', { style: styles.hint }, groups.length ? 'Every failure happened once so far. Nothing is repeating.' : 'No failed tool calls in this chat.'),
       );
     }
 
@@ -975,6 +976,8 @@ window.__ModuleLoader__.load({
         cell.set(key, (cell.get(key) ?? 0) + 1);
       }
       const types = [...typeOf.keys()];
+      const maxCell = Math.max(1, ...cell.values());
+      const plainType = (type) => type.replace(/^error:\s*/i, '').replace(/#+\s*/g, '').trim() || 'Unnamed failure';
       const readings = [];
       for (const type of types) {
         const onTools = toolNames.filter((name) => (cell.get(`${type}||${name}`) ?? 0) > 0);
@@ -988,12 +991,27 @@ window.__ModuleLoader__.load({
         types.length === 0
           ? h('p', { style: styles.hint }, 'No failed tool calls in this chat.')
           : h('div', null,
-            h('div', { style: { overflowX: 'auto', marginTop: 6 } },
-              h('table', { style: { borderCollapse: 'collapse', width: '100%' } },
-                h('thead', null, h('tr', null, h('th', { style: { ...styles.inlineHint, textAlign: 'left', padding: '4px 6px' } }, 'Failure type'), toolNames.map((name) => h('th', { key: name, style: { ...styles.inlineHint, padding: '4px 6px' } }, name)))),
+            h('div', { style: { overflow: 'auto', maxHeight: 260, marginTop: 6, border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 8 } },
+              h('table', { style: { borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed', fontVariantNumeric: 'tabular-nums' } },
+                h('colgroup', null, h('col', { style: { width: '34%' } }), toolNames.map((name) => h('col', { key: name }))),
+                h('thead', null, h('tr', null,
+                  h('th', { style: { ...styles.inlineHint, position: 'sticky', top: 0, zIndex: 2, background: 'var(--dsw-alias-bg-layer-1)', textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid var(--dsw-alias-border-l2)', fontWeight: 600 } }, 'Failure type'),
+                  toolNames.map((name) => h('th', { key: name, style: { ...styles.inlineHint, position: 'sticky', top: 0, zIndex: 2, background: 'var(--dsw-alias-bg-layer-1)', padding: '6px 8px', borderBottom: '1px solid var(--dsw-alias-border-l2)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' } }, name)),
+                )),
                 h('tbody', null, types.map((type) => h('tr', { key: type },
-                  h('td', { style: { padding: '4px 6px', fontSize: 11 } }, type),
-                  toolNames.map((name) => h('td', { key: name, style: { padding: '4px 6px', textAlign: 'center' } }, cell.get(`${type}||${name}`) ?? '')),
+                  h('td', { style: { padding: '6px 8px', fontSize: 12, color: 'var(--dsw-alias-label-primary)', borderTop: '1px solid var(--dsw-alias-border-l1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, plainType(type)),
+                  toolNames.map((name) => {
+                    const count = cell.get(`${type}||${name}`) ?? 0;
+                    const share = maxCell ? count / maxCell : 0;
+                    return h('td', { key: name, style: { padding: '6px 8px', borderTop: '1px solid var(--dsw-alias-border-l1)', textAlign: 'left', verticalAlign: 'middle' } },
+                      count ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+                        h('span', { style: { flex: '0 0 auto', minWidth: 14, fontSize: 12, fontWeight: 650, color: 'var(--dsw-alias-label-primary)' } }, count),
+                        h('span', { style: { flex: 1, height: 6, borderRadius: 999, background: 'var(--dsw-alias-bg-base)', overflow: 'hidden' } },
+                          h('span', { style: { display: 'block', height: '100%', width: `${Math.max(8, share * 100)}%`, background: 'var(--dsw-alias-state-error-primary)' } }),
+                        ),
+                      ) : null,
+                    );
+                  }),
                 ))),
               ),
             ),
@@ -1099,13 +1117,16 @@ window.__ModuleLoader__.load({
         : 'var(--dsw-alias-brand-primary)';
       const key = chosen ? `${chosen.focus}/${chosen.magnitude}` : null;
       const quadrantRect = (px, py, label) => h('rect', { key: label, x: px, y: py, width: (W - 2 * P) / 2, height: (H - 2 * P) / 2, fill: 'var(--dsw-alias-border-l2)', opacity: 0.25 });
-      return h('div', { style: styles.sessionBody },
-        h('div', { style: styles.liveHeader },
-          h('h3', { style: styles.compactCardTitle }, 'Convergence'),
+      return h('div', { style: { ...styles.sessionBody, display: 'flex', flexDirection: 'column', gap: 12 } },
+        h('div', { style: { ...styles.liveHeader, paddingBottom: 8, borderBottom: '1px solid var(--dsw-alias-border-l1)' } },
+          h('h3', { style: { ...styles.compactCardTitle, padding: 0 } }, 'Convergence'),
           h('button', { type: 'button', style: styles.compactButton, onClick: () => sessionLive.refresh() }, 'Refresh'),
         ),
-        h('div', { role: 'group', 'aria-label': 'Focus rule', style: styles.actionRow },
-          Object.keys(FOCUS_RULES).map((key) => h('button', { key, type: 'button', 'aria-pressed': focusRule === key, style: { ...styles.compactButton, fontWeight: focusRule === key ? 700 : 400 }, onClick: () => setFocusRule(key) }, FOCUS_RULES[key].label)),
+        h('div', { role: 'group', 'aria-label': 'Focus rule', style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+          h('span', { style: styles.sectionLabel }, 'Group points by'),
+          h('div', { style: styles.actionRow },
+            Object.keys(FOCUS_RULES).map((key) => h('button', { key, type: 'button', 'aria-pressed': focusRule === key, style: { ...styles.compactButton, padding: '6px 10px', fontSize: 12, fontWeight: focusRule === key ? 700 : 500, borderColor: focusRule === key ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-border-l2)' }, onClick: () => setFocusRule(key) }, FOCUS_RULES[key].label)),
+          ),
         ),
         h('p', { style: styles.hint }, `Focus rule: ${FOCUS_RULES[focusRule].note}. Changing it changes only how points are grouped here.`),
         sessionLive.error ? h('p', { role: 'alert', style: styles.error }, sessionLive.error) : null,
@@ -1174,12 +1195,12 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function SessionSettingsView({ sessionId }) {
+    function SessionSettingsView({ sessionId, defaultTab = 'settings' }) {
       const [settings, setSettings] = useState(null);
       const [loading, setLoading] = useState(false);
       const [working, setWorking] = useState('');
       const [error, setError] = useState('');
-      const [view, setView] = useState('settings');
+      const [view, setView] = useState(defaultTab);
       const scope = React.useRef({ id: sessionId, generation: 0, alive: true, busy: false, controller: null });
       if (scope.current.id !== sessionId) {
         scope.current.controller?.abort();
@@ -1287,10 +1308,35 @@ window.__ModuleLoader__.load({
       return sessionId ? h(SessionSettingsView, { key: String(sessionId), sessionId: String(sessionId) }) : null;
     }
 
+    const SOUP_PANE_ID = 'soup-sidebar';
+    const SOUP_SHORTCUT_ID = 'soup.sidebar.open';
+    function SoupSidebarTab({ sessionId }) {
+      return sessionId ? h(SessionSettingsView, { key: `pane-${sessionId}`, sessionId: String(sessionId), defaultTab: 'convergence' }) : null;
+    }
+
     return {
       name: 'qdev-trajectory-drift-soup-settings',
-      inject: ['slots', 'configForms'],
+      inject: ['slots', 'configForms', 'shortcuts'],
       apply(ctx) {
+        if (ctx.shortcuts?.register) ctx.effect(() => ctx.shortcuts.register({
+          id: SOUP_SHORTCUT_ID,
+          label: () => 'Open SOUP sidebar',
+          aliases: ['soup', 'convergence', 'open soup'],
+          defaults: {
+            'desktop:macos': { code: 'Space', modifiers: ['primary', 'shift'] },
+            'desktop:windows': { code: 'Space', modifiers: ['primary', 'shift'] },
+            'desktop:linux': { code: 'Space', modifiers: ['primary', 'shift'] },
+            'web:macos': { code: 'Space', modifiers: ['primary', 'shift'] },
+            'web:windows': { code: 'Space', modifiers: ['primary', 'shift'] },
+            'web:linux': { code: 'Space', modifiers: ['primary', 'shift'] },
+          },
+        }), 'qdev-trajectory-drift-soup: sidebar hot key');
+        ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+          name: 'sidebar.right.pane.tab', key: SOUP_PANE_ID,
+        }, SoupSidebarTab));
+        ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register({
+          name: 'sidebar.right.pane.tab.title', key: SOUP_PANE_ID,
+        }, () => h('span', null, 'SOUP')));
         ctx.slots.inject('settings.section', () => ctx.slots.register({
           name: 'settings.section', id: 'soup-trajectory-drift', order: 18, label: 'SOUP Drift',
           inject: () => ({ source: ctx.configForms.get(ENTRY) }),

@@ -57,7 +57,7 @@ function harness({ value = {}, writable = true, status = 'ready', mutate, fetch:
     return response(options.method === 'POST' ? { ok: true } : live)
   } }, { filename: 'qdev-soup-client.js' })
   assert.equal(module.name, 'qdev-trajectory-drift-soup-settings')
-  assert.deepEqual(plain(module.inject), ['slots', 'configForms'])
+  assert.deepEqual(plain(module.inject), ['slots', 'configForms', 'shortcuts'])
   const cleanups = []
   module.apply({
     configForms: { get(entry) { assert.equal(entry, pkg.name); return source } },
@@ -107,8 +107,10 @@ test('actual ModuleLoader registers settings and plugin detail; toggles mutate n
   const h = harness()
   try {
     h.mount()
-    assert.equal(h.registrations.length, 3)
-    assert.equal(h.registrations[1].options.key, `${pkg.name}#${pkg.name}`)
+    // settings section, plugin detail rows, sidebar pane, sidebar pane title, sidebar hot key
+    assert.equal(h.registrations.length, 5)
+    const detail = h.registrations.find((r) => r.options.key === `${pkg.name}#${pkg.name}`)
+    assert.ok(detail, 'plugin detail registration is present')
     for (const [field, label] of Object.entries(labels)) {
       const control = h.control(label)
       assert.equal(control.type, 'button'); assert.equal(control.props.role, 'switch'); assert.equal(control.props['aria-checked'], true)

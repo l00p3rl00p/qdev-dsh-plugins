@@ -514,7 +514,7 @@ test('Convergence: control chart flags a spike, repeated failures are named, eli
     assert.match(h.text(), /UCL/)
     assert.match(h.text(), /Rule 1: one reading beyond a control limit/)
     assert.match(h.text(), /Repeated failures/)
-    assert.match(h.text(), /malformed edit: old_string not found at: 2 times/)
+    assert.match(h.text(), /malformed edit: old_string not found at · 2 times/)
     assert.match(h.text(), /Still standing/)
   } finally { h.dispose() }
 })
