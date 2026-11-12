@@ -149,3 +149,63 @@ How it is used: read-only glance by the human; the agent is not involved.
 ## 8. Placeholders (this repository is public)
 
 Commands above use `<main-harness-container>`, `<clean-harness-container>`, `<repo-path-in-container>` and `<path-to-soup-python>`. The real values for the owner's machine are in the local-only file `.local-notes/PLACEHOLDER-VALUES.md` at the repository root, which is never committed. Do not write those values into any tracked file, commit message or pull request. Follow the root `AGENTS.md` on `main`.
+
+## 9. Status as built (appended 2026-11-12)
+
+This section records what the branch `feature/soup-feature3-live-mentor` actually contains. It overrides sections 1–8 where they differ. Sections 1–8 are kept unchanged as the record of the plan.
+
+**Base:** `eb44a23` (main, portable Python). **Current version:** 0.8.0, read from `package.json`; nothing else states the release number.
+
+### Feature status
+
+| # | Feature (section 2 of the requirements) | Status | Where it lives |
+|---|---|---|---|
+| 2 | Per-chat settings and overrides | Built (0.6.x) | SOUP tab, Settings view |
+| 3 | Per-chat live SOUP view | Built | Live tab (trajectory, numbers, KL chart) |
+| 4 | Gentle Mentor visibility and editing | Built | Mentor tab; message, current plan and amendments saved per chat |
+| 5 | Gentle Mentor escalation wording | Built | Drift 1 exact sentence; drift 2 message, plan and amendments; drift 3 unchanged |
+| 6 | Per-chat intervention toggle | Built | Gentle Mentor switch in the Settings view |
+| 7 | Live drift telemetry | Built | Live tab and Details tab |
+| — | Convergence (Appendix 11, first slice) | Partly built | Convergence tab: four-quadrant view, click-to-inspect |
+
+### Placement (replaces the placement in section 7 where they differ)
+
+- The SOUP tab holds five views: **Settings**, **Live**, **Mentor**, **Details**, **Convergence**.
+- There is **no card** in Settings or in the composer. The trajectory card from the work in progress is removed from Settings; its content lives in the Live tab.
+- The composer pop-up was removed from scope. The button beside "Read Only" belongs to the prompt-templates plugin.
+
+### Storage (per chat, survives a Host restart)
+
+- `qdev_soup_drift_state`: mentor carry and decision state (0.6.x).
+- `qdev_soup_session_settings`: per-chat settings (0.6.x).
+- `qdev_soup_live_history`: last 50 calculations and intervention markers.
+- `qdev_soup_mentor_context`: Gentle Mentor message, current plan and amendments. An absent key means the default.
+
+### Per-chat settings
+
+- The Python interpreter is no longer a per-chat field. Each chat inherits the global interpreter, which the worker uses. The Runtime group is gone from the view.
+
+### Appendix 11 (Signal focus and qualified convergence): what is and is not built
+
+| Part | Status | Reason |
+|---|---|---|
+| 11.1 Dimensions | Partly: magnitude, focus, boundary distance, persistence | Outlier convergence and event interpretation need other evidence |
+| 11.2 Mathematics | Built as illustrative: `r = min(1, KL / (2·threshold))`, `σ`, `1 − 2σ` | The threshold maps to 0.5 for this view only; the detector is unchanged |
+| 11.3 Four-quadrant view | Built over rolling windows of five calculations | Outlier subsets are not built |
+| 11.4 Click to investigate | Built for SOUP calculations only | Tool calls, decisions, test outcomes and an event graph need an evidence source SOUP does not have yet |
+| 11.5 Human meaning | Partly: hypothesis labels and the qualified near-boundary note | Event-specific interpretation needs the evidence in 11.4 |
+| 11.6 Concept blindness | Not built | Needs the same evidence sources |
+| 11.7 Integration | Preserved: the detector, the Gentle Mentor intervention and the existing telemetry path are unchanged | — |
+
+Telemetry to OTEL is parked. The OTEL path is a DSH method for SOUP to emit telemetry, not a plugin read path.
+
+### Verification
+
+- Container suite (real Python worker, real Cordis fixtures): 83 of 83 at the last full run, before the Python-field removal. The client tests were re-run after it (26 of 26).
+- Installed in the main Harness: `6feda14`, version 0.8.0. The boot log shows no SOUP import errors. The Web UI has not yet been checked for the newest tabs.
+
+### Open items
+
+- Web UI check of the Convergence tab, the Details tab and the removed interpreter field, in the live Harness.
+- Appendix 11 items 11.4–11.6 need an evidence source (tool calls, decisions, outcomes). That is a DSH data question, not a SOUP one.
+- Branch history contains `6528259 Update BACKLOG.md migration status`, which is not part of SOUP feature work. Check its origin before merging.
