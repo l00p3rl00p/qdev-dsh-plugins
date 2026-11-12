@@ -3,13 +3,13 @@
 ## QDev deployment context
 
 This plugin is built for and verified against the QDev environment defined in
-`l00p3rl00p/qdocker-compose`. It runs inside the DSH container on
-`quatrus-network` alongside the OTEL Collector.
+the deployment's own startup tooling. It runs inside the DSH container on
+`<deployment-network>` alongside the OTEL Collector.
 
 ## Network topology
 
 ```
-┌─────────────────────────┐        quatrus-network
+┌─────────────────────────┐        <deployment-network>
 │  DSH container          │   ─────────────────────────────────
 │  (deepseek-harness)     │         │
 │                         │   otel-collector:4317  (OTLP gRPC)
@@ -84,8 +84,8 @@ maintained in memory and cache form.
 ## Plugin install path
 
 ```
-/home/qdev/.dsh/profiles/web/node_modules/dsh-telemetry-seams
-  → symlink to /home/qdev/scratchpad/plugins/dsh-telemetry-seams
+$DSH_HOME/profiles/web/node_modules/dsh-telemetry-seams
+  → symlink to <local-path>
 ```
 
 Installed as a directory link. Rebuilding `lib/` and reloading DSH picks up

@@ -14,7 +14,7 @@ Do not skip Step 1 and do not report a fix as working without the Step 5 checks.
 Rules for you:
 
 - Work on a new branch cut from `main`. Never edit `working-install/acc-0.1.12-20261110` (install anchor).
-- Never push to `l00p3rl00p/dsh-auto-code-correct` (deprecated).
+- Never push to `the deprecated standalone ACC repository` (deprecated).
 - No mocks, no simulated output. If a step fails, stop and report the real output.
 - Do not change the correction engine, hygiene hook, LSP wiring, or `cordis.patch.yml`.
 - Order is fixed: Test → Commit → Package → Verify SHA → Install (see `AGENTS.md`).
@@ -24,7 +24,7 @@ Rules for you:
 
 | # | Fact | How verified |
 |---|------|--------------|
-| F1 | Both containers run DSH **0.2.2-rc.1** (not rc.2; rc.2 was published upstream 2026-11-11). | `dsh --version` in `quatrus-harness-deepseek-harness` and `qdev-clean-deepseek` |
+| F1 | Both containers run DSH **0.2.2-rc.1** (not rc.2; rc.2 was published upstream 2026-11-11). | `dsh --version` in `<harness-container>` and `<clean-harness-container>` |
 | F2 | Live Harness has `dsh-auto-code-correct@0.1.12` and `dsh-telemetry-seams@0.1.2` installed. Which git commit that 0.1.12 was built from is **unknown**. | `dsh plugin --profile web list` |
 | F3 | Clean container has `dsh-auto-code-correct@0.1.3`. Unexpected version; origin unknown. | same command |
 | F4 | The "webpage" on the ACC plugin page is **not ACC code**. DSH 0.2.2 added `BundleDetailSection`, which renders the package's README as a detail document on every plugin's page. Absent in 0.2.1-rc.5, present in 0.2.2-rc.1 and rc.2. | upstream `packages/client/ui-plugin-manager/src/client/BundleDetailSection.tsx` at each tag |
@@ -169,7 +169,7 @@ key `dsh-auto-code-correct#auto-code-correct`, using the `form` prop the page pa
 
 1. `pnpm run verify` (lint, format, types, tests, build, package check). Paste the tail of real output.
 2. Commit. Build `lib/` and include it in the installable revision (see root `LESSONS.md`, packaging contract; no `prepare` hook).
-3. Install into **`qdev-clean-deepseek` first**, never the live Harness first.
+3. Install into **`<clean-harness-container>` first**, never the live Harness first.
 4. In the clean UI: options section visible on the ACC plugin page; toggle one switch; reload; value persisted;
    AutoCorrect tab visible; Refresh on readiness returns tools or a visible error.
 5. Only after the human confirms step 4, install into the live Harness.
@@ -177,7 +177,7 @@ key `dsh-auto-code-correct#auto-code-correct`, using the `form` prop the page pa
 Escape if the UI breaks:
 
 ```sh
-docker exec -it qdev-clean-deepseek bash -lc 'dsh plugin --profile web remove dsh-auto-code-correct'
+docker exec -it <clean-harness-container> bash -lc 'dsh plugin --profile web remove dsh-auto-code-correct'
 ```
 
 ## 3a. Install and packaging facts (added 2026-11-11 from the owner's terminal log) — INSTALLER IS FROZEN
@@ -187,11 +187,11 @@ docker exec -it qdev-clean-deepseek bash -lc 'dsh plugin --profile web remove ds
 The one install command, with `<SHA>` a full commit on `l00p3rl00p/qdev-dsh-plugins`:
 
 ```sh
-docker exec -it qdev-clean-deepseek dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/dsh-auto-code-correct'
+docker exec -it <clean-harness-container> dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/dsh-auto-code-correct'
 ```
 
 ```sh
-docker restart qdev-clean-deepseek
+docker restart <clean-harness-container>
 ```
 
 | Commit | Contents | Result | Source |
@@ -250,4 +250,4 @@ The owner is the tester. Give them exactly one SHA and the frozen command. Do no
 
 ## Status — RESOLVED 2026-11-11
 
-ACC 0.1.13 implements revised Step 3 (readiness remote removed on Host and client) and ships a prebuilt `lib/`. The owner confirmed it working in QClean on DSH 0.2.2-rc.1. Step 1 and Step 4 were not needed. This file is kept as the record of the diagnosis; the durable lessons are in the root `LESSONS.md`.
+ACC 0.1.13 implements revised Step 3 (readiness remote removed on Host and client) and ships a prebuilt `lib/`. The owner confirmed it working in the clean test Harness on DSH 0.2.2-rc.1. Step 1 and Step 4 were not needed. This file is kept as the record of the diagnosis; the durable lessons are in the root `LESSONS.md`.

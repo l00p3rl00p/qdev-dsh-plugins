@@ -129,8 +129,8 @@ Inspect these repositories and their relevant history, code, documentation, test
 ### QDev sources
 
 - https://github.com/l00p3rl00p/qdev-dsh-plugins
-- https://github.com/l00p3rl00p/qdocker-compose
-- https://github.com/l00p3rl00p/quatrus-scratchpad
+- the deployment's own startup tooling
+- a private source repository
 
 Inspect the existing `dsh-telemetry-seams` plugin, SOUP integration, current Collector configuration, and ClickHouse evidence path.
 

@@ -23,9 +23,9 @@ The arrows describe **intended version ownership**, not current gitlink or runti
 
 ## Repository migration status
 
-- **ACC:** independent canonical source exists at [dsh-auto-code-correct](https://github.com/l00p3rl00p/dsh-auto-code-correct).
-- **SOUP:** native source lives in the [Scratchpad SOUP directory](https://github.com/l00p3rl00p/quatrus-scratchpad/tree/main/plugins/qdev-soup-drift).
-- **Telemetry Seams:** native source lives in the [Scratchpad Telemetry directory](https://github.com/l00p3rl00p/quatrus-scratchpad/tree/main/plugins/dsh-telemetry-seams).
+- **ACC:** independent canonical source exists at the deprecated standalone ACC repository.
+- **SOUP:** native source lives in a private source repository.
+- **Telemetry Seams:** native source lives in a private source repository.
 - All three directories on this transfer branch are **source copies**, not Git submodules yet. The target is three genuine Git submodule links to independent repositories.
 
 ## Isolation boundaries

@@ -23,8 +23,8 @@ The package identity is `qdev-trajectory-drift-soup`. The source directory remai
 If the SOUP plugin breaks DSH Web during load, remove **only SOUP v3** from the installed Web profile. From the Mac Terminal:
 
 ```sh
-docker exec -it quatrus-harness-deepseek-harness bash -lc 'dsh plugin --profile web remove qdev-trajectory-drift-soup'
-docker restart quatrus-harness-deepseek-harness
+docker exec -it <harness-container> bash -lc 'dsh plugin --profile web remove qdev-trajectory-drift-soup'
+docker restart <harness-container>
 ```
 
 If it still loads, inspect `dsh --profile web --dump-config` for a separate SOUP Cordis patch insertion and disable only that insertion through native profile configuration before restarting once. Preserve other plugins, sessions, and DSH data. See [shared plugin lessons](../plugin-lessons.md).
@@ -37,7 +37,7 @@ If a bad SOUP Web client makes DSH inaccessible, recover without the browser usi
 
 ## Build, test, and install
 
-The canonical source is [qdev-dsh-plugins/plugins/qdev-soup-drift](https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift), **not** the historical Scratchpad checkout.
+The canonical source is [qdev-dsh-plugins/plugins/qdev-soup-drift](https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift), **not** the historical private-source checkout.
 
 For a native **GitHub install**, open DSH **Plugins → Add plugin** and enter this exact pnpm Git source spec:
 
@@ -54,7 +54,7 @@ dsh --profile web --dump-config
 
 > **Superseded 2026-11-11:** the build-on-install text below is historical. `prepare` was removed and the built runtime is committed with the source, so no `allowBuilds` entry or Git build approval is needed. See "Prebuilt install payload" at the end of this file.
 
-**Git build approval (native DSH Web):** First use **Plugins → Add plugin** with the Git spec above. If pnpm refuses the source `prepare` script, DSH's own Plugin Manager records the exact pending `allowBuilds` key and offers **Allow these scripts and retry**. Review the named source and approve **only the intended plugin**. DSH writes the approval into the active Web profile's `pnpm-workspace.yaml` and retries the install. You do **not** have to pre-edit YAML or install via a copied QClean tarball.
+**Git build approval (native DSH Web):** First use **Plugins → Add plugin** with the Git spec above. If pnpm refuses the source `prepare` script, DSH's own Plugin Manager records the exact pending `allowBuilds` key and offers **Allow these scripts and retry**. Review the named source and approve **only the intended plugin**. DSH writes the approval into the active Web profile's `pnpm-workspace.yaml` and retries the install. You do **not** have to pre-edit YAML or install via a tarball from the clean test Harness.
 
 As an alternative when the Web approval control is unavailable, use the exact key printed by the failed installer and explicitly add it under the *existing* profile `allowBuilds:` mapping (preserve other entries). The current pnpm 12 documentation permits a repository-wide `<package-name>@git+https://github.com/l00p3rl00p/qdev-dsh-plugins.git` key even for `github:` shorthand downloaded from `codeload.github.com`, but an exact commit key is narrower and preferred for a one-time approval. An approved `prepare` script runs on your machine with the profile user's permissions. Never use `pnpm approve-builds --all`, `dangerouslyAllowAllBuilds`, or `--ignore-scripts` to bypass this check.
 
@@ -65,7 +65,7 @@ For local source development, inside a checkout of the **canonical** repository:
 ```sh
 cd plugins/qdev-soup-drift
 pnpm install
-SOUP_PYTHON=/home/qdev/llm-runtime/tools/venvs/soup/bin/python pnpm run verify
+SOUP_PYTHON="<path-to-soup-python>" pnpm run verify
 ```
 
 QDev's dedicated interpreter contains official `soup-cli==0.77.1`. Other environments must set `SOUP_PYTHON` to an interpreter containing `soup_cli` and configure the same interpreter in the plugin settings or `cordis.patch.yml`. CI uses `python` after installing the pinned SOUP package.

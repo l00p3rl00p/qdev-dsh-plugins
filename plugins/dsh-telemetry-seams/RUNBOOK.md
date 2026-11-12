@@ -1,41 +1,13 @@
 # Runbook — dsh-telemetry-seams
 
-## QClean isolation and acceptance (no GitHub Actions)
+## the clean test Harness isolation and acceptance (no GitHub Actions)
 
-From the Mac `qdocker-compose` checkout:
-
-```sh
-./qclean test-telemetry
-```
-
-This command fast-forwards source from `qdev-dsh-plugins`, runs the current
-plugin `pnpm run verify` and `pnpm pack` **inside the isolated clean
-container**, replaces **only** Telemetry Seams (if installed) in the disposable
-Web profile, and restarts only `qdev-clean-deepseek`. It preserves the earlier
-ACC isolation installation, clean sessions, and the original QVolume. No
-GitHub Actions workflow or main Harness rebuild is involved.
-
-**Acceptance in the clean browser (`http://127.0.0.1:3082`):** the existing
-session UI loads; open a conversation → Telemetry Seams → **Run probe**;
-confirm a fresh inventory with collector endpoint and evidence, *not* a
-Typert Remote argument-count/ModuleLoader error. Create and reopen a session,
-refresh browser, and invoke Run probe again. Collector connectivity, profile
-attribution and delivery evidence should be judged on what is observable;
-`configured` is never proof a record reached ClickHouse. Record each failure
-literally before modifying the production instance.
-
-**Source repair basis:** Browser build uses `target: 'es2022'` plus the DSH
-CJS ModuleLoader wrapper, explicitly bundles Typert runtime/schema, and
-package-check now rejects all unknown browser imports and verifies the
-zero-argument Remote contract. No warnings are globally muted. These source
-fixes and the QClean test command still need the user's live container run.
-
----
+Deployment-specific; kept in private operations notes.
 
 ## Normal operation
 
 Installation is profile-specific; do not assume this plugin is already installed.
-For isolated proof, use the **QClean** path below. The normal QDev Web profile
+For isolated proof, use the **clean test Harness** path below. The normal QDev Web profile
 must remain unchanged until clean-host and browser checks pass.
 
 **Agent tool:** call `telemetry_seams_inventory` in any session.
@@ -52,15 +24,15 @@ If this plugin causes the DSH Web UI to fail or become unresponsive, remove it
 from the Mac terminal **without touching any other plugin, session, or volume**:
 
 ```sh
-docker exec -it quatrus-harness-deepseek-harness bash -lc \
+docker exec -it <harness-container> bash -lc \
   'dsh plugin --profile web remove dsh-telemetry-seams'
-docker restart quatrus-harness-deepseek-harness
+docker restart <harness-container>
 ```
 
 Verify removal:
 
 ```sh
-docker exec -it quatrus-harness-deepseek-harness bash -lc \
+docker exec -it <harness-container> bash -lc \
   'dsh plugin --profile web list'
 ```
 
@@ -68,7 +40,7 @@ The entry `dsh-telemetry-seams` must not appear. If it does, inspect the
 profile config:
 
 ```sh
-docker exec -it quatrus-harness-deepseek-harness bash -lc \
+docker exec -it <harness-container> bash -lc \
   'dsh --profile web --dump-config'
 ```
 
@@ -92,7 +64,7 @@ Then restart DSH to reload the Host module (Node.js caches the old module
 until process restart):
 
 ```sh
-docker restart quatrus-harness-deepseek-harness
+docker restart <harness-container>
 ```
 
 The client bundle (`lib/client.js`) reloads via HMR if `pnpm run dev:web` is
@@ -108,7 +80,7 @@ cd plugins/dsh-telemetry-seams
 pnpm run verify           # typecheck + tests + build + package check
 git commit -m "..."
 # DSH loads new code on next restart
-docker restart quatrus-harness-deepseek-harness
+docker restart <harness-container>
 ```
 
 ---
@@ -155,7 +127,7 @@ All probe logic is pure and runs without network access.
 ## Diagnostic: check plugin is mounted
 
 ```sh
-docker exec -it quatrus-harness-deepseek-harness bash -lc \
+docker exec -it <harness-container> bash -lc \
   'dsh --profile web --dump-config | grep -A5 telemetry-seams'
 ```
 

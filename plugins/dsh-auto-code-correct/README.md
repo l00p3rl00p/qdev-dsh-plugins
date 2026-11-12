@@ -1,4 +1,4 @@
-> **CANONICAL ACC SOURCE.** This is the only active ACC development and release location. Do not edit, build from, or publish the deprecated standalone ACC repository or Scratchpad copies.
+> **CANONICAL ACC SOURCE.** This is the only active ACC development and release location. Do not edit, build from, or publish the deprecated standalone ACC repository or private source copies.
 
 <div align="center">
 
@@ -55,8 +55,8 @@ The AutoCorrect tab is an ACC-owned results view, not a replacement for DSH Chat
 If installing or updating ACC makes the DSH Web interface unusable, remove **only ACC** from its installed Web profile from the Mac Terminal:
 
 ```sh
-docker exec -it quatrus-harness-deepseek-harness bash -lc 'dsh plugin --profile web remove dsh-auto-code-correct'
-docker restart quatrus-harness-deepseek-harness
+docker exec -it <harness-container> bash -lc 'dsh plugin --profile web remove dsh-auto-code-correct'
+docker restart <harness-container>
 ```
 
 If ACC still loads, inspect `dsh --profile web --dump-config` and the effective profile/home Cordis patch for a separately configured ACC insertion; disable only that insertion through the native configuration path and restart once. Do **not** delete `~/.dsh`, clear sessions, remove other plugins, or rebuild the entire Docker stack. Full operator details: [ACC Runbook](RUNBOOK.md#emergency-recovery--bad-web-plugin) and [shared plugin lessons](https://github.com/l00p3rl00p/qdev-dsh-plugins/blob/main/plugins/plugin-lessons.md).
@@ -87,11 +87,11 @@ dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#main&path:/plug
 
 > **Superseded 2026-11-11:** the build-on-install text below is historical. `prepare` was removed and the built runtime is committed with the source, so no `allowBuilds` entry or Git build approval is needed. See "Prebuilt install payload" at the end of this file.
 
-**Git build approval (native DSH Web):** First use **Plugins → Add plugin** with the Git spec above. If pnpm refuses the source `prepare` script, DSH's own Plugin Manager records the exact pending `allowBuilds` key and offers **Allow these scripts and retry**. Review the named source and approve **only the intended plugin**. DSH writes the approval into the active Web profile's `pnpm-workspace.yaml` and retries the install. You do **not** have to pre-edit YAML or install via a copied QClean tarball.
+**Git build approval (native DSH Web):** First use **Plugins → Add plugin** with the Git spec above. If pnpm refuses the source `prepare` script, DSH's own Plugin Manager records the exact pending `allowBuilds` key and offers **Allow these scripts and retry**. Review the named source and approve **only the intended plugin**. DSH writes the approval into the active Web profile's `pnpm-workspace.yaml` and retries the install. You do **not** have to pre-edit YAML or install via a tarball from the clean test Harness.
 
 As an alternative when the Web approval control is unavailable, use the exact key printed by the failed installer and explicitly add it under the *existing* profile `allowBuilds:` mapping (preserve other entries). The current pnpm 12 documentation permits a repository-wide `<package-name>@git+https://github.com/l00p3rl00p/qdev-dsh-plugins.git` key even for `github:` shorthand downloaded from `codeload.github.com`, but an exact commit key is narrower and preferred for a one-time approval. An approved `prepare` script runs on your machine with the profile user's permissions. Never use `pnpm approve-builds --all`, `dangerouslyAllowAllBuilds`, or `--ignore-scripts` to bypass this check.
 
-This repository is a **monorepo**. The `&path:/plugins/...` fragment selects the actual installable package; omitting it would install the wrong root. The package's `prepare` script builds `lib/` from source during Git installation. The source package's reviewed build-tool policy is committed with the plugin; the parent profile's Git build approval is separate. Git installs do not use the QClean tarball, and the installed Git dependency remains in the profile across restarts. Restart DSH after replacing an existing Host plugin and verify the browser and plugin capability. If the original QDev launcher controls this profile, it must not overwrite this source on startup.
+This repository is a **monorepo**. The `&path:/plugins/...` fragment selects the actual installable package; omitting it would install the wrong root. The package's `prepare` script builds `lib/` from source during Git installation. The source package's reviewed build-tool policy is committed with the plugin; the parent profile's Git build approval is separate. Git installs do not use the clean test Harness tarball, and the installed Git dependency remains in the profile across restarts. Restart DSH after replacing an existing Host plugin and verify the browser and plugin capability. If the original QDev launcher controls this profile, it must not overwrite this source on startup.
 
 ---
 
@@ -126,7 +126,7 @@ Every push or pull request touching ACC runs the repository workflow [`dsh-auto-
 In **DeepSeek Harness → Plugins → Installed → Add plugin**, use:
 
 ```text
-github:l00p3rl00p/dsh-auto-code-correct
+github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/dsh-auto-code-correct
 ```
 
 This method requires that the Git transport used by pnpm can access the repository. If GitHub authentication inside the container is unavailable, use the local-package method rather than adding extra SSH credentials or transports just to install the plugin. Keep the **Official npm registry** for dependencies.
@@ -141,7 +141,7 @@ Use `/acc status <capability-id>` in DSH to inspect an available tool and `/acc 
 
 ## Plugin completion contract
 
-ACC is the **programming/linting plugin**. Its sole active source, package, user documentation, and release checks live in **this directory of qdev-dsh-plugins**. The standalone ACC repository and Scratchpad copies are deprecated. SOUP is separately maintained at [`../qdev-soup-drift/`](../qdev-soup-drift/) and is not an ACC dependency. Both plugins run within DSH and can use whichever compatible model endpoint the Harness is configured to use, including local inference. ACC does not require a training platform, a frontier model, or a dedicated Docker service.
+ACC is the **programming/linting plugin**. Its sole active source, package, user documentation, and release checks live in **this directory of qdev-dsh-plugins**. The standalone ACC repository and private source copies are deprecated. SOUP is separately maintained at [`../qdev-soup-drift/`](../qdev-soup-drift/) and is not an ACC dependency. Both plugins run within DSH and can use whichever compatible model endpoint the Harness is configured to use, including local inference. ACC does not require a training platform, a frontier model, or a dedicated Docker service.
 
 Before declaring ACC production-ready, reconcile code, manifest, native host entry, browser settings client, README, [architecture](ARCHITECTURE.md), [environment](ENVIRONMENT.md), and [runbook](RUNBOOK.md). The confirmed user-facing contract is: install in the intended DSH profile; appear in Plugins; open the native settings page; persist toggles; display read-only executable/project readiness; run enabled corrections on a real disposable edit; record those operations in AutoCorrect; report diagnostics back to the agent; and exercise Git hygiene separately. ACC uses an owned durable session event for its tab rather than altering `tool/result`; native nested Chat/Trajectory children and a post-execute metadata patch remain upstream platform requirements. CI and packed-package import tests prove packaging, **not** Web settings mounting or live agent behavior. Missing pieces remain explicit rather than silently treated as finished. Prefer native DSH plugin/UI seams; any new custom integration requires an audit and human approval.
 
