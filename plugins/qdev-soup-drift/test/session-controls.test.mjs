@@ -448,15 +448,15 @@ test('Live and Mentor are separate tabs: Mentor shows the Gentle Mentor prompt w
   } finally { h.dispose() }
 })
 
-test("Details opens a read-only panel from Live or Mentor, never from Settings", async () => {
+test('Details is its own tab: it shows telemetry, fetches live status while open, and is not in Mentor', async () => {
   const server = backend(), h = harness(server.fetch)
   try {
-    assert.equal(h.button("Details").props.disabled, true)
-    await h.click(h.button("Live")); await h.settle()
-    const before = h.statusRequests.length
-    await h.click(h.button("Details")); await h.settle()
-    assert.match(h.text(), /Mentor message/)
-    assert.match(h.text(), /Average KL/)
-    assert.ok(h.statusRequests.length > before, "Details did not fetch live status")
+    await h.click(h.button('Details')); await h.settle()
+    assert.match(h.text(), /Calculations/)
+    assert.match(h.text(), /Average KL against threshold/)
+    assert.doesNotMatch(h.text(), /Gentle Mentor/, 'Details showed the Gentle Mentor prompt')
+    assert.ok(h.statusRequests.length >= 1, 'Details did not fetch live status')
+    await h.click(h.button('Mentor')); await h.settle()
+    assert.doesNotMatch(h.text(), /Calculations/, 'Mentor tab showed telemetry')
   } finally { h.dispose() }
 })

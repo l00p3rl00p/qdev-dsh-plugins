@@ -599,41 +599,70 @@ window.__ModuleLoader__.load({
       );
     }
 
-    // Details: a read-only SOUP-side panel with the Mentor prompt and the telemetry behind it.
-    // Opened from the SOUP tab only. It polls while open and never runs in the Settings view.
-    function SoupDetailsPanel({ sessionId, onClose }) {
+    // Details: its own tab. Telemetry for this chat, read-only, polling only while open.
+    function SoupDetailsView({ sessionId }) {
       const sessionLive = useSessionLiveStatus(sessionId);
       const live = sessionLive.live;
-      const context = live?.mentor?.context ?? {};
       const detector = live?.detector ?? {};
       const trajectory = live?.trajectory ?? {};
       const mentor = live?.mentor ?? {};
-      const threshold = live?.effective?.threshold;
-      const latest = detector.lastResult?.klDivergence;
-      const rows = [
-        ['Mentor message', context.message ?? '—'],
-        ['Current plan', context.plan ?? live?.mentor?.originalPlan ?? '—'],
-        ['Plan amendments', (context.amendments ?? []).length ? context.amendments.join(' · ') : 'none'],
-        ['Calculations', detector.evaluations ?? 0],
-        ['Qualifying drifts', detector.drifts ?? 0],
-        ['Average KL', typeof detector.averageKlDivergence === 'number' ? detector.averageKlDivergence.toFixed(4) : '—'],
-        ['Latest KL / threshold', typeof latest === 'number' ? `${latest.toFixed(4)} / ${Number(threshold).toFixed(2)}` : `— / ${threshold == null ? '—' : Number(threshold).toFixed(2)}`],
-        ['Session events', trajectory.sessionEvents ?? 0],
-        ['Assistant messages', trajectory.assistantMessages ?? 0],
-        ['Mentor deliveries', (detector.markers ?? []).filter((marker) => marker.kind !== 'crossing').length],
-        ['Trajectory · detector · mentor', `${trajectory.state ?? '—'} · ${detector.state ?? '—'} · ${mentor.state ?? '—'}`],
-        ['Carried drifts', mentor.carry ?? 0],
-      ];
-      return h('section', { style: styles.compactCard, 'aria-label': 'SOUP details' },
+      const threshold = Number(live?.effective?.threshold);
+      const history = detector.history ?? [];
+      const markers = detector.markers ?? [];
+      const interventions = markers.filter((marker) => marker.kind !== 'crossing');
+      const average = typeof detector.averageKlDivergence === 'number' ? detector.averageKlDivergence : null;
+      const ratio = average != null && threshold > 0 ? average / threshold : null;
+      const meterColor = ratio == null ? 'var(--dsw-alias-border-l2)' : ratio < 1 ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-error-primary)';
+      const tile = (label, value, tone) => h('div', { key: label, style: { ...styles.liveMetric, borderLeft: `3px solid ${tone ?? 'var(--dsw-alias-border-l2)'}` } },
+        h('span', { style: styles.inlineHint }, label),
+        h('strong', { style: styles.liveValue }, String(value)),
+      );
+      const cell = { padding: '4px 6px', textAlign: 'left', borderTop: '1px solid var(--dsw-alias-border-l2)' };
+      const recent = history.slice(-10).reverse();
+      return h('div', { style: styles.sessionBody },
         h('div', { style: styles.liveHeader },
           h('h3', { style: styles.compactCardTitle }, 'Details'),
-          h('button', { type: 'button', style: styles.compactButton, onClick: onClose }, 'Close'),
+          h('button', { type: 'button', style: styles.compactButton, onClick: () => sessionLive.refresh() }, 'Refresh'),
         ),
         sessionLive.error ? h('p', { role: 'alert', style: styles.error }, sessionLive.error) : null,
-        rows.map(([label, value]) => h('div', { key: label, style: styles.compactRow },
-          h('span', { style: styles.label }, label),
-          h('span', { style: { ...styles.body, whiteSpace: 'normal', textAlign: 'right' } }, String(value)),
-        )),
+        h('div', { style: styles.liveMetrics },
+          tile('Calculations', detector.evaluations ?? 0),
+          tile('Qualifying drifts', detector.drifts ?? 0, detector.drifts ? 'var(--dsw-alias-state-error-primary)' : null),
+          tile('Carried drifts', mentor.carry ?? 0),
+          tile('Session events', trajectory.sessionEvents ?? 0),
+          tile('Assistant messages', trajectory.assistantMessages ?? 0),
+          tile('Mentor deliveries', interventions.length),
+        ),
+        h('section', { style: styles.compactCard, 'aria-label': 'Average KL against threshold' },
+          h('span', { style: styles.label }, 'Average KL against threshold'),
+          h('div', { role: 'meter', 'aria-label': 'Average KL against threshold', 'aria-valuemin': 0, 'aria-valuemax': 200, 'aria-valuenow': ratio == null ? 0 : Math.min(200, Math.round(ratio * 100)), style: { height: 8, borderRadius: 4, overflow: 'hidden', background: 'var(--dsw-alias-border-l2)', marginTop: 6 } },
+            h('span', { style: { display: 'block', height: '100%', width: `${ratio == null ? 0 : Math.min(100, ratio * 100)}%`, background: meterColor } }),
+          ),
+          h('span', { style: styles.hint }, average == null ? 'Waiting for measurements' : `${average.toFixed(4)} KL · ${ratio.toFixed(2)}× the threshold of ${threshold.toFixed(2)}`),
+        ),
+        history.length ? h(KlChart, { history, markers, threshold }) : null,
+        h('section', { style: styles.compactCard, 'aria-label': 'Recent calculations' },
+          h('span', { style: styles.label }, 'Recent calculations'),
+          recent.length ? h('table', { style: { width: '100%', borderCollapse: 'collapse', marginTop: 6 } },
+            h('thead', null, h('tr', null, ['Time', 'KL', 'Threshold', 'Result'].map((title) => h('th', { key: title, style: { ...cell, borderTop: 'none', ...styles.inlineHint } }, title)))),
+            h('tbody', null, recent.map((point, index) => h('tr', { key: `${point.at}-${index}` },
+              h('td', { style: cell }, new Date(point.at).toLocaleTimeString()),
+              h('td', { style: cell }, point.kl.toFixed(4)),
+              h('td', { style: cell }, point.threshold.toFixed(2)),
+              h('td', { style: cell }, h('span', { style: { ...styles.sourceBadge, color: point.drift ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-success-primary)' } }, point.drift ? 'drift' : 'within')),
+            )))) : h('p', { style: styles.hint }, 'No calculations yet.'),
+        ),
+        h('section', { style: styles.compactCard, 'aria-label': 'Interventions' },
+          h('span', { style: styles.label }, 'Interventions'),
+          interventions.length ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, interventions.slice(-10).reverse().map((marker, index) => h('li', { key: `${marker.at}-${index}`, style: styles.body },
+            h('strong', null, marker.kind), ` · ${new Date(marker.at).toLocaleTimeString()}`,
+          ))) : h('p', { style: styles.hint }, 'No interventions yet.'),
+        ),
+        h('section', { style: styles.compactCard, 'aria-label': 'Current state' },
+          h('span', { style: styles.label }, 'Current state'),
+          h('p', { style: styles.body }, `Trajectory ${trajectory.state ?? '—'} · Detector ${detector.state ?? '—'} · Mentor ${mentor.state ?? '—'}`),
+          h('p', { style: styles.hint }, `Plan amendments: ${(live?.mentor?.context?.amendments ?? []).length || 'none'}`),
+        ),
       );
     }
 
@@ -643,7 +672,6 @@ window.__ModuleLoader__.load({
       const [working, setWorking] = useState('');
       const [error, setError] = useState('');
       const [view, setView] = useState('settings');
-      const [details, setDetails] = useState(false);
       const scope = React.useRef({ id: sessionId, generation: 0, alive: true, busy: false, controller: null });
       if (scope.current.id !== sessionId) {
         scope.current.controller?.abort();
@@ -724,10 +752,9 @@ window.__ModuleLoader__.load({
             h('button', { type: 'button', 'aria-pressed': view === 'settings', style: styles.compactButton, onClick: () => setView('settings') }, 'Settings'),
             h('button', { type: 'button', 'aria-pressed': view === 'live', style: styles.compactButton, onClick: () => setView('live') }, 'Live'),
             h('button', { type: 'button', 'aria-pressed': view === 'mentor', style: styles.compactButton, onClick: () => setView('mentor') }, 'Mentor'),
-            h('button', { type: 'button', 'aria-pressed': details, disabled: view === 'settings', style: styles.compactButton, onClick: () => setDetails((open) => !open) }, 'Details'),
+            h('button', { type: 'button', 'aria-pressed': view === 'details', style: styles.compactButton, onClick: () => setView('details') }, 'Details'),
           ),
-          details && view !== 'settings' ? h(SoupDetailsPanel, { sessionId, onClose: () => setDetails(false) }) : null,
-          view === 'live' || view === 'mentor' ? h(LiveMentorView, { sessionId, part: view }) : h('div', { style: styles.sessionBody },
+          view === 'details' ? h(SoupDetailsView, { sessionId }) : view === 'live' || view === 'mentor' ? h(LiveMentorView, { sessionId, part: view }) : h('div', { style: styles.sessionBody },
           loading ? h('p', { role: 'status', style: styles.body }, 'Loading chat settings…') : null,
           visible && !visible.masterEnabled ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Global monitoring is OFF. Chat settings are read-only and cannot bypass the global master switch.') : visible && !visible.writable ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Chat settings are read-only.') : null,
           visible ? h('div', { style: styles.sessionGrid },
