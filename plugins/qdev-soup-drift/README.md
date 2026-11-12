@@ -101,7 +101,7 @@ dsh plugin --profile web add /tmp/qdev-trajectory-drift-soup-0.6.3.tgz
 dsh --profile web --dump-config
 ```
 
-QDev's dedicated interpreter contains official `soup-cli==0.77.1`. Other environments must set `SOUP_PYTHON` to an interpreter containing `soup_cli` and configure the same interpreter in the plugin settings or `cordis.patch.yml`. CI uses `python` after installing the pinned SOUP package.
+Install the official SOUP package with `pip install soup-cli==0.77.1` (project: https://github.com/MakazhanAlpamys/Soup, PyPI: https://pypi.org/project/soup-cli/). QDev's dedicated interpreter contains that version. Other environments must set `SOUP_PYTHON` to an interpreter containing `soup_cli` and configure the same interpreter in the plugin settings or `cordis.patch.yml`. CI uses `python` after installing the pinned SOUP package.
 
 Install into the profile actually used by DSH Web. After adding or updating the package, restart the existing DSH Web process and open its token-bearing URL. Do not start a replacement Web server to validate this plugin.
 

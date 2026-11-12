@@ -60,7 +60,7 @@ pnpm install
 pnpm run verify
 ```
 
-For SOUP, first make the official `soup_cli` Python package available and set `SOUP_PYTHON` to that interpreter as described in its [operator guide](plugins/qdev-soup-drift/README.md). Telemetry Seams has its own [build and probe instructions](plugins/dsh-telemetry-seams/README.md).
+For SOUP, first install the official `soup-cli` Python package (`pip install soup-cli==0.77.1`; project: https://github.com/MakazhanAlpamys/Soup) and make it available and set `SOUP_PYTHON` to that interpreter as described in its [operator guide](plugins/qdev-soup-drift/README.md). Telemetry Seams has its own [build and probe instructions](plugins/dsh-telemetry-seams/README.md).
 
 These checks do not install into the running QDev Harness. Packaging checks and live session behavior are distinct release gates.
 
