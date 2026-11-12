@@ -3,7 +3,7 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 import assert from 'node:assert/strict';
 import {createPluginRuntime,PRESETS} from '../runtime.mjs';
-import {createReanchor,GENTLE_REMINDER} from '../reanchor.mjs';
+import {createReanchor,FIRST_DRIFT_MESSAGE,secondDriftReminder,GENTLE_MENTOR_MESSAGE} from '../reanchor.mjs';
 const event=(text,turn=1)=>({type:'assistant/message',data:{turn,message:{content:[{type:'text',text}]}}});
 test('five thresholds, upstream default at center',()=>assert.deepEqual(PRESETS,[0.05,0.1,0.2,0.3,0.4]));
 test('gentle mentor pauses after two reminders and a third-drift human escalation',()=>{
@@ -16,7 +16,10 @@ test('gentle mentor pauses after two reminders and a third-drift human escalatio
  assert.equal(mentor.drift('s',{drift_detected:true,turn:7}),'human');
  assert.equal(mentor.drift('s',{drift_detected:true,turn:7}),'awaiting-reset-decision');
  assert.equal(injected.length,2);assert.equal(humans.length,1);
- assert.equal(injected[0].reminder,GENTLE_REMINDER('The mission is unchanged.'));
+ // Feature 5: drift 1 is exactly the first-drift sentence; drift 2 carries the plan (no amendments yet).
+ assert.equal(injected[0].reminder,FIRST_DRIFT_MESSAGE);
+ assert.equal(injected[1].reminder,secondDriftReminder({plan:'The mission is unchanged.',amendments:[]}));
+ assert.ok(injected[1].reminder.includes('Current plan:\n\nThe mission is unchanged.'));
  assert.deepEqual(changes.at(-1),{sessionId:'s',turn:7,driftCount:3,carry:3,decisionPending:true,escalated:true});
 });
 
@@ -96,4 +99,8 @@ test('canonical native DSH plugin identity matches Cordis registration and packa
  assert.match(patch,/id: qdev-trajectory-drift-soup/);
  assert.match(patch,/name: qdev-trajectory-drift-soup/);
  assert.equal(pkg.main,'./dist/index.js');
+});
+test('second-drift reminder lists plan amendments one "- " line each, after the plan',()=>{
+ const text=secondDriftReminder({plan:'Ship the card.',amendments:['Keep the chart.','Drop the footnote.']});
+ assert.equal(text,[GENTLE_MENTOR_MESSAGE,'','Current plan:','','Ship the card.','','Plan amendments:','- Keep the chart.','- Drop the footnote.'].join('\n'));
 });
