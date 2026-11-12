@@ -493,7 +493,7 @@ window.__ModuleLoader__.load({
           h(SessionLiveMetric, { label: 'Effective threshold', value: threshold == null ? '—' : Number(threshold).toFixed(2) }),
         ),
         history.length ? h(KlChart, { history, markers, threshold }) : h('p', { role: 'status', style: styles.hint }, 'Waiting for measurements'),
-        h(GentleMentorSection, { plan: live?.mentor?.originalPlan ?? null }),
+        h(GentleMentorSection, { sessionId, live, onSaved: sessionLive.refresh }),
       );
     }
 
@@ -518,15 +518,78 @@ window.__ModuleLoader__.load({
       );
     }
 
-    // Read-only glance at the Gentle Mentor prompt. Editing and amendments arrive in Feature 4.
-    function GentleMentorSection({ plan }) {
-      const planText = plan || 'Waiting for the first user message.';
+    // Feature 4: the Gentle Mentor prompt for this chat. Each field saves on an explicit click, and a failed save keeps the typed text.
+    const MENTOR_ACTION_PATH = '/qdev-soup-drift/status';
+    const FIRST_DRIFT_SENTENCE = 'I think what you are doing is interesting; however, I would like to return focus to the current plan.';
+
+    async function saveMentorField(sessionId, field, value) {
+      const response = await fetch(MENTOR_ACTION_PATH, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'content-type': 'application/json', 'x-qdev-soup-action': 'session-mentor' },
+        body: JSON.stringify({ sessionId, field, value }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) throw new Error(payload.message || payload.error || `Save returned ${response.status}`);
+    }
+
+    function MentorTextField({ label, value, customized, disabled, onSave }) {
+      const [draft, setDraft] = useState(value);
+      const [working, setWorking] = useState(false);
+      const [error, setError] = useState('');
+      async function save(next) {
+        setWorking(true); setError('');
+        try { await onSave(next); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setWorking(false); }
+      }
+      return h('div', { style: { display: 'grid', gap: 6, marginTop: 8 } },
+        h('div', { style: styles.liveHeader }, h('span', { style: styles.label }, label), h('span', { style: styles.sourceBadge }, customized ? 'chat' : 'default')),
+        h('textarea', { 'aria-label': label, value: draft, rows: 3, disabled: disabled || working, onChange: (event) => setDraft(event.target.value), style: { width: '100%', boxSizing: 'border-box', minHeight: 64 } }),
+        h('div', { style: styles.actionRow },
+          h('button', { type: 'button', style: styles.compactButton, disabled: disabled || working || draft === value, onClick: () => save(draft) }, 'Save'),
+          h('button', { type: 'button', style: styles.compactButton, disabled: disabled || working || !customized, onClick: () => save(null) }, 'Use default'),
+        ),
+        error ? h('p', { role: 'alert', style: styles.error }, error) : null,
+      );
+    }
+
+    function MentorAmendments({ items, customized, disabled, onSave }) {
+      const [list, setList] = useState(items);
+      const [entry, setEntry] = useState('');
+      const [working, setWorking] = useState(false);
+      const [error, setError] = useState('');
+      async function save(next) {
+        setWorking(true); setError('');
+        try { await onSave(next); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setWorking(false); }
+      }
+      return h('div', { style: { display: 'grid', gap: 6, marginTop: 8 } },
+        h('div', { style: styles.liveHeader }, h('span', { style: styles.label }, 'Plan amendments'), h('span', { style: styles.sourceBadge }, customized ? 'chat' : 'default')),
+        list.length ? h('ol', { style: { margin: 0, paddingLeft: 20 } }, list.map((item, index) => h('li', { key: `${index}-${item}`, style: styles.body },
+          item, ' ', h('button', { type: 'button', style: styles.compactButton, disabled: disabled || working, onClick: () => setList(list.filter((_, i) => i !== index)) }, 'Remove'),
+        ))) : h('p', { style: styles.hint }, 'No amendments.'),
+        h('div', { style: styles.actionRow },
+          h('input', { 'aria-label': 'New plan amendment', value: entry, disabled: disabled || working, onChange: (event) => setEntry(event.target.value), style: { flex: 1 } }),
+          h('button', { type: 'button', style: styles.compactButton, disabled: disabled || working || !entry.trim() || list.length >= 50, onClick: () => { setList([...list, entry.trim()]); setEntry(''); } }, 'Add'),
+        ),
+        h('div', { style: styles.actionRow },
+          h('button', { type: 'button', style: styles.compactButton, disabled: disabled || working, onClick: () => save(list) }, 'Save amendments'),
+          h('button', { type: 'button', style: styles.compactButton, disabled: disabled || working || !customized, onClick: () => save(null) }, 'Use default'),
+        ),
+        error ? h('p', { role: 'alert', style: styles.error }, error) : null,
+      );
+    }
+
+    function GentleMentorSection({ sessionId, live, onSaved }) {
+      const context = live?.mentor?.context ?? { message: '', plan: '', amendments: [], customized: {} };
+      const original = live?.mentor?.originalPlan || 'Waiting for the first user message.';
+      const disabled = live?.effective?.enabled === false;
+      const save = (field) => async (value) => { await saveMentorField(sessionId, field, value); onSaved?.(); };
       return h('section', { style: styles.compactCard, 'aria-label': 'Gentle Mentor' },
         h('h3', { style: styles.compactCardTitle }, 'Gentle Mentor'),
-        h('p', { style: styles.body }, `Message: "I noticed you might be drifting slightly off plan. Here's the original plan: …"`),
-        h('p', { style: styles.body }, `Original plan: ${planText}`),
-        h('p', { style: styles.body }, `Current plan: ${planText} (no edits yet)`),
-        h('p', { style: styles.body }, 'Plan amendments: none.'),
+        disabled ? h('p', { role: 'status', style: styles.hint }, 'Monitoring is OFF; Gentle Mentor edits are read-only.') : null,
+        h('p', { style: styles.hint }, `First drift says: "${FIRST_DRIFT_SENTENCE}"`),
+        h('p', { style: styles.body }, `Original plan (read-only): ${original}`),
+        h(MentorTextField, { key: `message-${context.message ?? ''}`, label: 'Mentor message', value: context.message ?? '', customized: Boolean(context.customized?.message), disabled, onSave: save('message') }),
+        h(MentorTextField, { key: `plan-${context.plan ?? ''}`, label: 'Current plan', value: context.plan ?? original, customized: Boolean(context.customized?.plan), disabled, onSave: save('plan') }),
+        h(MentorAmendments, { key: `amend-${JSON.stringify(context.amendments ?? [])}`, items: context.amendments ?? [], customized: Boolean(context.customized?.amendments), disabled, onSave: save('amendments') }),
       );
     }
 

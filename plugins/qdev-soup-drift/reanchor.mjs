@@ -28,7 +28,13 @@ export function createReanchor({
   reportStale = () => {},
   initialState = {},
   onStateChange = () => {},
+  // Feature 4: per-chat Gentle Mentor context { message?, plan?, amendments? }. Read at each intervention.
+  contextFor = () => ({}),
 }) {
+  const secondDriftFields = (id, original) => {
+    const override = contextFor(id) ?? {}
+    return { message: override.message ?? GENTLE_MENTOR_MESSAGE, plan: override.plan ?? original, amendments: override.amendments ?? [] }
+  }
   if (typeof inject !== 'function' || typeof escalate !== 'function') throw new TypeError('Callbacks required')
   const state = new Map()
 
@@ -100,7 +106,7 @@ export function createReanchor({
         escalate({ id, turn: current.turn, detections: current.detections, original: current.intent, question: HUMAN_QUESTION, report })
         return 'human'
       }
-      inject({ id, turn: current.turn, attempt: current.detections, original: current.intent, reminder: current.detections === 1 ? FIRST_DRIFT_MESSAGE : secondDriftReminder({ plan: original, amendments: [] }), report })
+      inject({ id, turn: current.turn, attempt: current.detections, original: current.intent, reminder: current.detections === 1 ? FIRST_DRIFT_MESSAGE : secondDriftReminder(secondDriftFields(id, original)), report })
       return 'injected'
     },
     decide(id, reset) {

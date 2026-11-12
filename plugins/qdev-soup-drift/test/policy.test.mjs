@@ -104,3 +104,15 @@ test('second-drift reminder lists plan amendments one "- " line each, after the 
  const text=secondDriftReminder({plan:'Ship the card.',amendments:['Keep the chart.','Drop the footnote.']});
  assert.equal(text,[GENTLE_MENTOR_MESSAGE,'','Current plan:','','Ship the card.','','Plan amendments:','- Keep the chart.','- Drop the footnote.'].join('\n'));
 });
+test('Feature 4: per-chat context changes the second-drift prompt only; first drift and defaults unchanged',()=>{
+ const injected=[];
+ const ctxs={s:{message:'Stay with the card.',plan:'Ship the chart.',amendments:['Keep the footnote out.']}};
+ const mentor=createReanchor({inject:x=>injected.push(x),escalate:()=>{},contextFor:id=>ctxs[id]??{}});
+ mentor.observe('s',{type:'user/message',data:{id:'o',source:{kind:'user'},content:[{type:'text',text:'Original plan.'}]}});
+ mentor.observe('s',{type:'turn/start',data:{turn:1}});
+ mentor.drift('s',{drift_detected:true,turn:1});
+ mentor.drift('s',{drift_detected:true,turn:1});
+ assert.equal(injected[0].reminder,FIRST_DRIFT_MESSAGE);
+ assert.equal(injected[1].reminder,secondDriftReminder({message:'Stay with the card.',plan:'Ship the chart.',amendments:['Keep the footnote out.']}));
+ assert.ok(injected[1].reminder.startsWith('Stay with the card.'));
+});

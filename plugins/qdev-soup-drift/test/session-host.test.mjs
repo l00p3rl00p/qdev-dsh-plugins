@@ -1054,3 +1054,39 @@ test('Live & Mentor history survives a Host restart from its own storage row', a
   assert.equal(after.detector.markers.some((marker) => marker.kind === 'crossing'), true, 'drift crossing marker was not restored')
   await reopened.close()
 })
+
+test('Feature 4: Gentle Mentor edits are validated, owner-only, refused when OFF, and survive a restart', async (t) => {
+  const root = await temporaryRoot(t)
+  const f = await fixture(t, { root, liveIds: [A] })
+  const post = async (body, { owner = true } = {}) => {
+    const route = f.routes.get(STATUS_PATH)
+    assert.ok(route)
+    const payload = JSON.stringify(body)
+    const values = { host: 'localhost', origin: 'http://localhost', 'x-qdev-soup-action': 'session-mentor', ...(owner ? { 'x-synthetic-owner': 'yes' } : {}) }
+    const headers = { ...values, get(name) { return values[String(name).toLowerCase()] ?? null } }
+    let text
+    const response = { statusCode: 0, setHeader() {}, end(value) { text = value } }
+    await route.handler({ method: 'POST', headers, async *[Symbol.asyncIterator]() { yield payload } }, response)
+    return { code: response.statusCode, body: JSON.parse(text) }
+  }
+  assert.equal((await post({ sessionId: A, field: 'nope', value: 'x' })).code, 400, 'unknown field was accepted')
+  assert.equal((await post({ sessionId: A, field: 'message', value: 'x'.repeat(4001) })).code, 400, 'over-limit message was accepted')
+  const saved = await post({ sessionId: A, field: 'message', value: 'Stay on the card.' })
+  assert.equal(saved.code, 200)
+  assert.equal(saved.body.view.mentor.context.message, 'Stay on the card.')
+  assert.equal(saved.body.view.mentor.context.customized.message, true)
+  const refused = await post({ sessionId: A, field: 'message', value: 'Sneaky edit.' }, { owner: false })
+  assert.notEqual(refused.code, 200, 'non-owner edited the Gentle Mentor context')
+  await f.update({ enabled: false })
+  const off = await post({ sessionId: A, field: 'plan', value: 'Edit while OFF.' })
+  assert.equal(off.code, 409)
+  assert.equal(off.body.error, 'soup-disabled', 'master OFF gate must refuse the edit before the handler runs')
+  await f.update({ enabled: true })
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  await f.close()
+  const reopened = await fixture(t, { root, liveIds: [A] })
+  const after = await reopened.liveStatus(A)
+  assert.equal(after.mentor.context.message, 'Stay on the card.', 'Gentle Mentor message did not survive a restart')
+  assert.equal(after.mentor.context.customized.plan, false)
+  await reopened.close()
+})

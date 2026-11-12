@@ -23,6 +23,7 @@ export function createPluginRuntime({
   onError = () => {},
   initialMentorState = {},
   onMentorStateChange = () => {},
+  contextFor = () => ({}),
   spawnProcess,
 } = {}) {
   const mentor = createReanchor({
@@ -32,6 +33,7 @@ export function createPluginRuntime({
     reportStale,
     initialState: initialMentorState,
     onStateChange: onMentorStateChange,
+    contextFor,
   })
   let settings = { python, preset, enabled, detectorEnabled, reanchoring, baselineCount, windowCount }
   let generation = 0

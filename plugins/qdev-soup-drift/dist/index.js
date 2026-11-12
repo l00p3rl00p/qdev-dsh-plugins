@@ -7,6 +7,10 @@ import { z } from 'zod';
 import { createPluginRuntime, PRESETS } from '../runtime.mjs';
 // @ts-expect-error JavaScript settings module has no declaration file.
 import { createSessionSettings, SessionSettingsRecord, SessionSettingsError } from '../session-settings.mjs';
+// @ts-expect-error JavaScript module has no declaration file.
+import { applyMentorEdit, MentorContextRecord } from '../mentor-context.mjs';
+// @ts-expect-error JavaScript module has no declaration file.
+import { GENTLE_MENTOR_MESSAGE } from '../reanchor.mjs';
 const PACKAGE_NAME = 'qdev-trajectory-drift-soup';
 const VERSION = '0.7.0';
 const SOURCE = 'https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift';
@@ -18,6 +22,12 @@ const SESSION_SETTINGS_DOMAIN = defineDomain({
     version: 1,
     layout: 'per-record',
     tables: { sessions: domainTable(SessionSettingsRecord) },
+});
+const MENTOR_CONTEXT_DOMAIN = defineDomain({
+    name: 'qdev_soup_mentor_context',
+    version: 1,
+    layout: 'per-record',
+    tables: { sessions: domainTable(MentorContextRecord) },
 });
 const LIVE_HISTORY_DOMAIN = defineDomain({
     name: 'qdev_soup_live_history',
@@ -87,6 +97,10 @@ export async function apply(ctx, config = {}) {
     ctx.effect(() => () => liveDomain.close());
     const liveTable = liveDomain.table('sessions');
     const initialLive = Object.fromEntries(liveTable.entries());
+    const contextDomain = await ctx.storageDomain.open(MENTOR_CONTEXT_DOMAIN);
+    ctx.effect(() => () => contextDomain.close());
+    const contextTable = contextDomain.table('sessions');
+    const mentorContexts = new Map(contextTable.entries());
     const settingsDomain = await ctx.storageDomain.open(SESSION_SETTINGS_DOMAIN);
     ctx.effect(() => () => settingsDomain.close());
     const readConfiguration = () => ({
@@ -297,6 +311,17 @@ export async function apply(ctx, config = {}) {
                 decisionPending: mentor.decisionPending,
                 escalated: mentor.escalated,
                 originalPlan: runtimes.get(id)?.originalPlan(id) ?? null,
+                // Effective Gentle Mentor prompt parts; "customized" says which fields a chat has overridden.
+                context: {
+                    message: mentorContexts.get(id)?.message ?? GENTLE_MENTOR_MESSAGE,
+                    plan: mentorContexts.get(id)?.plan ?? runtimes.get(id)?.originalPlan(id) ?? null,
+                    amendments: mentorContexts.get(id)?.amendments ?? [],
+                    customized: {
+                        message: mentorContexts.get(id)?.message !== undefined,
+                        plan: mentorContexts.get(id)?.plan !== undefined,
+                        amendments: mentorContexts.get(id)?.amendments !== undefined,
+                    },
+                },
                 ...(record?.mentorError === undefined ? {} : { lastError: record.mentorError }),
             },
         };
@@ -329,6 +354,7 @@ export async function apply(ctx, config = {}) {
         const runtime = createPluginRuntime({
             ...effectiveSettings(id),
             initialMentorState: { [id]: initialMentorState[id] },
+            contextFor: (sessionKey) => mentorContexts.get(String(sessionKey)) ?? {},
             onMentorStateChange: updateMentorStatus,
             inject: ({ id, turn, attempt, reminder, report }) => {
                 const live = ensureSessionLive(id);
@@ -776,7 +802,8 @@ export async function apply(ctx, config = {}) {
                 response.end(JSON.stringify({ ok: false, error: rejection === 401 ? 'unauthorized' : 'forbidden' }));
                 return;
             }
-            if (request.headers['x-qdev-soup-action'] !== 'reset-drift-count') {
+            const actionHeader = request.headers['x-qdev-soup-action'];
+            if (actionHeader !== 'reset-drift-count' && actionHeader !== 'session-mentor') {
                 response.statusCode = 403;
                 response.end(JSON.stringify({ ok: false, error: 'action-header-required' }));
                 return;
@@ -785,6 +812,38 @@ export async function apply(ctx, config = {}) {
                 const body = await readJsonBody(request);
                 if (!body || typeof body !== 'object' || Array.isArray(body))
                     throw new Error('Expected a JSON object');
+                if (actionHeader === 'session-mentor') {
+                    // Feature 4: save one Gentle Mentor field for one chat. Refused when monitoring is off.
+                    const mentorSessionId = Reflect.get(body, 'sessionId');
+                    if (typeof mentorSessionId !== 'string' || !mentorSessionId)
+                        throw new Error('sessionId is required');
+                    sessionSettings.read(mentorSessionId);
+                    // Edits happen in an open chat: the agent must be attached right now.
+                    if (!agents.has(mentorSessionId) && !ctx.agents.get(mentorSessionId)) {
+                        response.statusCode = 409;
+                        response.end(JSON.stringify({ ok: false, error: 'chat-not-attached' }));
+                        return;
+                    }
+                    if (!resolved.enabled) {
+                        response.statusCode = 409;
+                        response.end(JSON.stringify({ ok: false, error: 'monitoring-off' }));
+                        return;
+                    }
+                    let next;
+                    try {
+                        next = applyMentorEdit(mentorContexts.get(mentorSessionId) ?? {}, Reflect.get(body, 'field'), Reflect.get(body, 'value'));
+                    }
+                    catch (error) {
+                        response.statusCode = 400;
+                        response.end(JSON.stringify({ ok: false, error: 'invalid-mentor-edit', message: error instanceof Error ? error.message : String(error) }));
+                        return;
+                    }
+                    await contextTable.put(mentorSessionId, next);
+                    mentorContexts.set(mentorSessionId, next);
+                    response.statusCode = 200;
+                    response.end(JSON.stringify({ ok: true, view: sessionLiveView(mentorSessionId, true) }));
+                    return;
+                }
                 const action = Reflect.get(body, 'action');
                 const reset = Reflect.get(body, 'reset');
                 const requestedSession = Reflect.get(body, 'sessionId');
