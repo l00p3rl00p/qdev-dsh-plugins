@@ -48,7 +48,7 @@ const MENTOR_CONTEXT_DOMAIN = defineDomain({
 type LiveHistoryStored = {
   history: Array<{ at: number; kl: number; threshold: number; drift: boolean }>
   markers: Array<{ at: number; kind: 'crossing' | 'reminder' | 'escalation' | 'clarification' }>
-  tools?: Array<{ callId: string; name: string; startedAt: number; endedAt: number | null; error: boolean }>
+  tools?: Array<{ callId: string; name: string; startedAt: number; endedAt: number | null; error: boolean; reason?: string }>
 }
 const LIVE_HISTORY_DOMAIN = defineDomain({
   name: 'qdev_soup_live_history',
@@ -58,7 +58,7 @@ const LIVE_HISTORY_DOMAIN = defineDomain({
     sessions: domainTable<string, LiveHistoryStored>(z.object({
       history: z.array(z.object({ at: z.number(), kl: z.number(), threshold: z.number(), drift: z.boolean() })).max(50),
       markers: z.array(z.object({ at: z.number(), kind: z.enum(['crossing', 'reminder', 'escalation', 'clarification']) })).max(50),
-      tools: z.array(z.object({ callId: z.string(), name: z.string(), startedAt: z.number(), endedAt: z.number().nullable(), error: z.boolean() })).max(200).optional(),
+      tools: z.array(z.object({ callId: z.string(), name: z.string(), startedAt: z.number(), endedAt: z.number().nullable(), error: z.boolean(), reason: z.string().optional() })).max(200).optional(),
     })),
   },
 })
@@ -256,10 +256,14 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
   const runtimes = new Map<string, ReturnType<typeof createPluginRuntime>>()
   const sessionLive = new Map<string, SessionLiveRecord>()
   // Tool calls per chat, read from DSH's own tool/call and tool/result session events. Memory only; last 200.
-  type ToolRecord = { callId: string; name: string; startedAt: number; endedAt: number | null; error: boolean }
+  type ToolRecord = { callId: string; name: string; startedAt: number; endedAt: number | null; error: boolean; reason?: string }
   const liveTools = new Map<string, ToolRecord[]>()
+  // The short reason a failed result gives, from its text blocks. Used to group failures by type.
+  const reasonText = (content: unknown): string => (Array.isArray(content)
+    ? content.map((block) => (block && typeof block.text === 'string' ? block.text : '')).join(' ')
+    : '').replace(/\s+/g, ' ').trim().slice(0, 160)
   const observeTool = (id: string, event: SessionEvent): void => {
-    const data = event.data as unknown as { callId?: unknown; name?: unknown; message?: { source?: { callId?: unknown }; isError?: unknown } }
+    const data = event.data as unknown as { callId?: unknown; name?: unknown; message?: { source?: { callId?: unknown }; isError?: unknown; content?: unknown } }
     const list = liveTools.get(id) ?? [...(initialLive[id]?.tools ?? [])]
     if (event.type === 'tool/call') {
       list.push({ callId: String(data.callId), name: String(data.name), startedAt: event.time, endedAt: null, error: false })
@@ -270,6 +274,7 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
       if (record) {
         record.endedAt = event.time
         record.error = data.message?.isError === true
+        if (record.error) record.reason = reasonText(data.message?.content)
       }
     }
     liveTools.set(id, list)

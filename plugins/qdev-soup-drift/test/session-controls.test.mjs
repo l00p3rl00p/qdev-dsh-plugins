@@ -501,8 +501,8 @@ test('Convergence: control chart flags a spike, repeated failures are named, eli
   const kls = [0.08, 0.09, 0.08, 0.07, 0.09, 0.08, 0.09, 0.08, 0.5]
   live.detector.history = kls.map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: kl >= 0.2 }))
   live.tools = [
-    { callId: 'a', name: 'web_fetch', startedAt: 1700000000500, endedAt: 1700000000600, error: true },
-    { callId: 'b', name: 'web_fetch', startedAt: 1700000005500, endedAt: 1700000005600, error: true },
+    { callId: 'a', name: 'web_fetch', startedAt: 1700000000500, endedAt: 1700000000600, error: true, reason: 'Malformed edit: old_string not found at line 12' },
+    { callId: 'b', name: 'web_fetch', startedAt: 1700000005500, endedAt: 1700000005600, error: true, reason: 'Malformed edit: old_string not found at line 40' },
   ]
   const h = harness((url, options) => {
     if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
@@ -514,7 +514,7 @@ test('Convergence: control chart flags a spike, repeated failures are named, eli
     assert.match(h.text(), /UCL/)
     assert.match(h.text(), /Rule 1: one reading beyond a control limit/)
     assert.match(h.text(), /Repeated failures/)
-    assert.match(h.text(), /web_fetch: failed 2 of 2 calls/)
+    assert.match(h.text(), /malformed edit: old_string not found at: 2 times/)
     assert.match(h.text(), /Still standing/)
   } finally { h.dispose() }
 })

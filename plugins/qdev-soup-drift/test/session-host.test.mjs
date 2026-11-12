@@ -1120,3 +1120,13 @@ test('tool calls per chat survive a Host restart from their storage row', async 
   assert.equal(live.tools[0].error, true)
   await reopened.close()
 })
+
+test('a failed tool result keeps its reason text so failures can be grouped by type', async (t) => {
+  const f = await fixture(t)
+  f.start(A)
+  f.append(A, 'tool/call', { callId: 'r1', name: 'edit', turn: 1, step: 1, arguments: {} })
+  f.append(A, 'tool/result', { turn: 1, step: 1, message: { source: { callId: 'r1' }, isError: true, content: [{ type: 'text', text: 'Malformed edit: old_string not found at line 12' }] } })
+  const live = await f.liveStatus(A)
+  assert.equal(live.tools[0].error, true)
+  assert.equal(live.tools[0].reason, 'Malformed edit: old_string not found at line 12')
+})

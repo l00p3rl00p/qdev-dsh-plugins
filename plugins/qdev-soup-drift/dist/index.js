@@ -39,7 +39,7 @@ const LIVE_HISTORY_DOMAIN = defineDomain({
         sessions: domainTable(z.object({
             history: z.array(z.object({ at: z.number(), kl: z.number(), threshold: z.number(), drift: z.boolean() })).max(50),
             markers: z.array(z.object({ at: z.number(), kind: z.enum(['crossing', 'reminder', 'escalation', 'clarification']) })).max(50),
-            tools: z.array(z.object({ callId: z.string(), name: z.string(), startedAt: z.number(), endedAt: z.number().nullable(), error: z.boolean() })).max(200).optional(),
+            tools: z.array(z.object({ callId: z.string(), name: z.string(), startedAt: z.number(), endedAt: z.number().nullable(), error: z.boolean(), reason: z.string().optional() })).max(200).optional(),
         })),
     },
 });
@@ -123,6 +123,10 @@ export async function apply(ctx, config = {}) {
     const runtimes = new Map();
     const sessionLive = new Map();
     const liveTools = new Map();
+    // The short reason a failed result gives, from its text blocks. Used to group failures by type.
+    const reasonText = (content) => (Array.isArray(content)
+        ? content.map((block) => (block && typeof block.text === 'string' ? block.text : '')).join(' ')
+        : '').replace(/\s+/g, ' ').trim().slice(0, 160);
     const observeTool = (id, event) => {
         const data = event.data;
         const list = liveTools.get(id) ?? [...(initialLive[id]?.tools ?? [])];
@@ -137,6 +141,8 @@ export async function apply(ctx, config = {}) {
             if (record) {
                 record.endedAt = event.time;
                 record.error = data.message?.isError === true;
+                if (record.error)
+                    record.reason = reasonText(data.message?.content);
             }
         }
         liveTools.set(id, list);

@@ -822,20 +822,52 @@ window.__ModuleLoader__.load({
       );
     }
 
-    // Repeated mistakes: a tool that keeps failing in this chat is a pattern to explain, not a single bad call.
-    function RepeatedFailuresSection({ tools }) {
-      const byName = {};
+    // Repeated failures by type (Appendix 11.5 and 11.6): a failure type is the normalized reason the failed result gave.
+    // Two or more failures of one type in a chat is a repeated mistake. The scatter shows when each type recurs.
+    const FAILURE_LANE_LIMIT = 6;
+    function failureType(tool) {
+      const reason = (tool.reason ?? '').toLowerCase().replace(/[0-9]+/g, '#').replace(/["'`]/g, '');
+      const words = reason.split(/\s+/).filter(Boolean).slice(0, 6).join(' ');
+      return words || `${tool.name} failed (no reason recorded)`;
+    }
+    function failureGroups(tools) {
+      const groups = new Map();
       for (const tool of tools ?? []) {
-        byName[tool.name] = byName[tool.name] ?? { total: 0, failed: 0 };
-        byName[tool.name].total += 1;
-        if (tool.error) byName[tool.name].failed += 1;
+        if (!tool.error) continue;
+        const key = failureType(tool);
+        groups.set(key, [...(groups.get(key) ?? []), tool]);
       }
-      const repeated = Object.entries(byName).filter(([, s]) => s.failed >= 2).sort((a, b) => b[1].failed - a[1].failed);
+      return [...groups.entries()].map(([type, list]) => ({ type, list })).sort((a, b) => b.list.length - a.list.length);
+    }
+    function FailureScatter({ groups, times }) {
+      const W = 300, rowH = 22, P = 8, labelW = 96;
+      const H = P * 2 + rowH * groups.length;
+      const min = Math.min(...times);
+      const max = Math.max(...times);
+      const x = (t) => P + labelW + ((t - min) / (max - min || 1)) * (W - labelW - 2 * P);
+      return h('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Failures by type over time', style: { width: '100%', height: 'auto', display: 'block', marginTop: 6 } },
+        groups.map((group, i) => {
+          const y = P + rowH * i + rowH / 2;
+          return h('g', { key: group.type },
+            h('line', { x1: P + labelW, x2: W - P, y1: y, y2: y, stroke: 'var(--dsw-alias-border-l2)' }),
+            h('text', { x: P, y: y + 3, fontSize: 9, fill: 'currentColor' }, group.type.slice(0, 16)),
+            group.list.map((tool, j) => h('circle', { key: j, cx: x(tool.startedAt).toFixed(1), cy: y.toFixed(1), r: 3.5, fill: 'var(--dsw-alias-state-error-primary)' })),
+          );
+        }),
+      );
+    }
+    function RepeatedFailuresSection({ tools }) {
+      const groups = failureGroups(tools);
+      const repeated = groups.filter((group) => group.list.length >= 2);
+      const times = (tools ?? []).map((tool) => tool.startedAt);
       return h('section', { style: styles.compactCard, 'aria-label': 'Repeated failures' },
-        h('span', { style: styles.label }, 'Repeated failures'),
+        h('span', { style: styles.label }, 'Repeated failures by type'),
+        groups.length ? h(FailureScatter, { groups: groups.slice(0, FAILURE_LANE_LIMIT), times }) : null,
         repeated.length
-          ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, repeated.map(([name, s]) => h('li', { key: name, style: styles.body }, `${name}: failed ${s.failed} of ${s.total} calls. The same mistake is repeating.`)))
-          : h('p', { style: styles.hint }, 'No tool failed more than once in this chat.'),
+          ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, repeated.map((group) => h('li', { key: group.type, style: styles.body },
+            `${group.type}: ${group.list.length} times (${[...new Set(group.list.map((tool) => tool.name))].join(', ')}). The same mistake is repeating.`,
+          )))
+          : h('p', { style: styles.hint }, groups.length ? 'Every failure type happened once so far.' : 'No failed tool calls in this chat.'),
       );
     }
 
@@ -843,28 +875,28 @@ window.__ModuleLoader__.load({
     // and show what remains. Remaining candidates are not verified; judging them is the arbitration step for a human or agent.
     function EliminationSection({ history, tools, spc, threshold }) {
       const limit = Number(threshold) > 0 ? Number(threshold) : null;
-      const inWindowFails = (tools ?? []).filter((t) => t.error).length;
-      const crossings = history.filter((p) => p.drift).length;
-      const repeated = Object.values((tools ?? []).reduce((acc, t) => { acc[t.name] = (acc[t.name] ?? 0) + (t.error ? 1 : 0); return acc; }, {})).some((n) => n >= 2);
-      const nearLimit = limit !== null && history.length > 0 && history.every((p) => p.kl >= 0.5 * limit && p.kl < limit);
+      const failures = (tools ?? []).filter((tool) => tool.error).length;
+      const crossings = history.filter((point) => point.drift).length;
+      const recurringType = failureGroups(tools).some((group) => group.list.length >= 2);
+      const nearLimit = limit !== null && history.length > 0 && history.every((point) => point.kl >= 0.5 * limit && point.kl < limit);
       const candidates = [
         { label: 'A real threshold crossing drives the readings', contradicted: crossings === 0 },
-        { label: 'Failing tool calls drive the readings', contradicted: inWindowFails === 0 },
-        { label: 'One tool keeps failing (a repeated mistake)', contradicted: !repeated },
+        { label: 'Failing tool calls drive the readings', contradicted: failures === 0 },
+        { label: 'One failure type keeps recurring (a repeated mistake)', contradicted: !recurringType },
         { label: 'A special cause (control-chart rule violated)', contradicted: !spc || spc.flags.length === 0 },
         { label: 'Steady riding just under the limit', contradicted: !nearLimit },
       ];
-      const remaining = candidates.filter((c) => !c.contradicted);
-      const dropped = candidates.filter((c) => c.contradicted);
+      const remaining = candidates.filter((candidate) => !candidate.contradicted);
+      const dropped = candidates.filter((candidate) => candidate.contradicted);
       return h('section', { style: styles.compactCard, 'aria-label': 'Elimination' },
         h('span', { style: styles.label }, 'What the evidence leaves (elimination)'),
         remaining.length
           ? h('div', null,
             h('p', { style: styles.body }, 'Still standing. Not verified; a human or agent judges these:'),
-            h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, remaining.map((c) => h('li', { key: c.label, style: styles.body }, c.label))),
+            h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, remaining.map((candidate) => h('li', { key: candidate.label, style: styles.body }, candidate.label))),
           )
           : h('p', { style: styles.hint }, 'Every candidate is contradicted by the evidence here. No qualified pattern to report.'),
-        dropped.length ? h('p', { style: styles.hint }, `Ruled out by the data: ${dropped.map((c) => c.label.toLowerCase()).join('; ')}.`) : null,
+        dropped.length ? h('p', { style: styles.hint }, `Ruled out by the data: ${dropped.map((candidate) => candidate.label.toLowerCase()).join('; ')}.`) : null,
       );
     }
 
