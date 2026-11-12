@@ -11,7 +11,7 @@ const clone = value => JSON.parse(JSON.stringify(value))
 const response = (data, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => data })
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no }); return { promise, resolve, reject } }
 const defaults = () => ({ python: '/fixture/python', enabled: true, detectorEnabled: true, reanchoring: true, preset: 2, baselineCount: 4, windowCount: 4 })
-const fields = { enabled: 'Monitoring', detectorEnabled: 'Drift detector', reanchoring: 'Gentle Mentor', preset: 'Sensitivity', baselineCount: 'Baseline messages', windowCount: 'Comparison window', python: 'Python interpreter' }
+const fields = { enabled: 'Monitoring', detectorEnabled: 'Drift detector', reanchoring: 'Gentle Mentor', preset: 'Sensitivity', baselineCount: 'Baseline messages', windowCount: 'Comparison window' }
 function snapshot(sessionId = 'chat-A', overrides = {}, base = defaults(), revision = 0) {
   const effective = { ...base, ...overrides }; effective.enabled = base.enabled && effective.enabled
   return { sessionId, revision, base: clone(base), overrides: clone(overrides), effective, sources: Object.fromEntries(Object.keys(base).map(field => [field, Object.hasOwn(overrides, field) ? 'chat' : 'global'])), threshold: [0.05, 0.1, 0.2, 0.3, 0.4][effective.preset], masterEnabled: base.enabled, writable: base.enabled }
@@ -182,29 +182,28 @@ test('same-chat polling fences an older live response that resolves after the ne
   } finally { h.dispose() }
 })
 
-test('all seven inherited fields expose current global/effective values and a derived read-only threshold', async () => {
+test('all six inherited fields expose current global/effective values and a derived read-only threshold', async () => {
   const server = backend(), h = harness(server.fetch)
   try {
     await h.settle()
-    assert.equal(h.nodes(node => node.type === 'button' && h.text(node) === 'Use global').length, 7)
+    assert.equal(h.nodes(node => node.type === 'button' && h.text(node) === 'Use global').length, 6)
     for (const [field, label] of Object.entries(fields)) {
       assert.ok(h.control(`Chat ${label}`))
       assert.equal(h.control(`Use global for ${label}`).props.disabled, true)
     }
-    assert.equal(h.nodes(node => node.type === 'span' && h.text(node) === 'Inherited').length, 7)
+    assert.equal(h.nodes(node => node.type === 'span' && h.text(node) === 'Inherited').length, 6)
     assert.match(h.text(), /Global ON · Effective ON/)
-    assert.match(h.text(), /Global \/fixture\/python · Effective \/fixture\/python/)
     assert.equal(h.text(h.control('Chat effective KL threshold')), '0.20')
     assert.equal(h.control('Chat effective KL threshold').type, 'output')
     assert.doesNotMatch(h.text(), /Plan editor|Suppress intervention|Edit original plan/)
   } finally { h.dispose() }
 })
 
-test('all seven overrides and individual resets use session-scoped revisioned POSTs, never global form mutations', async () => {
+test('all six overrides and individual resets use session-scoped revisioned POSTs, never global form mutations', async () => {
   const server = backend(), h = harness(server.fetch)
   try {
     await h.settle()
-    for (const [field, value] of Object.entries({ enabled: false, detectorEnabled: false, reanchoring: false, preset: 0, baselineCount: 1, windowCount: 100, python: '  /chat/python  ' })) {
+    for (const [field, value] of Object.entries({ enabled: false, detectorEnabled: false, reanchoring: false, preset: 0, baselineCount: 1, windowCount: 100 })) {
       const label = fields[field]
       if (typeof value === 'boolean') await h.click(h.control(`Chat ${label}`))
       else if (field === 'preset') await h.control(`Chat ${label}`).props.onChange({ target: { value: String(value) } })
@@ -262,13 +261,12 @@ test('hard global master OFF and independently read-only snapshots disable every
       }
       await h.control('Chat Monitoring').props.onClick()
       await h.control('Use global for Sensitivity').props.onClick()
-      await h.control('Save Python interpreter for this chat').props.onClick()
       assert.equal(posts(h).length, 0)
     } finally { h.dispose() }
   }
 })
 
-test('invalid count, interpreter and sensitivity drafts are rejected locally without a request', async () => {
+test('invalid count and sensitivity drafts are rejected locally without a request', async () => {
   const server = backend(), h = harness(server.fetch)
   try {
     await h.settle()
@@ -279,9 +277,6 @@ test('invalid count, interpreter and sensitivity drafts are rejected locally wit
         assert.match(h.text(h.node(node => node.props.role === 'alert')), /valid whole number/)
       }
     }
-    h.input('Chat Python interpreter', '  ')
-    await h.click(h.control('Save Python interpreter for this chat')); await h.settle()
-    assert.match(h.text(h.node(node => node.props.role === 'alert')), /non-empty interpreter/)
     for (const invalid of ['-1', '5', '0.5', 'invalid']) await h.control('Chat Sensitivity').props.onChange({ target: { value: invalid } })
     assert.equal(posts(h).length, 0)
   } finally { h.dispose() }

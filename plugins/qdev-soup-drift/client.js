@@ -277,7 +277,6 @@ window.__ModuleLoader__.load({
       ['preset', 'Sensitivity', 'preset'],
       ['baselineCount', 'Baseline messages', 'number'],
       ['windowCount', 'Comparison window', 'number'],
-      ['python', 'Python interpreter', 'text'],
     ];
 
     function useSessionLiveStatus(sessionId) {
@@ -845,7 +844,6 @@ window.__ModuleLoader__.load({
       const grouped = visible ? [
         ['Controls', SESSION_FIELDS.slice(0, 3)],
         ['Detection', SESSION_FIELDS.slice(3, 6)],
-        ['Runtime', SESSION_FIELDS.slice(6)],
       ] : [];
       return h('main', { style: styles.sessionView, 'aria-label': 'SOUP settings for this chat', 'aria-busy': loading },
         h('header', { style: styles.sessionHeader },
