@@ -656,3 +656,26 @@ test('Appendix 11.2 Example C as a 5-reading window: perfectly coherent, far bel
     assert.doesNotMatch(h.text(), /Qualified near-boundary signal/)
   } finally { h.dispose() }
 })
+
+test('Focus rule is selectable in Convergence: default keeps the coherence cut; dispersion and 0.7 cuts re-label Example B as scattered', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.5
+  live.detector.history = examplesHistory([0.49, 0.80, 0.23, 0.49, 0.49])
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /Focus rule: focus = coherence at or above 0\.5/)
+    assert.match(h.text(), /Coherent and at or above the boundary/, 'default rule changed')
+    await h.click(h.button('Dispersion σ ≤ 0.10')); await h.settle()
+    assert.match(h.text(), /Focus rule: focus = dispersion \(σ\) at or below 0\.10/)
+    assert.match(h.text(), /Scattered and at or above the boundary/)
+    await h.click(h.button('Coherence ≥ 0.7')); await h.settle()
+    assert.match(h.text(), /Scattered and at or above the boundary/)
+    await h.click(h.button('Coherence ≥ 0.5 \(default\)')); await h.settle()
+    assert.match(h.text(), /Coherent and at or above the boundary/)
+  } finally { h.dispose() }
+})

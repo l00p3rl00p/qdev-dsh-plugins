@@ -774,7 +774,13 @@ window.__ModuleLoader__.load({
       'SCATTERED/LOW': 'Scattered and below the boundary: ordinary variation or isolated events.',
       'SCATTERED/HIGH': 'Scattered and at or above the boundary: mixed, conflicting, or multiple events.',
     };
-    function convergencePoints(history, threshold) {
+    // Focus rules (Appendix 11.2 open decision). The owner selects one in the Convergence view. Default is the original coherence cut.
+    const FOCUS_RULES = {
+      coherence: { label: 'Coherence ≥ 0.5 (default)', focused: (p) => p.coherence >= 0.5, note: 'focus = coherence at or above 0.5' },
+      coherence07: { label: 'Coherence ≥ 0.7', focused: (p) => p.coherence >= 0.7, note: 'focus = coherence at or above 0.7' },
+      dispersion: { label: 'Dispersion σ ≤ 0.10', focused: (p) => p.sigma <= 0.1, note: 'focus = dispersion (σ) at or below 0.10' },
+    };
+    function convergencePoints(history, threshold, rule = 'coherence') {
       const limit = Number(threshold) > 0 ? Number(threshold) : null;
       if (!limit) return [];
       const norm = (kl) => Math.min(1, Math.max(0, kl / (2 * limit)));
@@ -789,7 +795,7 @@ window.__ModuleLoader__.load({
           index: points.length, at: slice[slice.length - 1].at, slice, values,
           mean, sigma, coherence, distance: 0.5 - mean,
           crossings: slice.filter((point) => point.drift).length,
-          focus: coherence >= 0.5 ? 'FOCUSED' : 'SCATTERED',
+          focus: FOCUS_RULES[rule].focused({ coherence, sigma }) ? 'FOCUSED' : 'SCATTERED',
           magnitude: mean >= 0.5 ? 'HIGH' : 'LOW',
         });
       }
@@ -1081,7 +1087,8 @@ window.__ModuleLoader__.load({
       const live = sessionLive.live;
       const threshold = live?.effective?.threshold;
       const history = live?.detector?.history ?? [];
-      const points = convergencePoints(history, threshold);
+      const [focusRule, setFocusRule] = useState('coherence');
+      const points = convergencePoints(history, threshold, focusRule);
       const [selected, setSelected] = useState(null);
       const chosen = selected != null && points[selected] ? points[selected] : points[points.length - 1] ?? null;
       const W = 300, H = 240, P = 28;
@@ -1097,6 +1104,10 @@ window.__ModuleLoader__.load({
           h('h3', { style: styles.compactCardTitle }, 'Convergence'),
           h('button', { type: 'button', style: styles.compactButton, onClick: () => sessionLive.refresh() }, 'Refresh'),
         ),
+        h('div', { role: 'group', 'aria-label': 'Focus rule', style: styles.actionRow },
+          Object.keys(FOCUS_RULES).map((key) => h('button', { key, type: 'button', 'aria-pressed': focusRule === key, style: { ...styles.compactButton, fontWeight: focusRule === key ? 700 : 400 }, onClick: () => setFocusRule(key) }, FOCUS_RULES[key].label)),
+        ),
+        h('p', { style: styles.hint }, `Focus rule: ${FOCUS_RULES[focusRule].note}. Changing it changes only how points are grouped here.`),
         sessionLive.error ? h('p', { role: 'alert', style: styles.error }, sessionLive.error) : null,
         points.length === 0 ? h('p', { role: 'status', style: styles.hint }, `Waiting for ${CONVERGENCE_WINDOW} calculations`) : null,
         points.length === 0 ? null : h('section', { style: styles.compactCard, 'aria-label': 'Four-quadrant view' },

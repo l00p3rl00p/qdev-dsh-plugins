@@ -266,3 +266,11 @@ Telemetry to OTEL is parked. The OTEL path is a DSH method for SOUP to emit tele
 - **Installed:** commit ffdad12 (SOUP package version still 0.8.0; no version bump) into the main Harness with `dsh plugin --profile web remove` then `add` by full SHA, then a container restart.
 - **Checked:** the plugin list shows qdev-trajectory-drift-soup@0.8.0. The installed dist and client contain the decision log, test-outcome and drill-down code. No SOUP errors in the container log after the restart.
 - **Not checked:** the Web UI tabs, including the new drill-down sections, were not opened after this install. The Examples A–C check and the domain-meaning text are still open.
+
+### 9f. Focus rule selectable (2026-11-12)
+
+- **Decision:** the owner chose all three focus rules, selectable in the Convergence view. The default is the original rule (coherence ≥ 0.5), so existing readings are not re-labelled unless a different rule is picked.
+- **Rules:** coherence ≥ 0.5 (default); coherence ≥ 0.7; dispersion σ ≤ 0.10. The 0.7 and 0.10 cuts are proposed values; set them in the code if the owner wants others.
+- **Effect:** only the Convergence view's grouping changes. Stored readings, Host behaviour and qualified convergence are unchanged.
+- **Test:** Example B (5-reading version) is labelled focused under the default rule and scattered under the 0.7 and dispersion rules. 100 of 100 tests pass.
+- **Not yet done:** the choice is not stored. Each page load starts on the default.
