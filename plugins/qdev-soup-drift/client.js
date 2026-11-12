@@ -493,6 +493,10 @@ window.__ModuleLoader__.load({
         part === 'live' ? h('div', { style: styles.liveMetrics },
           h(SessionLiveMetric, { label: 'Current drift score (KL)', value: latest == null ? '—' : latest.toFixed(4) }),
           h(SessionLiveMetric, { label: 'Effective threshold', value: threshold == null ? '—' : Number(threshold).toFixed(2) }),
+          h(SessionLiveMetric, { label: 'Average KL', value: typeof live?.detector?.averageKlDivergence === 'number' ? live.detector.averageKlDivergence.toFixed(4) : '—' }),
+          h(SessionLiveMetric, { label: 'Session events', value: live?.trajectory?.sessionEvents ?? 0 }),
+          h(SessionLiveMetric, { label: 'Assistant messages', value: live?.trajectory?.assistantMessages ?? 0 }),
+          h(SessionLiveMetric, { label: 'Mentor deliveries', value: markers.filter((marker) => marker.kind !== 'crossing').length }),
         ) : null,
         part === 'live' ? (history.length ? h(KlChart, { history, markers, threshold }) : h('p', { role: 'status', style: styles.hint }, 'Waiting for measurements')) : null,
         part === 'mentor' ? h(GentleMentorSection, { sessionId, live, onSaved: sessionLive.refresh }) : null,
@@ -568,7 +572,7 @@ window.__ModuleLoader__.load({
           item, ' ', h('button', { type: 'button', style: styles.compactButton, disabled: disabled || working, onClick: () => setList(list.filter((_, i) => i !== index)) }, 'Remove'),
         ))) : h('p', { style: styles.hint }, 'No amendments.'),
         h('div', { style: styles.actionRow },
-          h('input', { 'aria-label': 'New plan amendment', value: entry, disabled: disabled || working, onChange: (event) => setEntry(event.target.value), style: { flex: 1 } }),
+          h('textarea', { 'aria-label': 'New plan amendment', rows: 3, value: entry, disabled: disabled || working, onChange: (event) => setEntry(event.target.value), style: { flex: 1, boxSizing: 'border-box' } }),
           h('button', { type: 'button', style: styles.compactButton, disabled: disabled || working || !entry.trim() || list.length >= 50, onClick: () => { setList([...list, entry.trim()]); setEntry(''); } }, 'Add'),
         ),
         h('div', { style: styles.actionRow },
@@ -595,12 +599,51 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // Details: a read-only SOUP-side panel with the Mentor prompt and the telemetry behind it.
+    // Opened from the SOUP tab only. It polls while open and never runs in the Settings view.
+    function SoupDetailsPanel({ sessionId, onClose }) {
+      const sessionLive = useSessionLiveStatus(sessionId);
+      const live = sessionLive.live;
+      const context = live?.mentor?.context ?? {};
+      const detector = live?.detector ?? {};
+      const trajectory = live?.trajectory ?? {};
+      const mentor = live?.mentor ?? {};
+      const threshold = live?.effective?.threshold;
+      const latest = detector.lastResult?.klDivergence;
+      const rows = [
+        ['Mentor message', context.message ?? '—'],
+        ['Current plan', context.plan ?? live?.mentor?.originalPlan ?? '—'],
+        ['Plan amendments', (context.amendments ?? []).length ? context.amendments.join(' · ') : 'none'],
+        ['Calculations', detector.evaluations ?? 0],
+        ['Qualifying drifts', detector.drifts ?? 0],
+        ['Average KL', typeof detector.averageKlDivergence === 'number' ? detector.averageKlDivergence.toFixed(4) : '—'],
+        ['Latest KL / threshold', typeof latest === 'number' ? `${latest.toFixed(4)} / ${Number(threshold).toFixed(2)}` : `— / ${threshold == null ? '—' : Number(threshold).toFixed(2)}`],
+        ['Session events', trajectory.sessionEvents ?? 0],
+        ['Assistant messages', trajectory.assistantMessages ?? 0],
+        ['Mentor deliveries', (detector.markers ?? []).filter((marker) => marker.kind !== 'crossing').length],
+        ['Trajectory · detector · mentor', `${trajectory.state ?? '—'} · ${detector.state ?? '—'} · ${mentor.state ?? '—'}`],
+        ['Carried drifts', mentor.carry ?? 0],
+      ];
+      return h('section', { style: styles.compactCard, 'aria-label': 'SOUP details' },
+        h('div', { style: styles.liveHeader },
+          h('h3', { style: styles.compactCardTitle }, 'Details'),
+          h('button', { type: 'button', style: styles.compactButton, onClick: onClose }, 'Close'),
+        ),
+        sessionLive.error ? h('p', { role: 'alert', style: styles.error }, sessionLive.error) : null,
+        rows.map(([label, value]) => h('div', { key: label, style: styles.compactRow },
+          h('span', { style: styles.label }, label),
+          h('span', { style: { ...styles.body, whiteSpace: 'normal', textAlign: 'right' } }, String(value)),
+        )),
+      );
+    }
+
     function SessionSettingsView({ sessionId }) {
       const [settings, setSettings] = useState(null);
       const [loading, setLoading] = useState(false);
       const [working, setWorking] = useState('');
       const [error, setError] = useState('');
       const [view, setView] = useState('settings');
+      const [details, setDetails] = useState(false);
       const scope = React.useRef({ id: sessionId, generation: 0, alive: true, busy: false, controller: null });
       if (scope.current.id !== sessionId) {
         scope.current.controller?.abort();
@@ -681,7 +724,9 @@ window.__ModuleLoader__.load({
             h('button', { type: 'button', 'aria-pressed': view === 'settings', style: styles.compactButton, onClick: () => setView('settings') }, 'Settings'),
             h('button', { type: 'button', 'aria-pressed': view === 'live', style: styles.compactButton, onClick: () => setView('live') }, 'Live'),
             h('button', { type: 'button', 'aria-pressed': view === 'mentor', style: styles.compactButton, onClick: () => setView('mentor') }, 'Mentor'),
+            h('button', { type: 'button', 'aria-pressed': details, disabled: view === 'settings', style: styles.compactButton, onClick: () => setDetails((open) => !open) }, 'Details'),
           ),
+          details && view !== 'settings' ? h(SoupDetailsPanel, { sessionId, onClose: () => setDetails(false) }) : null,
           view === 'live' || view === 'mentor' ? h(LiveMentorView, { sessionId, part: view }) : h('div', { style: styles.sessionBody },
           loading ? h('p', { role: 'status', style: styles.body }, 'Loading chat settings…') : null,
           visible && !visible.masterEnabled ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Global monitoring is OFF. Chat settings are read-only and cannot bypass the global master switch.') : visible && !visible.writable ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Chat settings are read-only.') : null,
