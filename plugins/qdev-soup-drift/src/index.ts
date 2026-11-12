@@ -17,7 +17,7 @@ import { createPluginRuntime, PRESETS } from '../runtime.mjs'
 // @ts-expect-error JavaScript settings module has no declaration file.
 import { createSessionSettings, SessionSettingsRecord, SessionSettingsError } from '../session-settings.mjs'
 // @ts-expect-error JavaScript module has no declaration file.
-import { applyMentorEdit, MentorContextRecord } from '../mentor-context.mjs'
+import { applyMentorEdit, MentorContextRecord, MENTOR_LIMITS } from '../mentor-context.mjs'
 // @ts-expect-error JavaScript module has no declaration file.
 import { GENTLE_MENTOR_MESSAGE } from '../reanchor.mjs'
 
@@ -209,13 +209,17 @@ const messageText = (answer: { answers: Array<{ selected: string[]; custom?: str
   return item?.custom?.trim() || item?.selected?.join(', ') || 'Continue with the original plan.'
 }
 
+// Derived from the Mentor limits so the reader and the schema cannot drift apart. The largest valid
+// request is one full plan (MENTOR_LIMITS.plan characters). JSON escaping and non-ASCII text can
+// expand each character to several bytes, so allow 6 bytes per character plus fixed JSON overhead.
+const MAX_BODY_BYTES = MENTOR_LIMITS.plan * 6 + 4096
 const readJsonBody = async (request: AsyncIterable<Uint8Array | string>): Promise<unknown> => {
   const chunks: Uint8Array[] = []
   let size = 0
   for await (const chunk of request) {
     const bytes = typeof chunk === 'string' ? new TextEncoder().encode(chunk) : chunk
     size += bytes.byteLength
-    if (size > 4096) throw new Error('Request body exceeds 4096 bytes')
+    if (size > MAX_BODY_BYTES) throw new Error(`Request body exceeds ${MAX_BODY_BYTES} bytes`)
     chunks.push(bytes)
   }
   const body = new Uint8Array(size)

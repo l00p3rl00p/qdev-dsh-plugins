@@ -541,9 +541,10 @@ window.__ModuleLoader__.load({
       const [draft, setDraft] = useState(value);
       const [working, setWorking] = useState(false);
       const [error, setError] = useState('');
+      // The parent keys this field on its saved value, so a saved change remounts it and shows the server text.
       async function save(next) {
         setWorking(true); setError('');
-        try { await onSave(next); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setWorking(false); }
+        try { await onSave(next); if (next === null) setDraft(value); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setWorking(false); }
       }
       return h('div', { style: { display: 'grid', gap: 6, marginTop: 8 } },
         h('div', { style: styles.liveHeader }, h('span', { style: styles.label }, label), h('span', { style: styles.sourceBadge }, customized ? 'chat' : 'default')),
@@ -561,9 +562,10 @@ window.__ModuleLoader__.load({
       const [entry, setEntry] = useState('');
       const [working, setWorking] = useState(false);
       const [error, setError] = useState('');
+      // The parent keys this list on its saved content, so a saved change remounts it and shows the server list.
       async function save(next) {
         setWorking(true); setError('');
-        try { await onSave(next); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setWorking(false); }
+        try { await onSave(next); if (next === null) setList([]); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setWorking(false); }
       }
       return h('div', { style: { display: 'grid', gap: 6, marginTop: 8 } },
         h('div', { style: styles.liveHeader }, h('span', { style: styles.label }, 'Plan amendments'), h('span', { style: styles.sourceBadge }, customized ? 'chat' : 'default')),
