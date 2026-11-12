@@ -980,7 +980,7 @@ window.__ModuleLoader__.load({
 
     return {
       name: 'qdev-trajectory-drift-soup-settings',
-      inject: ['slots', 'configForms', 'uiConversation'],
+      inject: ['slots', 'configForms'],
       apply(ctx) {
         soupUiConversation = ctx.uiConversation ?? null;
         ctx.uiConversation?.events?.register(soupToolDefinition);
