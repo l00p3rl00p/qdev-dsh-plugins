@@ -122,7 +122,7 @@ test('native SOUP conversation tab fetches immediately with inline controls, hea
     assert.match(script, /minHeight: 39/, 'compact session rows lost their tightened density')
     assert.match(script, /compact: true/, 'session toggles are not using the compact variant')
     assert.equal(h.requests.length, 1, 'mounted tab did not immediately fetch settings')
-    assert.equal(h.statusRequests.length, 1, 'mounted tab did not immediately fetch live trajectory status')
+    assert.equal(h.statusRequests.length, 0, 'Settings view fetched live status; only Live & Mentor may')
     assert.match(h.text(), /Loading chat settings/)
     assert.equal(h.button('Loading…').props.disabled, true)
     const get = h.requests[0]
@@ -136,16 +136,16 @@ test('native SOUP conversation tab fetches immediately with inline controls, hea
     assert.equal(h.nodes(node => node === h.button('Reload')).length, 1)
     assert.ok(header.props.children.some(node => node === h.button('Reload')), 'Reload is not in the compact header')
     assert.equal(h.button('Reload').props.disabled, false)
+    await h.click(h.button('Live & Mentor')); await h.settle()
+    assert.equal(h.statusRequests.length, 1, 'Live & Mentor did not fetch live status once')
     assert.match(h.text(), /Live trajectoryWithin thresholdLive chatReference4 \/ 4Live window1 \/ 4Latest KL \/ threshold0\.1200 \/ 0\.20Mentor0 drifts · ready/)
-    await h.click(h.button('Reload')); await h.settle()
-    assert.equal(h.requests.length, 2)
+    await h.click(h.button('Refresh')); await h.settle()
+    assert.equal(h.requests.length, 1, 'Refresh in Live & Mentor re-fetched settings')
     assert.equal(h.statusRequests.length, 2)
-    assert.equal(get.options.signal.aborted, true)
     assert.equal(h.statusRequests[0].options.signal.aborted, true)
     h.session(undefined); assert.equal(h.text(), '')
-    assert.equal(h.requests[1].options.signal.aborted, true)
     assert.equal(h.statusRequests[1].options.signal.aborted, true)
-    assert.equal(h.requests.length, 2, 'a tab without a session fetched settings')
+    assert.equal(h.requests.length, 1, 'a tab without a session fetched settings')
     assert.equal(h.statusRequests.length, 2, 'a tab without a session fetched live status')
   } finally { h.dispose() }
 })
@@ -159,6 +159,7 @@ test('same-chat polling fences an older live response that resolves after the ne
     return liveRequest === 1 ? older.promise : newer.promise
   })
   try {
+    await h.click(h.button('Live & Mentor')); await h.settle()
     assert.equal(h.statusRequests.length, 1)
     h.poll()
     assert.equal(h.statusRequests.length, 2)
@@ -362,4 +363,75 @@ test('A/B session switches fence late GETs, stale handlers and writes; unmount c
     const currentRequest = h.requests.at(-1)
     h.dispose(); assert.equal(currentRequest.options.signal.aborted, true)
   } catch (error) { h.dispose(); throw error }
+})
+
+// Per-chat Live & Mentor reset decision. Ported from client-controls (Settings-panel tests),
+// which asserted the removed Settings panel. Same assertions, per-chat endpoint and sessionId.
+const decisionLive = () => { const live = liveSnapshot('chat-A'); live.mentor.decisionPending = true; return live }
+
+test('Live & Mentor reset Yes/No POST the Host action for this chat and refresh the card', async () => {
+  for (const reset of [true, false]) {
+    const server = backend()
+    const h = harness((url, options) => {
+      if (options?.method === 'POST') return response({ ok: true, result: { accepted: true } })
+      if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: decisionLive() })
+      return server.fetch(url, options)
+    })
+    try {
+      await h.click(h.button('Live & Mentor')); await h.settle()
+      await h.click(h.button(reset ? 'Yes — reset to 0' : 'No — carry 3 forward')); await h.settle()
+      const post = posts(h)
+      assert.equal(post.length, 1)
+      assert.equal(post[0].url, '/qdev-soup-drift/status'); assert.equal(post[0].options.credentials, 'same-origin')
+      assert.deepEqual(JSON.parse(post[0].options.body), { action: 'reset-drift-count', sessionId: 'chat-A', reset })
+      assert.equal(h.statusRequests.length, 2, 'card did not refresh after the reset decision')
+    } finally { h.dispose() }
+  }
+})
+
+test('Live & Mentor reset busy guard: duplicate clicks send one POST, rejection shows and buttons restore', async () => {
+  const server = backend(), wait = deferred()
+  const h = harness((url, options) => {
+    if (options?.method === 'POST') return wait.promise
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: decisionLive() })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Live & Mentor')); await h.settle()
+    const action = h.click(h.button('Yes — reset to 0')); await h.settle()
+    assert.equal(h.button('Yes — reset to 0').props.disabled, true)
+    assert.equal(h.button('No — carry 3 forward').props.disabled, true)
+    await h.button('No — carry 3 forward').props.onClick()
+    assert.equal(posts(h).length, 1)
+    wait.resolve(response({ ok: false, result: { reason: 'disabled' } }, 409))
+    await action; await h.settle()
+    assert.match(h.text(h.node(node => node.props.role === 'alert')), /disabled/)
+    assert.equal(Boolean(h.button('Yes — reset to 0').props.disabled), false)
+  } finally { h.dispose() }
+})
+
+test('Live & Mentor reset buttons are disabled with no POST when monitoring is OFF', async () => {
+  const server = backend(), live = decisionLive(); live.effective.enabled = false
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Live & Mentor')); await h.settle()
+    for (const text of ['Yes — reset to 0', 'No — carry 3 forward']) {
+      assert.equal(h.button(text).props.disabled, true)
+      await h.button(text).props.onClick()
+    }
+    assert.equal(posts(h).length, 0)
+  } finally { h.dispose() }
+})
+
+test('Live & Mentor shows a status-endpoint failure and unmount aborts polling', async () => {
+  const server = backend()
+  const h = harness((url, options) => new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status' ? response({}, 503) : server.fetch(url, options))
+  await h.click(h.button('Live & Mentor')); await h.settle()
+  assert.match(h.text(), /Session status returned 503/)
+  const signal = h.statusRequests[0].options.signal
+  h.dispose()
+  assert.equal(signal.aborted, true)
 })

@@ -310,7 +310,7 @@ window.__ModuleLoader__.load({
           }
         }
         void refresh();
-        const timer = window.setInterval(refresh, 4000);
+        const timer = window.setInterval(refresh, 5000);
         return () => { active = false; window.clearInterval(timer); controller?.abort(); };
       }, [sessionId, refreshKey]);
       return { live, error, refresh: () => setRefreshKey(value => value + 1) };
@@ -336,7 +336,7 @@ window.__ModuleLoader__.load({
 
     // Human decision after escalation: reset the qualifying-drift count or carry three strikes forward.
     // Posts to the Host's reset-drift-count action, scoped to this chat's sessionId.
-    function ResetDecision({ sessionId, disabled }) {
+    function ResetDecision({ sessionId, disabled, onChanged }) {
       const [working, setWorking] = useState('');
       const [error, setError] = useState('');
       async function choose(reset) {
@@ -351,6 +351,7 @@ window.__ModuleLoader__.load({
           });
           const payload = await response.json();
           if (!response.ok || !payload.ok) throw new Error(payload.error || payload.result?.reason || `Reset action returned ${response.status}`);
+          onChanged?.();
         } catch (cause) {
           setError(cause instanceof Error ? cause.message : String(cause));
         } finally {
@@ -370,7 +371,7 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function SessionLiveCard({ live, error }) {
+    function SessionLiveCard({ live, error, onChanged }) {
       if (!live) return h('section', { style: styles.liveCard, 'aria-label': 'Live trajectory status' },
         h('div', { style: styles.liveHeader },
           h('h3', { style: styles.compactCardTitle }, 'Live trajectory'),
@@ -417,7 +418,7 @@ window.__ModuleLoader__.load({
         h('span', { style: { ...styles.inlineHint, whiteSpace: 'normal' } }, `Accountability: ${mentor.driftCount ?? 0} qualifying drift${mentor.driftCount === 1 ? '' : 's'} · ${mentor.carry ?? 0} carried across turns · two reminders, then escalation`),
         h('p', { style: styles.hint }, 'KL is the difference between recent output and the baseline: 0 means closely aligned, larger values mean more change, and a value above the threshold counts as drift.'),
         detector.averageKlDivergence == null ? null : h('span', { style: { ...styles.inlineHint, whiteSpace: 'normal' } }, `Average KL ${detector.averageKlDivergence.toFixed(4)} · ${detector.averageThresholdRatio.toFixed(1)}× the active threshold`),
-        mentor.decisionPending ? h(ResetDecision, { sessionId: live.sessionId, disabled: live.effective?.enabled === false }) : null,
+        mentor.decisionPending ? h(ResetDecision, { sessionId: live.sessionId, disabled: live.effective?.enabled === false, onChanged }) : null,
         result ? h('span', { style: { ...styles.inlineHint, whiteSpace: 'normal' } }, `Latest calculation: ${result.driftDetected ? 'drift detected' : 'within threshold'} at KL ${kl}`) : null,
         error ? h('p', { role: 'alert', style: styles.error }, error) : null,
       );
@@ -473,12 +474,69 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // Live & Mentor: a read-only per-chat glance. It polls only while this view is mounted (every 5 s).
+    function LiveMentorView({ sessionId }) {
+      const sessionLive = useSessionLiveStatus(sessionId);
+      const live = sessionLive.live;
+      const history = live?.detector?.history ?? [];
+      const markers = live?.detector?.markers ?? [];
+      const latest = history.length ? history[history.length - 1].kl : null;
+      const threshold = live?.effective?.threshold;
+      return h('div', { style: styles.sessionBody },
+        h('div', { style: styles.liveHeader },
+          h('h3', { style: styles.compactCardTitle }, 'Live & Mentor'),
+          h('button', { type: 'button', style: styles.compactButton, onClick: () => sessionLive.refresh() }, 'Refresh'),
+        ),
+        h(SessionLiveCard, { live, error: sessionLive.error, onChanged: sessionLive.refresh }),
+        h('div', { style: styles.liveMetrics },
+          h(SessionLiveMetric, { label: 'Current drift score (KL)', value: latest == null ? '—' : latest.toFixed(4) }),
+          h(SessionLiveMetric, { label: 'Effective threshold', value: threshold == null ? '—' : Number(threshold).toFixed(2) }),
+        ),
+        history.length ? h(KlChart, { history, markers, threshold }) : h('p', { role: 'status', style: styles.hint }, 'Waiting for measurements'),
+        h(GentleMentorSection, { plan: live?.mentor?.originalPlan ?? null }),
+        h('p', { style: styles.hint }, 'History resets when the Harness restarts.'),
+      );
+    }
+
+    // Inline SVG only. Colours are the existing DSH alias theme tokens used elsewhere in this file.
+    function KlChart({ history, markers, threshold }) {
+      const W = 300, H = 120, P = 8;
+      const t = Number(threshold) || 0;
+      const max = Math.max(t, ...history.map(p => p.kl), 0.0001) * 1.1;
+      const x = i => P + (history.length < 2 ? 0 : (i * (W - 2 * P)) / (history.length - 1));
+      const y = v => H - P - (v / max) * (H - 2 * P);
+      const points = history.map((p, i) => `${x(i).toFixed(1)},${y(p.kl).toFixed(1)}`).join(' ');
+      // A marker belongs to the last calculation at or before its time.
+      const marks = markers.map(m => {
+        let index = -1;
+        history.forEach((p, i) => { if (p.at <= m.at) index = i; });
+        return index < 0 ? null : { x: x(index), y: y(history[index].kl), kind: m.kind };
+      }).filter(Boolean);
+      return h('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'KL over recent calculations against the threshold', style: { width: '100%', height: 'auto', display: 'block' } },
+        h('line', { x1: P, x2: W - P, y1: y(t), y2: y(t), stroke: 'var(--dsw-alias-state-warn-primary)', strokeDasharray: '4 3' }),
+        h('polyline', { points, fill: 'none', stroke: 'var(--dsw-alias-brand-primary)', strokeWidth: 2 }),
+        ...marks.map((m, i) => h('circle', { key: i, cx: m.x.toFixed(1), cy: m.y.toFixed(1), r: 3, fill: m.kind === 'crossing' ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warn-primary)' })),
+      );
+    }
+
+    // Read-only glance at the Gentle Mentor prompt. Editing and amendments arrive in Feature 4.
+    function GentleMentorSection({ plan }) {
+      const planText = plan || 'Waiting for the first user message.';
+      return h('section', { style: styles.compactCard, 'aria-label': 'Gentle Mentor' },
+        h('h3', { style: styles.compactCardTitle }, 'Gentle Mentor'),
+        h('p', { style: styles.body }, `Message: "I noticed you might be drifting slightly off plan. Here's the original plan: …"`),
+        h('p', { style: styles.body }, `Original plan: ${planText}`),
+        h('p', { style: styles.body }, `Current plan: ${planText} (no edits yet)`),
+        h('p', { style: styles.body }, 'Plan amendments: none.'),
+      );
+    }
+
     function SessionSettingsView({ sessionId }) {
       const [settings, setSettings] = useState(null);
       const [loading, setLoading] = useState(false);
       const [working, setWorking] = useState('');
       const [error, setError] = useState('');
-      const sessionLive = useSessionLiveStatus(sessionId);
+      const [view, setView] = useState('settings');
       const scope = React.useRef({ id: sessionId, generation: 0, alive: true, busy: false, controller: null });
       if (scope.current.id !== sessionId) {
         scope.current.controller?.abort();
@@ -552,13 +610,17 @@ window.__ModuleLoader__.load({
             h('span', { style: styles.hint }, 'Only this chat'),
             visible ? h('span', { style: styles.sourceBadge }, `${overrideCount} override${overrideCount === 1 ? '' : 's'}`) : null,
           ),
-          h('button', { type: 'button', style: styles.compactButton, disabled: loading || Boolean(working), onClick: () => { void request(); sessionLive.refresh(); } }, loading ? 'Loading…' : 'Reload'),
+          h('button', { type: 'button', style: styles.compactButton, disabled: loading || Boolean(working), onClick: () => { void request(); } }, loading ? 'Loading…' : 'Reload'),
         ),
-        h('div', { style: styles.sessionBody },
+        h('div', null,
+          h('div', { role: 'group', 'aria-label': 'SOUP view', style: { display: 'flex', gap: 8, marginBottom: 10 } },
+            h('button', { type: 'button', 'aria-pressed': view === 'settings', style: styles.compactButton, onClick: () => setView('settings') }, 'Settings'),
+            h('button', { type: 'button', 'aria-pressed': view === 'live', style: styles.compactButton, onClick: () => setView('live') }, 'Live & Mentor'),
+          ),
+          view === 'live' ? h(LiveMentorView, { sessionId }) : h('div', { style: styles.sessionBody },
           loading ? h('p', { role: 'status', style: styles.body }, 'Loading chat settings…') : null,
           visible && !visible.masterEnabled ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Global monitoring is OFF. Chat settings are read-only and cannot bypass the global master switch.') : visible && !visible.writable ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Chat settings are read-only.') : null,
           visible ? h('div', { style: styles.sessionGrid },
-            h(SessionLiveCard, { live: sessionLive.live, error: sessionLive.error }),
             ...grouped.map(([title, fields]) => h('section', { key: title, style: title === 'Runtime' ? { ...styles.compactCard, gridColumn: '1 / -1' } : styles.compactCard, 'aria-label': `${title} settings` },
               h('h3', { style: styles.compactCardTitle }, title),
               ...fields.map(([field, label, type]) => h(SessionField, { key: field, field, label, type, settings: visible, disabled, mutate })),
@@ -572,7 +634,7 @@ window.__ModuleLoader__.load({
             )),
           ) : null,
           error ? h('p', { role: 'alert', style: { ...styles.error, marginTop: 10 } }, error) : null,
-        ),
+        )),
       );
     }
 
