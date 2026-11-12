@@ -460,3 +460,24 @@ test('Details is its own tab: it shows telemetry, fetches live status while open
     assert.doesNotMatch(h.text(), /Calculations/, 'Mentor tab showed telemetry')
   } finally { h.dispose() }
 })
+
+test('Convergence tab: four-quadrant view, separated evidence sections, qualified near-boundary note', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.2
+  live.detector.history = [0.19, 0.19, 0.19, 0.19, 0.19].map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: false }))
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /Four-quadrant view/)
+    assert.match(h.text(), /Raw measurements/)
+    assert.match(h.text(), /Statistical measures/)
+    assert.match(h.text(), /Interpretation \(hypothesis, not a verified event\)/)
+    assert.match(h.text(), /Qualified near-boundary signal/)
+    assert.match(h.text(), /SOUP calculations only/)
+    assert.doesNotMatch(h.text(), /Gentle Mentor/)
+  } finally { h.dispose() }
+})

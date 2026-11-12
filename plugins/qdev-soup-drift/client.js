@@ -666,6 +666,115 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // Convergence: a SOUP tab. A four-quadrant view of rolling windows over this chat's calculations.
+    // Navigational and read-only: quadrants describe the pattern, they do not decide an event.
+    // Measurements are normalized so the decision threshold sits at 0.5 (the appendix boundary): r = min(1, KL / (2 * threshold)).
+    const CONVERGENCE_WINDOW = 5;
+    const QUADRANT_NOTES = {
+      'FOCUSED/LOW': 'Coherent and below the boundary: calm, or riding near the limit (see distance from the boundary).',
+      'FOCUSED/HIGH': 'Coherent and at or above the boundary: a focused, elevated signal.',
+      'SCATTERED/LOW': 'Scattered and below the boundary: ordinary variation or isolated events.',
+      'SCATTERED/HIGH': 'Scattered and at or above the boundary: mixed, conflicting, or multiple events.',
+    };
+    function convergencePoints(history, threshold) {
+      const limit = Number(threshold) > 0 ? Number(threshold) : null;
+      if (!limit) return [];
+      const norm = (kl) => Math.min(1, Math.max(0, kl / (2 * limit)));
+      const points = [];
+      for (let end = CONVERGENCE_WINDOW; end <= history.length; end += 1) {
+        const slice = history.slice(end - CONVERGENCE_WINDOW, end);
+        const values = slice.map((point) => norm(point.kl));
+        const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+        const sigma = Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length);
+        const coherence = Math.max(0, 1 - 2 * sigma);
+        points.push({
+          index: points.length, at: slice[slice.length - 1].at, slice, values,
+          mean, sigma, coherence, distance: 0.5 - mean,
+          crossings: slice.filter((point) => point.drift).length,
+          focus: coherence >= 0.5 ? 'FOCUSED' : 'SCATTERED',
+          magnitude: mean >= 0.5 ? 'HIGH' : 'LOW',
+        });
+      }
+      points.forEach((point, i) => {
+        let run = 0;
+        for (let j = i; j >= 0 && points[j].focus === point.focus && points[j].magnitude === point.magnitude; j -= 1) run += 1;
+        point.persistence = run;
+      });
+      return points;
+    }
+    function ConvergenceView({ sessionId }) {
+      const sessionLive = useSessionLiveStatus(sessionId);
+      const live = sessionLive.live;
+      const threshold = live?.effective?.threshold;
+      const history = live?.detector?.history ?? [];
+      const points = convergencePoints(history, threshold);
+      const [selected, setSelected] = useState(null);
+      const chosen = selected != null && points[selected] ? points[selected] : points[points.length - 1] ?? null;
+      const W = 300, H = 240, P = 28;
+      const x = (magnitude) => P + magnitude * (W - 2 * P);
+      const y = (focus) => H - P - focus * (H - 2 * P);
+      const colorOf = (point) => point.magnitude === 'HIGH'
+        ? (point.focus === 'FOCUSED' ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warn-primary)')
+        : 'var(--dsw-alias-brand-primary)';
+      const key = chosen ? `${chosen.focus}/${chosen.magnitude}` : null;
+      const quadrantRect = (px, py, label) => h('rect', { key: label, x: px, y: py, width: (W - 2 * P) / 2, height: (H - 2 * P) / 2, fill: 'var(--dsw-alias-border-l2)', opacity: 0.25 });
+      return h('div', { style: styles.sessionBody },
+        h('div', { style: styles.liveHeader },
+          h('h3', { style: styles.compactCardTitle }, 'Convergence'),
+          h('button', { type: 'button', style: styles.compactButton, onClick: () => sessionLive.refresh() }, 'Refresh'),
+        ),
+        sessionLive.error ? h('p', { role: 'alert', style: styles.error }, sessionLive.error) : null,
+        points.length === 0 ? h('p', { role: 'status', style: styles.hint }, `Waiting for ${CONVERGENCE_WINDOW} calculations`) : null,
+        points.length === 0 ? null : h('section', { style: styles.compactCard, 'aria-label': 'Four-quadrant view' },
+          h('span', { style: styles.label }, 'Four-quadrant view'),
+          h('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Focus against magnitude for rolling windows', style: { width: '100%', height: 'auto', display: 'block', marginTop: 6 } },
+            quadrantRect(P, P, 'focused-low'), quadrantRect(W / 2, P, 'focused-high'),
+            quadrantRect(P, H / 2, 'scattered-low'), quadrantRect(W / 2, H / 2, 'scattered-high'),
+            h('line', { x1: x(0.5), x2: x(0.5), y1: P, y2: H - P, stroke: 'var(--dsw-alias-state-warn-primary)', strokeDasharray: '4 3' }),
+            h('text', { x: W / 2, y: P - 8, textAnchor: 'middle', fill: 'currentColor', fontSize: 10 }, 'HIGH FOCUS'),
+            h('text', { x: W / 2, y: H - 8, textAnchor: 'middle', fill: 'currentColor', fontSize: 10 }, 'LOW FOCUS'),
+            h('text', { x: P, y: H - 8, fill: 'currentColor', fontSize: 10 }, 'LOWER MAGNITUDE'),
+            h('text', { x: W - P, y: H - 8, textAnchor: 'end', fill: 'currentColor', fontSize: 10 }, 'HIGHER MAGNITUDE'),
+            points.map((point) => h('circle', {
+              key: point.index, cx: x(point.mean).toFixed(1), cy: y(point.coherence).toFixed(1),
+              r: 4 + Math.min(4, point.crossings), fill: colorOf(point), stroke: chosen && chosen.index === point.index ? 'currentColor' : 'none', strokeWidth: 2,
+              style: { cursor: 'pointer' }, role: 'button', 'aria-label': `window ending ${new Date(point.at).toLocaleTimeString()}`,
+              onClick: () => setSelected(point.index),
+            })),
+          ),
+        ),
+        chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Raw measurements' },
+          h('span', { style: styles.label }, 'Raw measurements'),
+          h('table', { style: { width: '100%', borderCollapse: 'collapse', marginTop: 6 } },
+            h('thead', null, h('tr', null, ['Time', 'KL', 'Normalized', 'Crossed'].map((title) => h('th', { key: title, style: { ...styles.inlineHint, textAlign: 'left', padding: '4px 6px' } }, title)))),
+            h('tbody', null, chosen.slice.map((point, i) => h('tr', { key: `${point.at}-${i}` },
+              h('td', { style: { padding: '4px 6px' } }, new Date(point.at).toLocaleTimeString()),
+              h('td', { style: { padding: '4px 6px' } }, point.kl.toFixed(4)),
+              h('td', { style: { padding: '4px 6px' } }, chosen.values[i].toFixed(3)),
+              h('td', { style: { padding: '4px 6px' } }, point.drift ? 'yes' : 'no'),
+            ))),
+          ),
+        ) : null,
+        chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Statistical measures' },
+          h('span', { style: styles.label }, 'Statistical measures'),
+          h('p', { style: styles.body }, `Mean ${chosen.mean.toFixed(3)} · dispersion ${chosen.sigma.toFixed(3)} · coherence ${chosen.coherence.toFixed(3)}`),
+          h('p', { style: styles.body }, `Distance from the boundary ${chosen.distance.toFixed(3)} · crossings in window ${chosen.crossings} · same quadrant for ${chosen.persistence} window${chosen.persistence === 1 ? '' : 's'}`),
+        ) : null,
+        chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Interpretation' },
+          h('span', { style: styles.label }, 'Interpretation (hypothesis, not a verified event)'),
+          h('p', { style: styles.body }, QUADRANT_NOTES[key]),
+          chosen.focus === 'FOCUSED' && chosen.magnitude === 'LOW' && chosen.distance < 0.05
+            ? h('p', { style: styles.body }, 'Qualified near-boundary signal: focused and just below the boundary. It needs evidence beyond these numbers before it means anything.')
+            : null,
+          h('p', { style: styles.hint }, 'The detector is unchanged. Its binary decision is shown as crossings above.'),
+        ) : null,
+        chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Evidence available' },
+          h('span', { style: styles.label }, 'Evidence available'),
+          h('p', { style: styles.hint }, 'SOUP calculations only. Tool calls, decisions, test outcomes and outlier subsets are not in this data yet.'),
+        ) : null,
+      );
+    }
+
     function SessionSettingsView({ sessionId }) {
       const [settings, setSettings] = useState(null);
       const [loading, setLoading] = useState(false);
@@ -753,8 +862,9 @@ window.__ModuleLoader__.load({
             h('button', { type: 'button', 'aria-pressed': view === 'live', style: styles.compactButton, onClick: () => setView('live') }, 'Live'),
             h('button', { type: 'button', 'aria-pressed': view === 'mentor', style: styles.compactButton, onClick: () => setView('mentor') }, 'Mentor'),
             h('button', { type: 'button', 'aria-pressed': view === 'details', style: styles.compactButton, onClick: () => setView('details') }, 'Details'),
+            h('button', { type: 'button', 'aria-pressed': view === 'convergence', style: styles.compactButton, onClick: () => setView('convergence') }, 'Convergence'),
           ),
-          view === 'details' ? h(SoupDetailsView, { sessionId }) : view === 'live' || view === 'mentor' ? h(LiveMentorView, { sessionId, part: view }) : h('div', { style: styles.sessionBody },
+          view === 'convergence' ? h(ConvergenceView, { sessionId }) : view === 'details' ? h(SoupDetailsView, { sessionId }) : view === 'live' || view === 'mentor' ? h(LiveMentorView, { sessionId, part: view }) : h('div', { style: styles.sessionBody },
           loading ? h('p', { role: 'status', style: styles.body }, 'Loading chat settings…') : null,
           visible && !visible.masterEnabled ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Global monitoring is OFF. Chat settings are read-only and cannot bypass the global master switch.') : visible && !visible.writable ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Chat settings are read-only.') : null,
           visible ? h('div', { style: styles.sessionGrid },
