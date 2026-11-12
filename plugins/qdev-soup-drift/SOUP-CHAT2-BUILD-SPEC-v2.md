@@ -260,3 +260,9 @@ Telemetry to OTEL is parked. The OTEL path is a DSH method for SOUP to emit tele
 - Domain-specific meaning text (aircraft, creative writing) is not built.
 - Concept blindness judgment (11.6) stays a human or agent step.
 - The decision and outcome changes are not installed in the Harness.
+
+### 9e. Install record (2026-11-12)
+
+- **Installed:** commit ffdad12 (SOUP package version still 0.8.0; no version bump) into the main Harness with `dsh plugin --profile web remove` then `add` by full SHA, then a container restart.
+- **Checked:** the plugin list shows qdev-trajectory-drift-soup@0.8.0. The installed dist and client contain the decision log, test-outcome and drill-down code. No SOUP errors in the container log after the restart.
+- **Not checked:** the Web UI tabs, including the new drill-down sections, were not opened after this install. The Examples A–C check and the domain-meaning text are still open.
