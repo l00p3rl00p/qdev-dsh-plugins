@@ -8,7 +8,7 @@ import { createPluginRuntime, PRESETS } from '../runtime.mjs';
 // @ts-expect-error JavaScript settings module has no declaration file.
 import { createSessionSettings, SessionSettingsRecord, SessionSettingsError } from '../session-settings.mjs';
 const PACKAGE_NAME = 'qdev-trajectory-drift-soup';
-const VERSION = '0.6.3';
+const VERSION = '0.7.0';
 const SOURCE = 'https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift';
 const STATUS_PATH = '/qdev-soup-drift/status';
 const SESSION_SETTINGS_PATH = '/api/qdev-soup/session-settings';

@@ -870,8 +870,13 @@ test('live per-chat progress, worker completion, latest KL and first/second Ment
   assert.equal(a.mentor.decisionPending, true)
   assert.equal(a.mentor.escalated, true)
   assert.equal(f.questions.length, 1)
-  assert.equal(Object.values(a.detector).some(Array.isArray), false, 'live endpoint exposed measurement history')
-  assert.equal(JSON.stringify(a).includes('Implement the original plan'), false, 'live endpoint exposed transcript content')
+  // Feature 3 (0.7.0): the per-chat view carries the last 50 calculations and markers, and nothing else as an array.
+  assert.deepEqual(Object.keys(a.detector).filter(key => Array.isArray(a.detector[key])).sort(), ['history', 'markers'], 'live endpoint exposed unexpected array fields')
+  assert.ok(a.detector.history.every(point => Object.keys(point).sort().join(',') === 'at,drift,kl,threshold'), 'history carries fields beyond measurements')
+  assert.ok(a.detector.markers.every(marker => ['crossing', 'reminder', 'escalation', 'clarification'].includes(marker.kind)), 'marker kind outside the allowed set')
+  // Transcript text may appear only in the Gentle Mentor plan field, never in trajectory, detector or effective settings.
+  assert.equal(JSON.stringify({ trajectory: a.trajectory, detector: a.detector, effective: a.effective }).includes('Implement the original plan'), false, 'live endpoint exposed transcript content outside the Gentle Mentor plan')
+  assert.ok(String(a.mentor.originalPlan).includes('Implement the original plan'), 'Gentle Mentor did not show the captured original plan')
   assert.deepEqual(await f.liveStatus(B), untouchedB, 'A live measurements or Mentor state leaked into B')
   f.start(B)
   f.assistant(B, BASELINE)

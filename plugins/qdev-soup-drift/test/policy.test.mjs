@@ -88,7 +88,7 @@ test('canonical native DSH plugin identity matches Cordis registration and packa
  const pkg=JSON.parse(readFileSync(fileURLToPath(new URL('../package.json',import.meta.url)),'utf8'));
  const patch=readFileSync(fileURLToPath(new URL('../cordis.patch.yml',import.meta.url)),'utf8');
  assert.equal(pkg.name,'qdev-trajectory-drift-soup');
- assert.equal(pkg.version,'0.6.3');
+ assert.equal(pkg.version,'0.7.0');
  assert.match(pkg.description,/trajectory drift/i);
  assert.equal(pkg.exports['./client'],'./client.js');
  assert.equal(pkg.exports['./icon'],'./icon.svg');

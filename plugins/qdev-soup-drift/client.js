@@ -224,7 +224,7 @@ window.__ModuleLoader__.load({
             ),
           ) : null,
           h('div', { style: styles.copy },
-            h('code', { style: styles.code }, 'qdev-trajectory-drift-soup · version 0.6.3'),
+            h('code', { style: styles.code }, 'qdev-trajectory-drift-soup · version 0.7.0'),
             h('a', {
               href: 'https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift',
               target: '_blank', rel: 'noreferrer',
