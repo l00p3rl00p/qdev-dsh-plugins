@@ -10,6 +10,13 @@ Make telemetry a reusable, one-call capability for producers without rebuilding 
 
 **Any producer → a common emission interface → existing native telemetry → existing Collector → verifiable ClickHouse evidence.**
 
+**Mandatory implementation dependencies (USE, do not merely inspect):**
+
+- **Standalone OTel Neuron Connector:** use the actual published TypeScript package at [library/typescript/otel-neuron-connector](https://github.com/l00p3rl00p/library/tree/main/typescript/otel-neuron-connector). Import its working typed event/emitter API in the DSH telemetry service. Do not recreate an equivalent wrapper in plugin source.
+- **Existing DSH plugin boundary:** reuse the actual native integration, package/build/install patterns and tool/UI service interfaces already exercised by [dsh-telemetry-seams](../plugins/dsh-telemetry-seams/). Use its [Cordis entry](../plugins/dsh-telemetry-seams/src/index.ts), [package contract](../plugins/dsh-telemetry-seams/package.json), [client](../plugins/dsh-telemetry-seams/src/client/), and [seam/probe model](../plugins/dsh-telemetry-seams/ARCHITECTURE.md) as the existing native boundary. Preserve the current read-only observer's behavior: do **not** turn that inventory service into the writer or disrupt its independent probes. A separate service implementation may be needed inside the native DSH plugin boundary.
+
+**Both must be used in the built plugin and demonstrated in tests.** They are not optional references, alternatives or a request to build new competing frameworks. The native DSH layer supplies the real supported reporter to the library; the library provides the emission operation; the existing Collector handles transport/routing.
+
 Do it in two independently released products:
 
 1. **Standalone library/Neuron Connector capability:** framework-independent observation interface and compatible emitter/transport adapters; usable without DSH. A Neuron Connector is a general reusable connection mechanism; OTel is one application, not the definition of the concept.
@@ -23,7 +30,8 @@ The library is not a DSH plugin. The plugin is not a second library, Collector, 
 |---|---|---|
 | [OTel Neuron Connector](https://github.com/l00p3rl00p/library/tree/main/typescript/otel-neuron-connector) | Existing standalone TypeScript package, currently manifest version `0.1.0`, with `createTelemetry`, `createMemoryEmitter`, a typed `emit` seam, Node tests and a Marimo experiment | `l00p3rl00p/library` |
 | [Telemetry V2 specification](TELEMETRY_V2_SPECIFICATION.md) | The original full requirement and acceptance contract, unchanged in its substantive sections | `qdev-dsh-plugins/docs` |
-| Native DSH Telemetry plugin | To be built from official supported DSH plugin/Cordis seams; must consume rather than duplicate the library | DSH plugin project |
+| [Existing DSH plugin boundary](../plugins/dsh-telemetry-seams/) | **Required reuse** of proven Cordis host/client registration, installation/build contract, tool and on-demand probe patterns; preserve the existing observer's read-only responsibility | `qdev-dsh-plugins/plugins/dsh-telemetry-seams` |
+| Native DSH Telemetry service plugin | Build within the established native plugin boundary **and import the published connector**. Service emits through the working native reporter, while the existing observer remains independent | DSH plugin project |
 | Native event reporter / OTel SDK | Existing emitter implementation, supplied by the consuming runtime | Existing infrastructure |
 | OTel Collector / ClickHouse | Existing routing and durable evidence path to inspect and prove, not replace | Existing infrastructure |
 
@@ -32,7 +40,7 @@ The library is not a DSH plugin. The plugin is not a second library, Collector, 
 ## Begin here: inspect and establish the baseline
 
 1. Read the complete [specification](TELEMETRY_V2_SPECIFICATION.md), then the standalone package's [README](https://github.com/l00p3rl00p/library/blob/main/typescript/otel-neuron-connector/README.md), [package.json](https://github.com/l00p3rl00p/library/blob/main/typescript/otel-neuron-connector/package.json), [TypeScript source](https://github.com/l00p3rl00p/library/blob/main/typescript/otel-neuron-connector/src/index.ts), [tests](https://github.com/l00p3rl00p/library/tree/main/typescript/otel-neuron-connector/test) and [AGENTS.md](https://github.com/l00p3rl00p/library/blob/main/typescript/otel-neuron-connector/AGENTS.md).
-2. Inspect the *actual installed* DSH native telemetry surface and the official plugin creator/Cordis service contract. Identify the supported reporter construction and lifecycle, for example `ctx.otel.createEventReporter(options)` followed by `reporter.emit(record)`. Validate against installed interfaces rather than assuming example names alone are sufficient.
+2. **Use the existing DSH plugin boundary:** inspect the checked-in `plugins/dsh-telemetry-seams` entry, package, client and probe/service patterns, and the *actual installed* DSH native telemetry surface and official plugin creator/Cordis service contract. Identify the supported reporter construction and lifecycle, for example `ctx.otel.createEventReporter(options)` followed by `reporter.emit(record)`. Validate against installed interfaces rather than assuming example names alone are sufficient.
 3. Inspect the existing Collector configuration and ClickHouse schema/ingestion route. Locate a supported, read-only way to check arrival of one uniquely identified test record. Identify producer inputs, optional destinations, and current working paths.
 4. Write a **short reuse/gap inventory** mapping specification requirements to existing code, a missing capability, and a directly runnable validation command. Don't rebuild working infrastructure or invent extra services.
 
@@ -46,6 +54,8 @@ npm test
 python3 test/marimo_equivalent.py
 npm pack --dry-run
 ```
+
+**Required consumer integration:** package the exact tested connector build as a real dependency of the native DSH service plugin and verify an invocation from a second plugin reaches the connector's `emit()` and then the native reporter. A shared naming convention, copied code, README link or stand-alone test does **not** satisfy this dependency.
 
 The published source is an independent package; the manifest declares `otel-neuron-connector@0.1.0`. **Do not assume the package is published to npm**, or that a GitHub release/tag is immutable. Before plugin installation, select an inspected commit or packaged artifact, record its integrity/checksum and resolved dependency, and test the exact bits the consumer will install. Use a versioned package file, Git dependency or supported workspace/package workflow as established by actual build and plugin-manager tests; do not copy the library source into the plugin.
 
@@ -93,17 +103,17 @@ Publish a tested library release independently. Its capability/version changes d
 
 Only after the standalone component's required gates have passed:
 
-1. Use the **official DSH plugin creator** and current installed native contracts. Build a minimal Cordis service that declares and imports the tested standalone package; the plugin owns adapter/reporter creation, registration, and disposal.
+1. **Use BOTH existing implementations as required inputs.** Follow the proven native Cordis/plugin/host-client packaging and lifecycle boundary in [`dsh-telemetry-seams`](../plugins/dsh-telemetry-seams/) and the official DSH plugin creator; **import and invoke** the actual tested [`otel-neuron-connector`](https://github.com/l00p3rl00p/library/tree/main/typescript/otel-neuron-connector) dependency in the native service implementation. Keep the existing `dsh-telemetry-seams` observer read-only and working. Use `ctx.otel` through properly declared native service injection when writing events; do not repurpose its observer-only `ctx.reflect.get()` inspection path to perform emission. The native plugin owns reporter construction, adapter, registration, UI and disposal.
 2. Expose a simple service method (conceptually `ctx.qTelemetry.emit(event)`) and verify a second independent DSH plugin consumes it via the normal service dependency path.
 3. Add native settings for the capabilities actually integrated; persist and reload them through official DSH configuration mechanisms. Do not build a separate settings framework.
 4. Add an observation view driven by real available telemetry/evidence. Separate emitted, accepted, stored, failed and unknown states; don't simulate evidence.
 5. Add **manual** Ping and Refresh buttons to test configured endpoints. No continuous health polling. Normal emission/error handling continues during regular operation.
 6. Verify installation, enable/disable, restart, configured settings persistence, dependency discovery, plugin removal, and library-independent release behavior.
-7. Re-run the same unique-event Collector → ClickHouse test through the registered DSH service and verify no regressions to the existing evidence path.
+7. Re-run the same unique-event Collector → ClickHouse test **through the second-plugin caller → native Cordis service → installed OTel Neuron Connector → native reporter**. Confirm the installed package resolution and that the old `telemetry_seams_inventory` tool / read-only browser probes still work, with no regression to the existing evidence path.
 
 ### Native plugin acceptance
 
-The plugin is complete only when it installs through the supported DSH workflow, registers a real Cordis service, another plugin can call it, settings and observation UI show actual integrated capabilities, manual probes work, restart/removal behaves safely, and ClickHouse confirms the unique test event. **The specification's complete Product B contract and final acceptance tests remain authoritative.**
+The plugin is complete only when the **real published connector package and existing native DSH plugin boundary were both reused in the implemented service**, verified by import/dependency-resolution and integration tests (not documentation alone), and it installs through the supported DSH workflow, registers a real Cordis service, another plugin can call it, settings and observation UI show actual integrated capabilities, manual probes work, restart/removal behaves safely, and ClickHouse confirms the unique test event. **The specification's complete Product B contract and final acceptance tests remain authoritative.**
 
 ## Release, security and change control
 
@@ -118,4 +128,4 @@ The plugin is complete only when it installs through the supported DSH workflow,
 
 Provide the independently versioned connector/library, native DSH plugin, install/upgrade instructions, capability and configuration references, test evidence, unique ClickHouse receipt, and explicit remaining gaps. Complete [all final acceptance tests in the specification](TELEMETRY_V2_SPECIFICATION.md#final-acceptance-tests). A plan, a mock, a successful local callback, or a package build alone is not acceptance.
 
-**Execution order:** Inspect existing source → inventory reused seams → build/verify one input/emitter/transport → Collector receipt → ClickHouse receipt → extend inputs → extend outputs → verify library portability/release → native DSH service/plugin → UI/manual probes → end-to-end regression → independent release.
+**Execution order:** Reuse published connector + existing native DSH plugin boundary → inspect existing source → inventory reused seams → build/verify one input/emitter/transport → Collector receipt → ClickHouse receipt → extend inputs → extend outputs → verify library portability/release → native DSH service/plugin → UI/manual probes → end-to-end regression → independent release.
