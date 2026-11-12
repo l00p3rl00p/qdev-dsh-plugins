@@ -48,6 +48,7 @@ const MENTOR_CONTEXT_DOMAIN = defineDomain({
 type LiveHistoryStored = {
   history: Array<{ at: number; kl: number; threshold: number; drift: boolean }>
   markers: Array<{ at: number; kind: 'crossing' | 'reminder' | 'escalation' | 'clarification' }>
+  tools?: Array<{ callId: string; name: string; startedAt: number; endedAt: number | null; error: boolean }>
 }
 const LIVE_HISTORY_DOMAIN = defineDomain({
   name: 'qdev_soup_live_history',
@@ -57,6 +58,7 @@ const LIVE_HISTORY_DOMAIN = defineDomain({
     sessions: domainTable<string, LiveHistoryStored>(z.object({
       history: z.array(z.object({ at: z.number(), kl: z.number(), threshold: z.number(), drift: z.boolean() })).max(50),
       markers: z.array(z.object({ at: z.number(), kind: z.enum(['crossing', 'reminder', 'escalation', 'clarification']) })).max(50),
+      tools: z.array(z.object({ callId: z.string(), name: z.string(), startedAt: z.number(), endedAt: z.number().nullable(), error: z.boolean() })).max(200).optional(),
     })),
   },
 })
@@ -258,7 +260,7 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
   const liveTools = new Map<string, ToolRecord[]>()
   const observeTool = (id: string, event: SessionEvent): void => {
     const data = event.data as unknown as { callId?: unknown; name?: unknown; message?: { source?: { callId?: unknown }; isError?: unknown } }
-    const list = liveTools.get(id) ?? []
+    const list = liveTools.get(id) ?? [...(initialLive[id]?.tools ?? [])]
     if (event.type === 'tool/call') {
       list.push({ callId: String(data.callId), name: String(data.name), startedAt: event.time, endedAt: null, error: false })
       if (list.length > 200) list.splice(0, list.length - 200)
@@ -271,6 +273,7 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
       }
     }
     liveTools.set(id, list)
+    persistLive(id, ensureSessionLive(id))
   }
   const runningDetectors = new Set<string>()
   const interventions = new Map<string, { controller: AbortController; record: DeliveryRecord }>()
@@ -410,7 +413,7 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
 
   // Write the chat's history and markers to its own storage row. Failures are recorded, never thrown.
   const persistLive = (id: string, live: SessionLiveRecord): void => {
-    void liveTable.put(id, { history: live.history, markers: live.markers })
+    void liveTable.put(id, { history: live.history, markers: live.markers, tools: liveTools.get(id) ?? initialLive[id]?.tools ?? [] })
       .catch((error: unknown) => recordError(error, { phase: 'live-history-persist', sessionId: id }))
   }
   const sessionLiveView = (id: string, attached = agents.has(id)) => {
@@ -437,7 +440,7 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
     return {
       sessionId: id,
       version: VERSION,
-      tools: liveTools.get(id) ?? [],
+      tools: liveTools.get(id) ?? initialLive[id]?.tools ?? [],
       attached,
       effective: {
         enabled: active,

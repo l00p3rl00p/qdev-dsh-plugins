@@ -39,6 +39,7 @@ const LIVE_HISTORY_DOMAIN = defineDomain({
         sessions: domainTable(z.object({
             history: z.array(z.object({ at: z.number(), kl: z.number(), threshold: z.number(), drift: z.boolean() })).max(50),
             markers: z.array(z.object({ at: z.number(), kind: z.enum(['crossing', 'reminder', 'escalation', 'clarification']) })).max(50),
+            tools: z.array(z.object({ callId: z.string(), name: z.string(), startedAt: z.number(), endedAt: z.number().nullable(), error: z.boolean() })).max(200).optional(),
         })),
     },
 });
@@ -124,7 +125,7 @@ export async function apply(ctx, config = {}) {
     const liveTools = new Map();
     const observeTool = (id, event) => {
         const data = event.data;
-        const list = liveTools.get(id) ?? [];
+        const list = liveTools.get(id) ?? [...(initialLive[id]?.tools ?? [])];
         if (event.type === 'tool/call') {
             list.push({ callId: String(data.callId), name: String(data.name), startedAt: event.time, endedAt: null, error: false });
             if (list.length > 200)
@@ -139,6 +140,7 @@ export async function apply(ctx, config = {}) {
             }
         }
         liveTools.set(id, list);
+        persistLive(id, ensureSessionLive(id));
     };
     const runningDetectors = new Set();
     const interventions = new Map();
@@ -267,7 +269,7 @@ export async function apply(ctx, config = {}) {
     };
     // Write the chat's history and markers to its own storage row. Failures are recorded, never thrown.
     const persistLive = (id, live) => {
-        void liveTable.put(id, { history: live.history, markers: live.markers })
+        void liveTable.put(id, { history: live.history, markers: live.markers, tools: liveTools.get(id) ?? initialLive[id]?.tools ?? [] })
             .catch((error) => recordError(error, { phase: 'live-history-persist', sessionId: id }));
     };
     const sessionLiveView = (id, attached = agents.has(id)) => {
@@ -294,7 +296,7 @@ export async function apply(ctx, config = {}) {
         return {
             sessionId: id,
             version: VERSION,
-            tools: liveTools.get(id) ?? [],
+            tools: liveTools.get(id) ?? initialLive[id]?.tools ?? [],
             attached,
             effective: {
                 enabled: active,
