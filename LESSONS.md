@@ -304,3 +304,15 @@ text in this repository that describes `prepare`, `allowBuilds`, or Git build ap
    `ENOENT` and its detector cannot run in QClean.
 10. **Still unverified:** Telemetry Seams' browser half still mounts its own remote (lesson 5 applies if its tab ever
     disappears), and none of this has been run against DSH 0.2.2-rc.2.
+
+## SOUP 0.7.0 install — November 12, 2026
+
+- **Install spec used:** `github:l00p3rl00p/qdev-dsh-plugins#7873081b548ae9b2a5df79233a74883f837d42ca&path:/plugins/qdev-soup-drift`
+  (branch `feature/soup-feature3-live-mentor`). Rollback anchor: the 0.6.3 spec `…#eb44a237635e061bc8349e1eaed115067b6c980a…`.
+- **Remove-then-add leaves a gap.** `dsh plugin remove` ran before `add`, so the main Harness had no SOUP between the two
+  steps. Keep the rollback spec in hand before removing, and add the new revision immediately after.
+- **Install is not run.** Config shows `qdev-trajectory-drift-soup` enabled. The Host log has no SOUP line until a
+  restart, so Host activation, the Web tab and the Live & Mentor view are not yet verified in the live Harness.
+- **Test policy.** Tests that encode a removed UI move with their assertions, rather than being deleted. Tests that
+  assert a privacy boundary narrow the boundary to the field that now carries the data (for example, the captured
+  plan in the Gentle Mentor field only).

@@ -10,6 +10,8 @@
 - **Drift visualization:** threshold graph and intervention/event history per chat.
 - **Persistent native settings:** retain effective configuration across reopen and restart.
 
+Status: 0.7.0 delivers the per-chat Live & Mentor view (card, KL chart, reset decision, read-only Gentle Mentor). Editing of the Gentle Mentor context and per-chat persistence remain open.
+
 ## Future feature — separate scope
 
 - **Original SOUP application visualization:** expose the real upstream SOUP application's capabilities without duplicating its engine.
