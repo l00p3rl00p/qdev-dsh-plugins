@@ -871,6 +871,51 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // Tool by failure type (Appendix 11.5 and 11.6). Two dimensions, read together:
+    //  - one failure type on one tool, repeated: the tool is probably misconfigured or not working. Fix the configuration, or guard it deterministically.
+    //  - one failure type across several tools: the cause is more likely shared (instructions or the input pattern). Fix the instructions, or validate the input deterministically.
+    // These readings are hypotheses to check, not verdicts.
+    function FailureMatrixSection({ tools }) {
+      const failed = (tools ?? []).filter((tool) => tool.error);
+      const toolNames = [...new Set(failed.map((tool) => tool.name))];
+      const typeOf = new Map();
+      const cell = new Map();
+      for (const tool of failed) {
+        const type = failureType(tool);
+        typeOf.set(type, true);
+        const key = `${type}||${tool.name}`;
+        cell.set(key, (cell.get(key) ?? 0) + 1);
+      }
+      const types = [...typeOf.keys()];
+      const readings = [];
+      for (const type of types) {
+        const onTools = toolNames.filter((name) => (cell.get(`${type}||${name}`) ?? 0) > 0);
+        const total = onTools.reduce((sum, name) => sum + cell.get(`${type}||${name}`), 0);
+        if (total < 2) continue;
+        if (onTools.length === 1) readings.push(`"${type}" on ${onTools[0]} (${total} times): the tool is probably misconfigured or not working. Fix the configuration, or guard it deterministically.`);
+        else readings.push(`"${type}" across ${onTools.join(', ')} (${total} times): the cause is more likely shared. Check the instructions or the input pattern, or validate it deterministically.`);
+      }
+      return h('section', { style: styles.compactCard, 'aria-label': 'Tool by failure type' },
+        h('span', { style: styles.label }, 'Tool by failure type'),
+        types.length === 0
+          ? h('p', { style: styles.hint }, 'No failed tool calls in this chat.')
+          : h('div', null,
+            h('div', { style: { overflowX: 'auto', marginTop: 6 } },
+              h('table', { style: { borderCollapse: 'collapse', width: '100%' } },
+                h('thead', null, h('tr', null, h('th', { style: { ...styles.inlineHint, textAlign: 'left', padding: '4px 6px' } }, 'Failure type'), toolNames.map((name) => h('th', { key: name, style: { ...styles.inlineHint, padding: '4px 6px' } }, name)))),
+                h('tbody', null, types.map((type) => h('tr', { key: type },
+                  h('td', { style: { padding: '4px 6px', fontSize: 11 } }, type),
+                  toolNames.map((name) => h('td', { key: name, style: { padding: '4px 6px', textAlign: 'center' } }, cell.get(`${type}||${name}`) ?? '')),
+                ))),
+              ),
+            ),
+            readings.length
+              ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, readings.map((reading, i) => h('li', { key: i, style: styles.body }, reading)))
+              : h('p', { style: styles.hint }, 'No failure type repeats enough to read yet.'),
+          ),
+      );
+    }
+
     // Concept blindness, the elimination step: list candidate explanations, drop each one the evidence contradicts,
     // and show what remains. Remaining candidates are not verified; judging them is the arbitration step for a human or agent.
     function EliminationSection({ history, tools, spc, threshold }) {
@@ -970,6 +1015,7 @@ window.__ModuleLoader__.load({
         h(OutlierClustersSection, { history, threshold }),
         h(SpcSection, { history }),
         h(RepeatedFailuresSection, { tools: live?.tools ?? [] }),
+        h(FailureMatrixSection, { tools: live?.tools ?? [] }),
         h(EliminationSection, { history, tools: live?.tools ?? [], spc: spcAnalysis(history), threshold }),
         chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Evidence available' },
           h('span', { style: styles.label }, 'Evidence available'),

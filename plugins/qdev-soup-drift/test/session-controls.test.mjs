@@ -518,3 +518,27 @@ test('Convergence: control chart flags a spike, repeated failures are named, eli
     assert.match(h.text(), /Still standing/)
   } finally { h.dispose() }
 })
+
+test('Convergence: tool by failure type reads one tool repeating versus one failure across tools', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.2
+  live.detector.history = [0.08, 0.09, 0.08, 0.07, 0.09, 0.08, 0.09, 0.08].map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: false }))
+  const fail = (callId, name, reason, at) => ({ callId, name, startedAt: at, endedAt: at + 50, error: true, reason })
+  live.tools = [
+    fail('t1', 'web_fetch', 'Request timed out after 30 seconds', 1700000000500),
+    fail('t2', 'web_fetch', 'Request timed out after 45 seconds', 1700000002500),
+    fail('e1', 'edit', 'Malformed edit: old_string not found at line 12', 1700000004500),
+    fail('e2', 'write', 'Malformed edit: old_string not found at line 40', 1700000006500),
+  ]
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /Tool by failure type/)
+    assert.match(h.text(), /"request timed out after # seconds" on web_fetch \(2 times\): the tool is probably misconfigured or not working/)
+    assert.match(h.text(), /"malformed edit: old_string not found at" across edit, write \(2 times\): the cause is more likely shared/)
+  } finally { h.dispose() }
+})
