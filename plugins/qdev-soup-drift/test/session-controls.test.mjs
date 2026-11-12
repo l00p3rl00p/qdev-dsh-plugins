@@ -476,3 +476,20 @@ test('Convergence tab: four-quadrant view, separated evidence sections, qualifie
     assert.doesNotMatch(h.text(), /Gentle Mentor/)
   } finally { h.dispose() }
 })
+
+test('Convergence: outlier clusters show agreeing calculations away from the median', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.2
+  const kls = [0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.24, 0.242, 0.238, 0.24]
+  live.detector.history = kls.map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: kl >= 0.2 }))
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /Outlier clusters/)
+    assert.match(h.text(), /4 calculations, at or above the boundary/)
+  } finally { h.dispose() }
+})

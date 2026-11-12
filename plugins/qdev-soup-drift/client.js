@@ -701,6 +701,47 @@ window.__ModuleLoader__.load({
       });
       return points;
     }
+    // Outlier clusters (Appendix 11.3): calculations far from this chat's typical level that agree with each other.
+    // Definition used here: an outlier is at least 0.2 from the median normalized value; neighbouring outliers within 0.05 form a cluster of at least two.
+    // Descriptive only: a cluster is a pattern to inspect, not an event verdict.
+    const OUTLIER_DISTANCE = 0.2;
+    const CLUSTER_GAP = 0.05;
+    const MIN_CLUSTER = 2;
+    function outlierClusters(history, threshold) {
+      const limit = Number(threshold) > 0 ? Number(threshold) : null;
+      if (!limit || history.length < MIN_CLUSTER) return [];
+      const items = history.map((point, index) => ({ index, at: point.at, kl: point.kl, value: Math.min(1, Math.max(0, point.kl / (2 * limit))) }));
+      const sorted = items.map((item) => item.value).sort((a, b) => a - b);
+      const mid = sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+      const outliers = items.filter((item) => Math.abs(item.value - mid) >= OUTLIER_DISTANCE).sort((a, b) => a.value - b.value);
+      const groups = [];
+      let current = [];
+      for (const item of outliers) {
+        if (current.length && item.value - current[current.length - 1].value > CLUSTER_GAP) { groups.push(current); current = []; }
+        current.push(item);
+      }
+      if (current.length) groups.push(current);
+      return groups.filter((members) => members.length >= MIN_CLUSTER).map((members) => {
+        const values = members.map((member) => member.value);
+        const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+        const sigma = Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length);
+        return { members, mean, median: mid, coherence: Math.max(0, 1 - 2 * sigma), side: mean >= 0.5 ? 'at or above the boundary' : 'below the boundary' };
+      });
+    }
+    function OutlierClustersSection({ history, threshold }) {
+      const clusters = outlierClusters(history, threshold);
+      return h('section', { style: styles.compactCard, 'aria-label': 'Outlier clusters' },
+        h('span', { style: styles.label }, 'Outlier clusters'),
+        clusters.length === 0
+          ? h('p', { style: styles.hint }, "No outlier cluster in this chat's calculations.")
+          : clusters.map((cluster, i) => h('div', { key: i, style: styles.compactRow },
+            h('span', { style: styles.body }, `${cluster.members.length} calculations, ${cluster.side}`),
+            h('span', { style: styles.hint }, `mean ${cluster.mean.toFixed(3)} · coherence ${cluster.coherence.toFixed(3)} · population median ${cluster.median.toFixed(3)}`),
+          )),
+        h('p', { style: styles.hint }, 'Outlier: at least 0.2 from the median of normalized values. Cluster: outliers within 0.05 of each other, at least two. Descriptive only.'),
+      );
+    }
+
     function ConvergenceView({ sessionId }) {
       const sessionLive = useSessionLiveStatus(sessionId);
       const live = sessionLive.live;
@@ -767,6 +808,7 @@ window.__ModuleLoader__.load({
             : null,
           h('p', { style: styles.hint }, 'The detector is unchanged. Its binary decision is shown as crossings above.'),
         ) : null,
+        h(OutlierClustersSection, { history, threshold }),
         chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Evidence available' },
           h('span', { style: styles.label }, 'Evidence available'),
           h('p', { style: styles.hint }, 'SOUP calculations only. Tool calls, decisions, test outcomes and outlier subsets are not in this data yet.'),
