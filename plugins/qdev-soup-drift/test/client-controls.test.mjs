@@ -57,7 +57,7 @@ function harness({ value = {}, writable = true, status = 'ready', mutate, fetch:
     return response(options.method === 'POST' ? { ok: true } : live)
   } }, { filename: 'qdev-soup-client.js' })
   assert.equal(module.name, 'qdev-trajectory-drift-soup-settings')
-  assert.deepEqual(plain(module.inject), ['slots', 'configForms'])
+  assert.deepEqual(plain(module.inject), ['slots', 'configForms', 'sidebarRight', 'sidebarRightTabs'])
   const cleanups = []
   module.apply({
     configForms: { get(entry) { assert.equal(entry, pkg.name); return source } },
@@ -65,6 +65,8 @@ function harness({ value = {}, writable = true, status = 'ready', mutate, fetch:
       inject(name, effect) { const cleanup = effect(); cleanups.push(cleanup); return cleanup },
       register(options, component) { registrations.push({ options, component }); return () => {} },
     },
+    sidebarRightTabs: { register(definition) { registrations.push({ options: { tabType: definition } }); return () => {} } },
+    sidebarRight: { openTab() {} },
     effect(effect) { const cleanup = effect(); cleanups.push(cleanup); return cleanup },
   })
   function expand(node, path) {
@@ -107,8 +109,8 @@ test('actual ModuleLoader registers settings and plugin detail; toggles mutate n
   const h = harness()
   try {
     h.mount()
-    // settings section, plugin detail rows, sidebar pane, sidebar pane title, sidebar hot key
-    assert.equal(h.registrations.length, 5)
+    // settings section, plugin detail rows, sidebar pane, sidebar pane title, sidebar tab type
+    assert.equal(h.registrations.length, 6)
     const detail = h.registrations.find((r) => r.options.key === `${pkg.name}#${pkg.name}`)
     assert.ok(detail, 'plugin detail registration is present')
     for (const [field, label] of Object.entries(labels)) {

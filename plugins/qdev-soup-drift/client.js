@@ -1316,8 +1316,13 @@ window.__ModuleLoader__.load({
     // No hot key here: reading an undeclared service (ctx.shortcuts) blocks activation. The user creates the hot key.
     return {
       name: 'qdev-trajectory-drift-soup-settings',
-      inject: ['slots', 'configForms'],
+      inject: ['slots', 'configForms', 'sidebarRight', 'sidebarRightTabs'],
       apply(ctx) {
+        // Tab type: the sidebar renders a SOUP tab through its registry, and openTab('soup') opens it.
+        ctx.effect(() => ctx.sidebarRightTabs.register({
+          id: 'soup-sidebar', kind: 'soup',
+          guide: [{ id: 'open-soup', title: () => 'SOUP', description: () => 'Live drift, Mentor and Convergence for this chat' }],
+        }), 'qdev-trajectory-drift-soup: sidebar tab type');
         ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
           name: 'sidebar.right.pane.tab', key: SOUP_PANE_ID,
         }, SoupSidebarTab));

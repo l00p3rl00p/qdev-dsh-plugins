@@ -64,7 +64,7 @@ function harness(fetch) {
     clearInterval(id) { timers.delete(id) },
     __ModuleLoader__: { load(value) { module = value.factory(name => { assert.equal(name, 'react'); return React }) } },
   } })
-  module.apply({ configForms: { get() { throw new Error('Per-chat UI must not access the global form') } }, slots: { inject(name, effect) { return effect() }, register(options, component) { registrations.push({ options, component }); return () => {} } }, effect(effect) { return effect() } })
+  module.apply({ configForms: { get() { throw new Error('Per-chat UI must not access the global form') } }, slots: { inject(name, effect) { return effect() }, register(options, component) { registrations.push({ options, component }); return () => {} } }, sidebarRightTabs: { register(definition) { registrations.push({ options: { tabType: definition } }); return () => {} } }, sidebarRight: { openTab() {} }, effect(effect) { return effect() } })
   const registration = registrations.find(item => item.options.name === 'conversation.view' && item.options.id === 'soup-session-settings')
   assert.ok(registration)
   function cleanup(instance) { for (const hook of instance.hooks) hook?.cleanup?.() }
