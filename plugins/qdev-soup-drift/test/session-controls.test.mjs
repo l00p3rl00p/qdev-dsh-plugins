@@ -611,3 +611,48 @@ test('Convergence: a focused cluster just under the boundary, persisting over se
     assert.match(h.text(), /same quadrant for 4 windows/)
   } finally { h.dispose() }
 })
+
+// Appendix 11.2 examples, as 5-reading windows (the view's window is 5). Values are already normalized, so the threshold is 0.5 and KL equals the value.
+const examplesHistory = (values) => values.map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.5, drift: kl >= 0.5 }))
+async function convergenceFor(values) {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.5
+  live.detector.history = examplesHistory(values)
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  await h.click(h.button('Convergence')); await h.settle()
+  return h
+}
+
+test('Appendix 11.2 Example A as a 5-reading window: tight just below 0.50, flagged as a qualified near-boundary signal, no crossings', async () => {
+  const h = await convergenceFor([0.49, 0.48, 0.47, 0.48, 0.48])
+  try {
+    assert.match(h.text(), /Mean 0\.480 · dispersion 0\.006 · coherence 0\.987/)
+    assert.match(h.text(), /Distance from the boundary 0\.020 · crossings in window 0/)
+    assert.match(h.text(), /Coherent and below the boundary/)
+    assert.match(h.text(), /Qualified near-boundary signal/)
+  } finally { h.dispose() }
+})
+
+test('Appendix 11.2 Example B as a 5-reading window: mean at the boundary with one crossing; the view labels its focus', async () => {
+  const h = await convergenceFor([0.49, 0.80, 0.23, 0.49, 0.49])
+  try {
+    assert.match(h.text(), /Mean 0\.500 · dispersion 0\.181 · coherence 0\.639/)
+    assert.match(h.text(), /crossings in window 1/)
+    // Spec 11.2 Example B reads as 'magnitude without focus' (scattered). The view's focus threshold is coherence >= 0.5, and this example's coherence is 0.639, so the view says FOCUSED/HIGH. Reported as an open decision, not changed here.
+    assert.match(h.text(), /Coherent and at or above the boundary/)
+    assert.doesNotMatch(h.text(), /Qualified near-boundary signal/)
+  } finally { h.dispose() }
+})
+
+test('Appendix 11.2 Example C as a 5-reading window: perfectly coherent, far below the boundary, no near-boundary note', async () => {
+  const h = await convergenceFor([0.005, 0.005, 0.005, 0.005, 0.005])
+  try {
+    assert.match(h.text(), /Mean 0\.005 · dispersion 0\.000 · coherence 1\.000/)
+    assert.match(h.text(), /Distance from the boundary 0\.495 · crossings in window 0/)
+    assert.doesNotMatch(h.text(), /Qualified near-boundary signal/)
+  } finally { h.dispose() }
+})
