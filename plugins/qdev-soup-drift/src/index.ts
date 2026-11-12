@@ -253,6 +253,25 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
   const pendingMessages = new Map<string, DeliveryRecord>()
   const runtimes = new Map<string, ReturnType<typeof createPluginRuntime>>()
   const sessionLive = new Map<string, SessionLiveRecord>()
+  // Tool calls per chat, read from DSH's own tool/call and tool/result session events. Memory only; last 200.
+  type ToolRecord = { callId: string; name: string; startedAt: number; endedAt: number | null; error: boolean }
+  const liveTools = new Map<string, ToolRecord[]>()
+  const observeTool = (id: string, event: SessionEvent): void => {
+    const data = event.data as unknown as { callId?: unknown; name?: unknown; message?: { source?: { callId?: unknown }; isError?: unknown } }
+    const list = liveTools.get(id) ?? []
+    if (event.type === 'tool/call') {
+      list.push({ callId: String(data.callId), name: String(data.name), startedAt: event.time, endedAt: null, error: false })
+      if (list.length > 200) list.splice(0, list.length - 200)
+    } else {
+      const callId = String(data.message?.source?.callId)
+      const record = [...list].reverse().find((item) => item.callId === callId)
+      if (record) {
+        record.endedAt = event.time
+        record.error = data.message?.isError === true
+      }
+    }
+    liveTools.set(id, list)
+  }
   const runningDetectors = new Set<string>()
   const interventions = new Map<string, { controller: AbortController; record: DeliveryRecord }>()
   let applySessionSettings: (id: string) => void = () => {}
@@ -418,6 +437,7 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
     return {
       sessionId: id,
       version: VERSION,
+      tools: liveTools.get(id) ?? [],
       attached,
       effective: {
         enabled: active,
@@ -794,6 +814,7 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
         status.mentor.lastOutcome = `${record.kind} delivered in native agent inbox event ${String(event.seq)}.`
       }
     }
+    if (event.type === 'tool/call' || event.type === 'tool/result') observeTool(sessionId, event)
     const runtime = runtimes.get(sessionId) ?? activateSession(sessionId, event)
     runtime?.observe(sessionId, event)
   })

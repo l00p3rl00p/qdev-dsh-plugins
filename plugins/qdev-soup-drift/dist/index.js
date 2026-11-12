@@ -121,6 +121,25 @@ export async function apply(ctx, config = {}) {
     const pendingMessages = new Map();
     const runtimes = new Map();
     const sessionLive = new Map();
+    const liveTools = new Map();
+    const observeTool = (id, event) => {
+        const data = event.data;
+        const list = liveTools.get(id) ?? [];
+        if (event.type === 'tool/call') {
+            list.push({ callId: String(data.callId), name: String(data.name), startedAt: event.time, endedAt: null, error: false });
+            if (list.length > 200)
+                list.splice(0, list.length - 200);
+        }
+        else {
+            const callId = String(data.message?.source?.callId);
+            const record = [...list].reverse().find((item) => item.callId === callId);
+            if (record) {
+                record.endedAt = event.time;
+                record.error = data.message?.isError === true;
+            }
+        }
+        liveTools.set(id, list);
+    };
     const runningDetectors = new Set();
     const interventions = new Map();
     let applySessionSettings = () => { };
@@ -275,6 +294,7 @@ export async function apply(ctx, config = {}) {
         return {
             sessionId: id,
             version: VERSION,
+            tools: liveTools.get(id) ?? [],
             attached,
             effective: {
                 enabled: active,
@@ -676,6 +696,8 @@ export async function apply(ctx, config = {}) {
                 status.mentor.lastOutcome = `${record.kind} delivered in native agent inbox event ${String(event.seq)}.`;
             }
         }
+        if (event.type === 'tool/call' || event.type === 'tool/result')
+            observeTool(sessionId, event);
         const runtime = runtimes.get(sessionId) ?? activateSession(sessionId, event);
         runtime?.observe(sessionId, event);
     });

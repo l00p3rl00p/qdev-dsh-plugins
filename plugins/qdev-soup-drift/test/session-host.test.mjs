@@ -269,7 +269,7 @@ async function fixture(t, { root, config = {}, liveIds = [A, B], optional = true
   function append(id, type, data) {
     const session = sessions.get(id)
     assert.ok(session)
-    const event = ['user/message', 'assistant/message'].includes(type)
+    const event = ['user/message', 'assistant/message', 'tool/result'].includes(type)
       ? session.append(type, data, { surfaceOp: 'append' }) : session.append(type, data)
     ctx.emit('session/event', session, event)
     return event
@@ -1089,4 +1089,18 @@ test('Feature 4: Gentle Mentor edits are validated, owner-only, refused when OFF
   assert.equal(after.mentor.context.message, 'Stay on the card.', 'Gentle Mentor message did not survive a restart')
   assert.equal(after.mentor.context.customized.plan, false)
   await reopened.close()
+})
+
+test('tool calls and results from DSH session events are recorded per chat and sent with the live status', async (t) => {
+  const f = await fixture(t)
+  f.start(A)
+  f.append(A, 'tool/call', { callId: 'c1', name: 'web_search', turn: 1, step: 1, arguments: {} })
+  f.append(A, 'tool/result', { turn: 1, step: 1, message: { source: { callId: 'c1' }, isError: true, content: [] } })
+  const live = await f.liveStatus(A)
+  assert.equal(live.tools.length, 1)
+  assert.equal(live.tools[0].name, 'web_search')
+  assert.equal(live.tools[0].error, true)
+  assert.ok(live.tools[0].endedAt >= live.tools[0].startedAt)
+  const other = await f.liveStatus(B)
+  assert.deepEqual(other.tools, [], 'tool calls leaked into another chat')
 })
