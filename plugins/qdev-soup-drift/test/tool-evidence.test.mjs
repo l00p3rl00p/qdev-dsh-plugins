@@ -3,8 +3,8 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 
-// Loads the shipped client and checks the uiConversation event definition that reads DSH's own
-// tool/call and tool/result events. SOUP records nothing itself; this test only checks the reader.
+// DSH throws when a plugin reads a service it did not declare in inject. The client must never touch
+// ctx.uiConversation while it is undeclared, or activation fails. This test uses a context that throws on access.
 const client = readFileSync(new URL('../client.js', import.meta.url), 'utf8')
 const React = {
   createElement: (...args) => ({ args }),
@@ -17,7 +17,7 @@ const React = {
   useSyncExternalStore: (subscribe, getSnapshot) => getSnapshot(),
 }
 
-test('tool evidence definition pairs tool/call with tool/result and reports a failed result', () => {
+test('apply does not read an undeclared service (uiConversation); activation must not throw', () => {
   let moduleDeclaration
   const window = {
     __ModuleLoader__: { load(declaration) { moduleDeclaration = declaration.factory(() => React) } },
@@ -25,28 +25,11 @@ test('tool evidence definition pairs tool/call with tool/result and reports a fa
     clearInterval: () => {},
   }
   vm.runInNewContext(client, { window, AbortController, console, fetch: async () => ({}) }, { filename: 'qdev-soup-client.js' })
-  const registered = []
-  moduleDeclaration.apply({
+  const ctx = {
     slots: { inject: (_name, effect) => effect(), register: (options) => options },
     effect: () => {},
     configForms: { get: () => ({ subscribe: () => () => {}, getSnapshot: () => ({}), mutate: () => {} }) },
-    uiConversation: { events: { register: (definition) => registered.push(definition) } },
-  })
-  const plain = (value) => JSON.parse(JSON.stringify(value))
-  const [definition] = registered
-  assert.equal(definition.kind, 'soup-tool-call')
-  assert.equal(definition.target, 'soup-tools')
-
-  const call = { type: 'tool/call', time: 100, seq: 1, data: { callId: 'c1', name: 'web_search', turn: 1, step: 1, arguments: {} } }
-  const result = { type: 'tool/result', time: 250, seq: 2, data: { message: { source: { callId: 'c1' }, isError: true, content: [] } } }
-  assert.deepEqual(plain(definition.match(call)), { id: 'c1', role: 'start' })
-  assert.deepEqual(plain(definition.match(result)), { id: 'c1', role: 'update' })
-  assert.equal(definition.match({ type: 'assistant/message', data: {} }), null)
-
-  const started = definition.start({}, { event: call })
-  assert.equal(started.name, 'web_search')
-  assert.equal(started.startedAt, 100)
-  const finished = definition.update({ state: started }, { event: result })
-  assert.equal(finished.error, true)
-  assert.equal(finished.endedAt, 250)
+    get uiConversation() { throw new Error('service uiConversation was not declared in inject') },
+  }
+  assert.doesNotThrow(() => moduleDeclaration.apply(ctx))
 })

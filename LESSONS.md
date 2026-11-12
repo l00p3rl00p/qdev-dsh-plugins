@@ -319,7 +319,7 @@ text in this repository that describes `prepare`, `allowBuilds`, or Git build ap
 - **Every Host import must ship.** A file the Host imports but `package.files` omits makes the installed Host fail to import. A policy test now checks this.
 - **One version source.** The release number lives only in `package.json`. The Host reads it at load; docs and
   code comments describe features, not numbers. Hand-maintained copies drifted across about ten places before this.
-- **A client service needs its manifest entry.** A new service in the client `inject` list (for example `uiConversation`) also needs the package that provides it in `dsh.client.inject` in `package.json`. Without it the plugin does not load, and the Host log shows nothing for the client. Copy the entry from a plugin that already uses the service.
+- **Never read an undeclared service.** A plugin that reads a service it did not declare in `inject` (for example `ctx.uiConversation` without it in the list) throws, and activation fails with "did not activate". Declare the service first, and keep a test context that throws on access, as DSH does. A test that passes `undefined` for a missing service hides this.
 - **Storage writes are not evidence by count.** Raw change counts include every domain; assert on the domain you mean.
 - **Test policy.** Tests that encode a removed UI move with their assertions, rather than being deleted. Tests that
   assert a privacy boundary narrow the boundary to the field that now carries the data (for example, the captured

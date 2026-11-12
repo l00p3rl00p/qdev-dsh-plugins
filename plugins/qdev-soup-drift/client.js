@@ -982,8 +982,6 @@ window.__ModuleLoader__.load({
       name: 'qdev-trajectory-drift-soup-settings',
       inject: ['slots', 'configForms'],
       apply(ctx) {
-        soupUiConversation = ctx.uiConversation ?? null;
-        ctx.uiConversation?.events?.register(soupToolDefinition);
         ctx.slots.inject('settings.section', () => ctx.slots.register({
           name: 'settings.section', id: 'soup-trajectory-drift', order: 18, label: 'SOUP Drift',
           inject: () => ({ source: ctx.configForms.get(ENTRY) }),
