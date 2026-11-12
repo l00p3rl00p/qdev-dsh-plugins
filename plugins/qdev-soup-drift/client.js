@@ -1318,7 +1318,8 @@ window.__ModuleLoader__.load({
       name: 'qdev-trajectory-drift-soup-settings',
       inject: ['slots', 'configForms', 'sidebarRight', 'sidebarRightTabs'],
       apply(ctx) {
-        // Tab type: the sidebar renders a SOUP tab through its registry, and openTab('soup') opens it.
+        // Tab type: the sidebar renders a SOUP tab through its registry. The guide entry's click opens it
+        // (the guide calls open(kind) for the entry), and ctx.sidebarRight.openTab('soup') opens it in code.
         ctx.effect(() => ctx.sidebarRightTabs.register({
           id: 'soup-sidebar', kind: 'soup',
           guide: [{ id: 'open-soup', title: () => 'SOUP', description: () => 'Live drift, Mentor and Convergence for this chat' }],
