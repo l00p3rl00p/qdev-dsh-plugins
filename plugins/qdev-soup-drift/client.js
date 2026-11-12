@@ -916,6 +916,50 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // Qualified convergence (the governing question): how strongly, how precisely, and toward what event the observations converge.
+    // A candidate event counts only with independent evidence sources. Sources are families: 'calculations' (SOUP's KL readings and
+    // control chart, which all come from the same readings) and 'tool telemetry' (DSH's tool calls and results).
+    // Levels: 1 source = observed; 2 = corroborated; 3 or more = convergent. Every level is a hypothesis to verify, never a verified event.
+    function qualifiedConvergence({ history, tools, threshold, spc }) {
+      const limit = Number(threshold) > 0 ? Number(threshold) : null;
+      const candidates = [];
+      if (limit !== null && history.length >= 3) {
+        const recent = history.slice(-3);
+        if (recent.every((point) => point.kl >= 0.5 * limit && point.kl < limit)) {
+          candidates.push({ event: 'The chat keeps riding just under the limit', sources: ['calculations'], contradicted: null });
+        }
+      }
+      if (spc && spc.flags.length) candidates.push({ event: 'A special cause is moving the calculations', sources: ['calculations'], contradicted: null });
+      for (const group of failureGroups(tools).filter((g) => g.list.length >= 2)) {
+        const times = group.list.map((tool) => tool.startedAt);
+        const from = Math.min(...times);
+        const to = Math.max(...times);
+        const sources = ['tool telemetry'];
+        const elevated = limit !== null && history.some((point) => point.at >= from && point.at <= to && point.kl >= 0.5 * limit);
+        if (elevated) sources.push('calculations');
+        candidates.push({ event: `The same failure keeps recurring: ${group.type}`, sources, contradicted: elevated ? null : 'the calculations were not elevated while it happened' });
+      }
+      const levelOf = (count) => (count >= 3 ? 'convergent' : count === 2 ? 'corroborated' : 'observed');
+      return candidates.map((c) => ({ ...c, level: levelOf(new Set(c.sources).size) }));
+    }
+    function QualifiedConvergenceSection({ history, tools, threshold, spc }) {
+      const items = qualifiedConvergence({ history, tools, threshold, spc });
+      const qualified = items.filter((item) => item.level !== 'observed');
+      return h('section', { style: styles.compactCard, 'aria-label': 'Qualified convergence' },
+        h('span', { style: styles.label }, 'Qualified convergence (hypotheses, not verified events)'),
+        qualified.length
+          ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, qualified.map((item, i) => h('li', { key: i, style: styles.body },
+            h('strong', null, item.level), ` · ${item.event}`,
+            h('div', { style: styles.hint }, `Independent sources: ${[...new Set(item.sources)].join(' + ')}`),
+            item.contradicted ? h('div', { style: styles.hint }, `Weakened because ${item.contradicted}.`) : null,
+          )))
+          : h('p', { style: styles.body }, items.length
+            ? `No qualified convergence. Each candidate rests on one source: ${items.map((item) => item.event.toLowerCase()).join('; ')}.`
+            : 'No qualified convergence. No candidate event has evidence yet.'),
+        h('p', { style: styles.hint }, 'Verifying a candidate needs evidence outside these sources, such as decisions and test outcomes, which are not built yet.'),
+      );
+    }
+
     // Concept blindness, the elimination step: list candidate explanations, drop each one the evidence contradicts,
     // and show what remains. Remaining candidates are not verified; judging them is the arbitration step for a human or agent.
     function EliminationSection({ history, tools, spc, threshold }) {
@@ -1017,6 +1061,7 @@ window.__ModuleLoader__.load({
         h(RepeatedFailuresSection, { tools: live?.tools ?? [] }),
         h(FailureMatrixSection, { tools: live?.tools ?? [] }),
         h(EliminationSection, { history, tools: live?.tools ?? [], spc: spcAnalysis(history), threshold }),
+        h(QualifiedConvergenceSection, { history, tools: live?.tools ?? [], threshold, spc: spcAnalysis(history) }),
         chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Evidence available' },
           h('span', { style: styles.label }, 'Evidence available'),
           h('p', { style: styles.hint }, 'SOUP calculations only. Tool calls, decisions, test outcomes and outlier subsets are not in this data yet.'),

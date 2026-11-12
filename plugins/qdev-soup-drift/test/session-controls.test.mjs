@@ -542,3 +542,27 @@ test('Convergence: tool by failure type reads one tool repeating versus one fail
     assert.match(h.text(), /"malformed edit: old_string not found at" across edit, write \(2 times\): the cause is more likely shared/)
   } finally { h.dispose() }
 })
+
+test('Convergence: qualified convergence needs two independent sources; a recurring failure during elevated readings is corroborated', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.2
+  const kls = [0.08, 0.08, 0.08, 0.08, 0.15, 0.15, 0.15, 0.15]
+  live.detector.history = kls.map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: false }))
+  const fail = (callId, reason, at) => ({ callId, name: 'web_fetch', startedAt: at, endedAt: at + 50, error: true, reason })
+  live.tools = [
+    fail('t1', 'Request timed out after 30 seconds', 1700000004500),
+    fail('t2', 'Request timed out after 45 seconds', 1700000006500),
+  ]
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /Qualified convergence \(hypotheses, not verified events\)/)
+    assert.match(h.text(), /corroborated · The same failure keeps recurring: request timed out after # seconds/)
+    assert.match(h.text(), /Independent sources: tool telemetry \+ calculations/)
+    assert.match(h.text(), /Verifying a candidate needs evidence outside these sources/)
+  } finally { h.dispose() }
+})
