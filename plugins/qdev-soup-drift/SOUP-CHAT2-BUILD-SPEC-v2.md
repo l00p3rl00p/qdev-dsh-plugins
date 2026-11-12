@@ -219,3 +219,14 @@ Telemetry to OTEL is parked. The OTEL path is a DSH method for SOUP to emit tele
 - **Qualified convergence:** a candidate counts only with independent sources (calculations, tool telemetry). One source is observed, two corroborated, three or more convergent. Every level is a hypothesis to verify.
 - **Studio simulation:** plugins/qdev-soup-drift/notebooks/convergence_simulation.py runs synthetic scenarios. It lives in the Studio container quatrus-development-marimo and is synced with scripts/sync-convergence-notebook.sh. The logic is mirrored by hand in Python; no parity test yet compares it with client.js.
 - **Not built:** decision and test-outcome evidence, and the event graph.
+
+
+### 9b. Close-out status (2026-11-12)
+
+- **Installed:** 623fac8 (SOUP 0.8.0) in the main Harness. Config shows the plugin; no SOUP errors in the boot log since the last restart.
+- **Verified in the Web UI:** plugin loads (user report), Settings, Live, Mentor and Details tabs, and the Convergence tab rendering with the chat waiting for data.
+- **Built, not fully verified live:** tool-call evidence, failure-type grouping, the tool-by-type table, the control chart, qualified convergence.
+- **Not built:** decision and test-outcome evidence; the event graph.
+- **Judgment step:** concept blindness, the final reading of what remains, stays with a human or agent.
+- **Open:** the outlier and normalization numbers (threshold maps to 0.5; outlier distance 0.2; cluster gap 0.05) need your confirmation.
+- **Not part of this close-out:** the release and gotchas notebooks, which are out of scope per your instruction.
