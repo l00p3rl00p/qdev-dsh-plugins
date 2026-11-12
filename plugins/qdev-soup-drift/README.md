@@ -92,7 +92,7 @@ Inside the DSH container, using the Scratchpad `main` checkout:
 ```sh
 cd ~/scratchpad/plugins/qdev-soup-drift
 pnpm install --ignore-scripts
-SOUP_PYTHON=/home/qdev/llm-runtime/tools/venvs/soup/bin/python pnpm run verify
+SOUP_PYTHON=python3 pnpm run verify
 # Review and commit only intended source, tests, and documentation before packaging.
 pnpm pack --pack-destination /tmp
 sha256sum /tmp/qdev-trajectory-drift-soup-0.6.3.tgz

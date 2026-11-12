@@ -21,7 +21,7 @@ The implementation reuses the seams recorded in `NATIVE_CAPABILITY_AUDIT.md`: gl
 
 ## Executed verification
 
-`PYTHONDONTWRITEBYTECODE=1 SOUP_PYTHON=/home/qdev/llm-runtime/tools/venvs/soup/bin/python pnpm run verify` passes **69/69 tests**, plus typecheck, build, Host import, Client syntax/static metadata checks and `git diff --check`.
+`PYTHONDONTWRITEBYTECODE=1 SOUP_PYTHON=python3 pnpm run verify` passes **69/69 tests**, plus typecheck, build, Host import, Client syntax/static metadata checks and `git diff --check`.
 
 Breakdown:
 

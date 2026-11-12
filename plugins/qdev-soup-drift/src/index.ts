@@ -57,7 +57,7 @@ export const name = PACKAGE_NAME
 export const inject = ['agents', 'storageDomain', 'webServer', 'userQuestions']
 
 export const Config = s.object({
-  python: s.string().default('/home/qdev/llm-runtime/tools/venvs/soup/bin/python')
+  python: s.string().default('python3')
     .description('Python interpreter containing the official soup-cli package.'),
   enabled: s.boolean().default(true).volatile().description('Master switch for trajectory observation and intervention.'),
   detectorEnabled: s.boolean().default(true).volatile().description('Run the official SOUP drift detector for observed assistant messages.'),
@@ -166,7 +166,7 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
   const settingsDomain = await ctx.storageDomain.open(SESSION_SETTINGS_DOMAIN)
   ctx.effect(() => () => settingsDomain.close())
   const readConfiguration = () => ({
-    python: config.python ?? process.env.SOUP_PYTHON ?? '/home/qdev/llm-runtime/tools/venvs/soup/bin/python',
+    python: config.python ?? process.env.SOUP_PYTHON ?? 'python3',
     enabled: config.enabled.get() ?? true,
     detectorEnabled: config.detectorEnabled.get() ?? true,
     reanchoring: config.reanchoring.get() ?? true,

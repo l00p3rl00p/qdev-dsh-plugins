@@ -243,7 +243,7 @@ Prove:
 - **D1 (before Feature 3).** No native slot exists for a card at the top of the chat. Options: (a) put the compact
   card in `conversation.composer.dock`, below the composer, as the Anthropic plugin does — this spec's default;
   (b) tab only, no card; (c) wait for an upstream slot. Not allowed: DOM injection.
-- **D2 (before Baseline).** QClean has no SOUP Python interpreter (`/home/qdev/llm-runtime/tools/venvs/soup/bin/python`
+- **D2 (before Baseline).** QClean has no SOUP Python interpreter (`python3`
   is missing there), so live drift cannot be proven in QClean. Options: install `soup-cli` in QClean and point
   `python` at it, or run runtime proofs on the main Harness.
 - **D3 (before Feature 4).** Whether per-chat plan edits should also be visible to the human as a chat message.

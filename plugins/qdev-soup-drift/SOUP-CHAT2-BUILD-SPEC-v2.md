@@ -38,7 +38,7 @@ Build order: **6 → 5 → 4 → 7 → 3**. Each depends only on the ones before
 The repo is visible inside the main Harness container, which has the real SOUP Python. Run tests there; it does not touch the Harness install.
 
 ```sh
-docker exec quatrus-harness-deepseek-harness bash -lc 'cd /home/qdev/github/qdev-dsh-plugins/plugins/qdev-soup-drift && PYTHONDONTWRITEBYTECODE=1 SOUP_PYTHON=/home/qdev/llm-runtime/tools/venvs/soup/bin/python pnpm run verify'
+docker exec quatrus-harness-deepseek-harness bash -lc 'cd /home/qdev/github/qdev-dsh-plugins/plugins/qdev-soup-drift && PYTHONDONTWRITEBYTECODE=1 SOUP_PYTHON=python3 pnpm run verify'
 ```
 
 Pass = typecheck, build, host check, client check, and `fail 0`. Paste the `tests / pass / fail` lines in your report.
