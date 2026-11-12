@@ -1,4 +1,4 @@
-> **CURRENT SOURCE:** `qdev-dsh-plugins/plugins/dsh-auto-code-correct`. The standalone ACC GitHub repository and Scratchpad copies are deprecated. QDocker Compose uses `stacks/harness/start-harness.sh` to fetch, verify, package and install ACC from this directory. For isolated tests, use `./qclean test-acc` from QDocker Compose. Historical commands below mentioning the old Scratchpad checkout or run IDs are retained for incident history **and must not be executed for current ACC installs**.
+> **CURRENT SOURCE:** `qdev-dsh-plugins/plugins/dsh-auto-code-correct`. The standalone ACC GitHub repository and private source copies are deprecated. Use the deployment's own startup tooling for deployment-specific packaging and installation; test with a clean, disposable Harness profile before installing into a live profile. Historical commands below mentioning the old private source checkout or run IDs are retained for incident history **and must not be executed for current ACC installs**.
 
 # ACC — Runbook
 
@@ -11,68 +11,15 @@
 From the Mac, if ACC makes Web unusable:
 
 ```sh
-docker exec -it quatrus-harness-deepseek-harness bash -lc 'dsh plugin --profile web remove dsh-auto-code-correct'
-docker restart quatrus-harness-deepseek-harness
+docker exec -it <harness-container> bash -lc 'dsh plugin --profile web remove dsh-auto-code-correct'
+docker restart <harness-container>
 ```
 
 The native `dsh plugin` command forwards to the target profile's pnpm package manager. It removes the **installed dependency**; if an explicit manually maintained Cordis patch still inserts ACC, the corresponding insertion must also be removed from the actual profile/home configuration before restarting. Diagnose with `dsh --profile web --dump-config` and inspect `$DSH_HOME/profiles/web/cordis.patch.yml` or `$DSH_HOME/cordis.patch.yml` **when those files exist**. Remove only the ACC insertion, not other plugin entries, sessions, tokens or profile configuration. See [official DSH CLI reference](https://github.com/deepseek-ai/deepseek-harness/blob/master/apps/cli/reference/README.md) and [shared plugin lessons](https://github.com/l00p3rl00p/qdev-dsh-plugins/blob/main/plugins/plugin-lessons.md).
 
-## Historical installation example — deprecated Scratchpad artifact (DO NOT RUN)
+## Historical installation example — deprecated private source artifact (DO NOT RUN)
 
-The [ACC GitHub Actions packager](.github/workflows/dsh-auto-code-correct-package.yml) builds from the tested Git commit, checks unresolved Web imports, smoke-loads the actual Web module, installs the tarball into a clean DSH profile, and uploads an artifact. **Prefer this exact artifact over building or fetching private Git dependencies inside the Docker container.** From an authenticated Mac Terminal:
-
-```sh
-set -e
-repo="l00p3rl00p/quatrus-scratchpad"
-run="42012146720"  # verified 0.1.9 readiness injection fix at commit 0f6fbc9
-tmp=$(mktemp -d)
-gh run download "$run" -R "$repo" -n dsh-auto-code-correct-plugin-0.1.9 -D "$tmp"
-test -f "$tmp/dsh-auto-code-correct-0.1.9.tgz"
-docker cp "$tmp/dsh-auto-code-correct-0.1.9.tgz" quatrus-harness-deepseek-harness:/tmp/dsh-auto-code-correct-0.1.9.tgz
-docker exec -it quatrus-harness-deepseek-harness bash -lc '
-set -euo pipefail
-dsh plugin --profile web remove dsh-auto-code-correct
-dsh plugin --profile web add /tmp/dsh-auto-code-correct-0.1.9.tgz
-cd "${DSH_HOME:-/home/qdev/.dsh}/profiles/web"
-node -e "const fs=require(\"node:fs\");const p=require.resolve(\"dsh-auto-code-correct/client\");const s=fs.readFileSync(p,\"utf8\");if(s.includes(\"require(\\\"@deepseek-ai/dsh-typert-protocol/remote-info\\\")\"))process.exit(1);console.log(\"Verified installed browser bundle:\",p)"
-dsh --profile web --dump-config >/dev/null
-'
-docker restart quatrus-harness-deepseek-harness
-rm -rf "$tmp"
-```
-
-This selectively replaces ACC in the **installed Web profile**, not Scratchpad source and not the Docker image. Re-installing the same package version via an explicit remove/add avoids retained cached package copies. The command stops on build/download/install/validation failures and does not restart a failing plugin installation. Once the container restarts, open DSH Web, confirm the plugin configuration page and AutoCorrect tab load without browser-console ModuleLoader errors, and perform a disposable real edit. A CI loader smoke test cannot prove the mounted React UI or actual DSH session operation.
-
-**Historical Git-source procedure (DEPRECATED — DO NOT RUN):** fetch the intended branch, build in a detached temporary worktree so uncommitted SOUP/telemetry work is untouched, and install only if the source checks pass. Match the printed revision to the successful GitHub Actions run before promoting to a live Web profile.
-
-```sh
-# Invoked from the Mac; fetches the branch to a fresh temporary worktree.
-docker exec -it quatrus-harness-deepseek-harness bash -lc '
-set -euo pipefail
-cd /home/qdev/scratchpad
-git fetch origin main
-sha=$(git rev-parse origin/main)
-echo "Building Git revision: $sha"
-worktree=$(mktemp -d /tmp/acc-install.XXXXXX)
-git worktree add --detach "$worktree" "$sha"
-cleanup() {
-  cd /home/qdev/scratchpad || true
-  git worktree remove --force "$worktree" 2>/dev/null || true
-}
-trap cleanup EXIT
-cd "$worktree/plugins/dsh-auto-code-correct"
-pnpm install --no-frozen-lockfile
-pnpm run verify
-mkdir -p dist
-pnpm pack --pack-destination dist
-version=$(node -p "require(\"./package.json\").version")
-test -f "dist/dsh-auto-code-correct-$version.tgz"
-dsh plugin --profile web add "./dist/dsh-auto-code-correct-$version.tgz"
-dsh --profile web --dump-config
-'
-```
-
-The command builds a **detached clean Git revision** from `origin/main`, not the Scratchpad's active working tree. The temporary worktree is removed after the command; it doesn't modify the original checkout. The printed SHA must match the passing Actions revision. If Git authentication fails inside Docker, refresh the Scratchpad's Git refs from the authenticated host, then rerun this exact command; never substitute an unrelated source or skip verification. Reinstalling a verified tarball updates the profile package, but the running DSH Web process must then be restarted **once**, and its browser module load must be tested. Never restart the entire container repeatedly just to test packaging.
+Deployment-specific; kept in private operations notes.
 
 ### Confirm installed readiness dashboard (ACC 0.1.9)
 
@@ -106,7 +53,7 @@ For a GitHub source installation, the package's `prepare` script builds the plug
 
 ## Completion and verification boundaries
 
-This is the operational contract for the ACC package inside the sole active `qdev-dsh-plugins` repository. The separate SOUP drift plugin is maintained at [`../qdev-soup-drift/`](../qdev-soup-drift/). Neither plugin requires the other, and model choice (local or frontier) is an independent DSH configuration decision. Keep source/package changes and their corresponding README, architecture, environment, and runbook instructions synchronized **within this repository**. Do not mirror ACC implementation into Scratchpad.
+This is the operational contract for the ACC package inside the sole active `qdev-dsh-plugins` repository. The separate SOUP drift plugin is maintained at [`../qdev-soup-drift/`](../qdev-soup-drift/). Neither plugin requires the other, and model choice (local or frontier) is an independent DSH configuration decision. Keep source/package changes and their corresponding README, architecture, environment, and runbook instructions synchronized **within this repository**. Do not mirror ACC implementation into a private source repository.
 
 The operator must confirm three independent outcomes: native Host registration, browser-side plugin settings that actually mount and persist, and actual ACC execution on a disposable edit (plus a separate Git hook check). A missing settings window is a real product defect, not a successful install. The tests below are the acceptance procedure, not a claim that a particular user's live Harness has already passed.
 
@@ -208,7 +155,7 @@ Test with a known failure in a disposable repository. The hook should fail the c
 
 The real workflow is [`.github/workflows/ci.yml`](.github/workflows/ci.yml). Before calling ACC fully implemented, inspect the current workflow run and validate: packaged plugin import, DSH native profile install, Auto-Correct language and capability off/on, LSP on/off and startup, Git hook invocation with staged-data pass/fail, and **persistence** across restart. CI currently defines build, lint, format, typecheck, Vitest and package checks; the complete three-group runtime acceptance sequence has **not** been proven by those declarations alone.
 
-`ACC_QDOCKER_READ_TOKEN` is the exact optional CI secret for the private QDev Code-and-Quality installer checkout. Without it, cross-repository inventory validation is skipped. See [ENVIRONMENT.md](ENVIRONMENT.md) for the exact source paths and environment flags.
+Historical optional cross-repository CI inputs are not required for a standalone ACC build. See [ENVIRONMENT.md](ENVIRONMENT.md) for current portable tool discovery and package checks.
 
 ## Current install path (added 2026-11-11)
 
