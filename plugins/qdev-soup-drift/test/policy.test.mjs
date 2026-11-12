@@ -117,3 +117,11 @@ test('Feature 4: per-chat context changes the second-drift prompt only; first dr
  assert.equal(injected[1].reminder,secondDriftReminder({message:'Stay with the card.',plan:'Ship the chart.',amendments:['Keep the footnote out.']}));
  assert.ok(injected[1].reminder.startsWith('Stay with the card.'));
 });
+test('every relative module the Host imports ships in package.files (installed Host must import)',()=>{
+ const pkg=JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'));
+ const src=readFileSync(new URL('../src/index.ts',import.meta.url),'utf8');
+ const imports=[...src.matchAll(/from '(\.\.\/[^']+)'/g)].map(m=>m[1].replace(/^\.\.\//,''));
+ const shipped=new Set(pkg.files.map(String));
+ const missing=imports.filter(name=>!shipped.has(name));
+ assert.deepEqual(missing,[],'Host imports files the package does not ship');
+});
