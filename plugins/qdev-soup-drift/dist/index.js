@@ -12,6 +12,7 @@ const VERSION = '0.6.3';
 const SOURCE = 'https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift';
 const STATUS_PATH = '/qdev-soup-drift/status';
 const SESSION_SETTINGS_PATH = '/api/qdev-soup/session-settings';
+const SESSION_STATUS_PATH = '/api/qdev-soup/session-status';
 const SESSION_SETTINGS_DOMAIN = defineDomain({
     name: 'qdev_soup_session_settings',
     version: 1,
@@ -87,6 +88,7 @@ export async function apply(ctx, config = {}) {
     const seenSessions = new Set();
     const pendingMessages = new Map();
     const runtimes = new Map();
+    const sessionLive = new Map();
     const runningDetectors = new Set();
     const interventions = new Map();
     let applySessionSettings = () => { };
@@ -193,6 +195,84 @@ export async function apply(ctx, config = {}) {
             }).catch((error) => recordError(error, { phase: 'mentor-state-persist', sessionId: snapshot.sessionId }));
         }
     };
+    const ensureSessionLive = (id) => {
+        const existing = sessionLive.get(id);
+        if (existing)
+            return existing;
+        const created = {
+            sessionEvents: 0,
+            assistantMessages: 0,
+            baselineSize: 0,
+            windowSize: 0,
+            pending: false,
+            evaluations: 0,
+            drifts: 0,
+        };
+        sessionLive.set(id, created);
+        return created;
+    };
+    const sessionLiveView = (id, attached = agents.has(id)) => {
+        const effective = effectiveSettings(id);
+        const record = sessionLive.get(id);
+        const storedMentor = initialMentorState[id] ?? {};
+        const mentor = runtimes.get(id)?.mentorState(id) ?? mentorSnapshots.get(id) ?? {
+            sessionId: id,
+            turn: null,
+            driftCount: Number.isInteger(storedMentor.carry) ? storedMentor.carry : 0,
+            carry: Number.isInteger(storedMentor.carry) ? storedMentor.carry : 0,
+            decisionPending: storedMentor.decisionPending === true,
+            escalated: false,
+        };
+        const active = resolved.enabled && effective.enabled;
+        const detectorActive = active && effective.detectorEnabled;
+        const trajectoryState = !active ? 'disabled' : !attached ? 'detached' : record ? 'observing' : 'waiting';
+        const detectorState = !detectorActive ? 'disabled' : !attached ? 'detached' : record?.pending
+            ? 'running' : record?.lastError ? 'error' : 'idle';
+        const mentorState = !active || !effective.reanchoring ? 'disabled'
+            : record?.mentorActivity === 'error' ? 'error'
+                : mentor.decisionPending || mentor.escalated || interventions.has(id) ? 'escalated'
+                    : record?.mentorActivity ?? 'ready';
+        return {
+            sessionId: id,
+            attached,
+            effective: {
+                enabled: active,
+                detectorEnabled: detectorActive,
+                reanchoring: active && effective.reanchoring,
+                threshold: PRESETS[effective.preset],
+                baselineTarget: effective.baselineCount,
+                windowTarget: effective.windowCount,
+            },
+            trajectory: {
+                state: trajectoryState,
+                sessionEvents: record?.sessionEvents ?? 0,
+                assistantMessages: record?.assistantMessages ?? 0,
+                baselineSize: record?.baselineSize ?? 0,
+                windowSize: record?.windowSize ?? 0,
+                ...(record?.lastEventAt === undefined ? {} : { lastEventAt: record.lastEventAt }),
+                ...(record?.lastEventType === undefined ? {} : { lastEventType: record.lastEventType }),
+            },
+            detector: {
+                state: detectorState,
+                pending: record?.pending ?? false,
+                evaluations: record?.evaluations ?? 0,
+                drifts: record?.drifts ?? 0,
+                ...(record?.lastStartedAt === undefined ? {} : { lastStartedAt: record.lastStartedAt }),
+                ...(record?.lastCompletedAt === undefined ? {} : { lastCompletedAt: record.lastCompletedAt }),
+                ...(record?.lastResult === undefined ? {} : { lastResult: record.lastResult }),
+                ...(record?.lastError === undefined ? {} : { lastError: record.lastError }),
+            },
+            mentor: {
+                state: mentorState,
+                turn: mentor.turn,
+                driftCount: mentor.driftCount,
+                carry: mentor.carry,
+                decisionPending: mentor.decisionPending,
+                escalated: mentor.escalated,
+                ...(record?.mentorError === undefined ? {} : { lastError: record.mentorError }),
+            },
+        };
+    };
     const deliver = (agent, record, text, form, report) => {
         const effective = effectiveSettings(String(agent.id));
         if (!effective.enabled || !effective.reanchoring) {
@@ -223,6 +303,8 @@ export async function apply(ctx, config = {}) {
             initialMentorState: { [id]: initialMentorState[id] },
             onMentorStateChange: updateMentorStatus,
             inject: ({ id, turn, attempt, reminder, report }) => {
+                const live = ensureSessionLive(id);
+                live.mentorActivity = 'reminding';
                 const record = { kind: 'reminder', attempt, sessionId: id, turn, requestedAt: Date.now(), state: 'pending' };
                 status.mentor.reminders.push(record);
                 status.mentor.reminders.splice(0, Math.max(0, status.mentor.reminders.length - 6));
@@ -231,6 +313,7 @@ export async function apply(ctx, config = {}) {
                 if (!agent) {
                     record.state = 'failed';
                     record.error = 'No live receiving agent';
+                    live.mentorActivity = 'error';
                     status.mentor.state = 'error';
                     ctx.logger.warn('SOUP reminder could not be injected: no agent session=%s', id);
                     return;
@@ -310,7 +393,18 @@ export async function apply(ctx, config = {}) {
                 status.mentor.lastOutcome = 'Stale cross-turn drift result suppressed.';
                 ctx.logger.info('SOUP stale drift suppressed session=%s currentTurn=%s reportTurn=%s', id, turn, reportTurn ?? '-');
             },
-            onObservation: ({ sessionId, baselineSize, baselineTarget, windowSize, windowTarget }) => {
+            onObservation: ({ sessionId, baselineSize, baselineTarget, windowSize, windowTarget, pending }) => {
+                const live = ensureSessionLive(sessionId);
+                live.baselineSize = baselineSize;
+                live.windowSize = windowSize;
+                live.pending = pending;
+                if (pending)
+                    runningDetectors.add(sessionId);
+                else
+                    runningDetectors.delete(sessionId);
+                if (status.detector.state !== 'disabled') {
+                    status.detector.state = runningDetectors.size ? 'running' : live.lastError ? 'error' : 'idle';
+                }
                 status.trajectory.state = 'observing';
                 status.trajectory.lastSessionId = sessionId;
                 status.trajectory.baselineSize = baselineSize;
@@ -319,19 +413,41 @@ export async function apply(ctx, config = {}) {
                 status.trajectory.windowTarget = windowTarget;
             },
             onEvaluationStart: ({ sessionId }) => {
+                const live = ensureSessionLive(sessionId);
+                live.pending = true;
+                live.lastStartedAt = Date.now();
+                delete live.lastError;
                 runningDetectors.add(sessionId);
                 status.detector.state = 'running';
-                status.detector.lastStartedAt = Date.now();
+                status.detector.lastStartedAt = live.lastStartedAt;
             },
             onEvaluation: ({ sessionId, turn, singleTurn, result }) => {
-                runningDetectors.delete(sessionId);
+                const live = ensureSessionLive(sessionId);
+                live.evaluations += 1;
+                if (result.drift_detected)
+                    live.drifts += 1;
+                live.lastCompletedAt = Date.now();
+                live.lastResult = {
+                    sessionId,
+                    turn,
+                    singleTurn,
+                    klDivergence: result.kl_divergence,
+                    threshold: result.threshold,
+                    driftDetected: result.drift_detected,
+                    completedAt: live.lastCompletedAt,
+                };
+                delete live.lastError;
+                if (live.pending)
+                    runningDetectors.add(sessionId);
+                else
+                    runningDetectors.delete(sessionId);
                 status.detector.state = runningDetectors.size ? 'running' : 'idle';
                 status.detector.evaluations += 1;
                 ratioTotal += result.kl_divergence / result.threshold;
                 klTotal += result.kl_divergence;
                 status.detector.averageKlDivergence = klTotal / status.detector.evaluations;
                 updateDriftSummary();
-                status.detector.lastCompletedAt = Date.now();
+                status.detector.lastCompletedAt = live.lastCompletedAt;
                 status.detector.lastResult = {
                     sessionId,
                     turn,
@@ -342,8 +458,18 @@ export async function apply(ctx, config = {}) {
                 };
             },
             onError: (error, details = {}) => {
-                if (details.sessionId)
-                    runningDetectors.delete(details.sessionId);
+                if (details.sessionId) {
+                    const live = ensureSessionLive(details.sessionId);
+                    if (live.pending)
+                        runningDetectors.add(details.sessionId);
+                    else
+                        runningDetectors.delete(details.sessionId);
+                    live.lastError = {
+                        at: Date.now(),
+                        message: error instanceof Error ? error.message : String(error),
+                        ...(details.phase === undefined ? {} : { phase: details.phase }),
+                    };
+                }
                 recordError(error, details);
             },
         });
@@ -376,7 +502,7 @@ export async function apply(ctx, config = {}) {
         const existing = runtimes.get(id);
         if (existing)
             return existing;
-        const agent = agents.get(id) ?? ctx.agents.list().find((item) => String(item.id) === id);
+        const agent = agents.get(id) ?? ctx.agents.get(id);
         if (!agent)
             return undefined;
         attachAgent(agent);
@@ -394,6 +520,13 @@ export async function apply(ctx, config = {}) {
         const reset = existing ? existing.configure(operational) : Boolean(agent && next.enabled);
         if (reset) {
             runningDetectors.delete(id);
+            const live = sessionLive.get(id);
+            if (live) {
+                live.baselineSize = 0;
+                live.windowSize = 0;
+                live.pending = false;
+                delete live.lastError;
+            }
             if (status.trajectory.lastSessionId === id) {
                 status.trajectory.baselineSize = 0;
                 status.trajectory.windowSize = 0;
@@ -428,6 +561,9 @@ export async function apply(ctx, config = {}) {
             const runtime = runtimes.get(id);
             if (runtime)
                 runtime.configure({ ...effectiveSettings(id), enabled: false });
+            const live = sessionLive.get(id);
+            if (live)
+                live.pending = false;
             runningDetectors.delete(id);
             refreshOperationalState();
         }
@@ -439,6 +575,12 @@ export async function apply(ctx, config = {}) {
         const sessionId = String(session.id);
         if (!effectiveSettings(sessionId).enabled)
             return;
+        const live = ensureSessionLive(sessionId);
+        live.sessionEvents += 1;
+        live.lastEventAt = event.time;
+        live.lastEventType = event.type;
+        if (event.type === 'assistant/message')
+            live.assistantMessages += 1;
         seenSessions.add(sessionId);
         status.trajectory.sessionEvents += 1;
         status.trajectory.sessionsObserved = seenSessions.size;
@@ -456,6 +598,9 @@ export async function apply(ctx, config = {}) {
                 record.deliveredAt = event.time;
                 record.eventSeq = Number(event.seq);
                 pendingMessages.delete(String(inserted.id));
+                const deliveredLive = sessionLive.get(record.sessionId);
+                if (deliveredLive)
+                    deliveredLive.mentorActivity = 'ready';
                 status.mentor.lastOutcome = `${record.kind} delivered in native agent inbox event ${String(event.seq)}.`;
             }
         }
@@ -469,9 +614,36 @@ export async function apply(ctx, config = {}) {
             status: code, headers: { 'cache-control': 'no-store' },
         });
         const view = (id) => ({ ...sessionSettings.read(id), writable: resolved.enabled });
-        const exists = async (id) => agents.has(id)
-            || ctx.agents.list().some((agent) => String(agent.id) === id)
-            || Boolean(await uiCtx.sessionPersistence.stat(id));
+        const presence = async (id) => {
+            const attached = agents.has(id) || Boolean(ctx.agents.get(id));
+            return { attached, exists: attached || Boolean(await uiCtx.sessionPersistence.stat(id)) };
+        };
+        const exists = async (id) => (await presence(id)).exists;
+        uiCtx.connection.fetch.register({
+            path: SESSION_STATUS_PATH,
+            methods: ['GET'],
+            requestBody: 'buffered',
+            async fetch(request) {
+                if (status.lifecycle.state !== 'active')
+                    return reply({ ok: false, error: 'plugin-disposed' }, 503);
+                try {
+                    const ids = new URL(request.url).searchParams.getAll('sessionId');
+                    if (ids.length !== 1)
+                        return reply({ ok: false, error: 'invalid-status', message: 'One session identifier is required' }, 400);
+                    sessionSettings.read(ids[0]);
+                    const found = await presence(ids[0]);
+                    if (!found.exists)
+                        return reply({ ok: false, error: 'session-not-found' }, 404);
+                    return reply({ ok: true, live: sessionLiveView(ids[0], found.attached) });
+                }
+                catch (error) {
+                    if (error instanceof SessionSettingsError) {
+                        return reply({ ok: false, error: 'invalid-status', message: String(error) }, 400);
+                    }
+                    return reply({ ok: false, error: 'status-unavailable', message: 'Unable to read live chat status' }, 500);
+                }
+            },
+        });
         uiCtx.connection.fetch.register({
             path: SESSION_SETTINGS_PATH,
             methods: ['GET', 'POST'],
@@ -606,6 +778,7 @@ export async function apply(ctx, config = {}) {
         for (const runtime of runtimes.values())
             runtime.dispose();
         runtimes.clear();
+        sessionLive.clear();
         runningDetectors.clear();
         agents.clear();
         pendingMessages.clear();

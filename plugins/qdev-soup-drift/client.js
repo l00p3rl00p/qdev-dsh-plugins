@@ -7,6 +7,7 @@ window.__ModuleLoader__.load({
 
     const ENTRY = 'qdev-trajectory-drift-soup';
     const THRESHOLDS = [0.05, 0.1, 0.2, 0.3, 0.4];
+    const SESSION_STATUS_PATH = '/api/qdev-soup/session-status';
     const ROW_KEYS = [`${ENTRY}#${ENTRY}`];
 
     const styles = {
@@ -54,6 +55,12 @@ window.__ModuleLoader__.load({
       sourceBadge: { display: 'inline-flex', alignItems: 'center', minHeight: 17, padding: '0 6px', borderRadius: 999, background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-secondary)', fontSize: 10, lineHeight: '16px', fontWeight: 650, whiteSpace: 'nowrap' },
       inlineHint: { color: 'var(--dsw-alias-label-secondary)', fontSize: 10, lineHeight: '16px', whiteSpace: 'nowrap' },
       compactButton: { padding: '4px 7px', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 6, background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)', font: 'inherit', fontSize: 11, lineHeight: '16px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' },
+      liveCard: { gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 11px', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 8, background: 'var(--dsw-alias-bg-layer-1)' },
+      liveHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
+      liveMetrics: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 5 },
+      liveMetric: { minWidth: 0, padding: '5px 7px', borderRadius: 6, background: 'var(--dsw-alias-bg-layer-2)' },
+      liveValue: { display: 'block', overflow: 'hidden', color: 'var(--dsw-alias-label-primary)', fontSize: 13, lineHeight: '18px', fontWeight: 680, textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+      liveMeter: { height: 3, marginTop: 4, overflow: 'hidden', borderRadius: 999, background: 'var(--dsw-alias-bg-base)' },
     };
 
     function SoupIcon({ size = 34 }) {
@@ -425,6 +432,102 @@ window.__ModuleLoader__.load({
       ['python', 'Python interpreter', 'text'],
     ];
 
+    function useSessionLiveStatus(sessionId) {
+      const [live, setLive] = useState(null);
+      const [error, setError] = useState('');
+      const [refreshKey, setRefreshKey] = useState(0);
+      useEffect(() => {
+        if (!sessionId) { setLive(null); setError(''); return undefined; }
+        let active = true;
+        let controller;
+        let generation = 0;
+        setLive(null);
+        async function refresh() {
+          controller?.abort();
+          const requestController = new AbortController();
+          controller = requestController;
+          const requestGeneration = ++generation;
+          const current = () => active && requestGeneration === generation && controller === requestController && !requestController.signal.aborted;
+          try {
+            const response = await fetch(`${SESSION_STATUS_PATH}?sessionId=${encodeURIComponent(sessionId)}`, {
+              credentials: 'same-origin', signal: requestController.signal, headers: { accept: 'application/json' },
+            });
+            const payload = await response.json();
+            if (!current()) return;
+            if (!response.ok || !payload.ok) throw new Error(payload.message || payload.error || `Session status returned ${response.status}`);
+            if (payload.live?.sessionId !== sessionId) throw new Error('Live status response belongs to a different chat.');
+            setLive(payload.live); setError('');
+          } catch (cause) {
+            if (current() && cause?.name !== 'AbortError') setError(cause instanceof Error ? cause.message : String(cause));
+          }
+        }
+        void refresh();
+        const timer = window.setInterval(refresh, 4000);
+        return () => { active = false; window.clearInterval(timer); controller?.abort(); };
+      }, [sessionId, refreshKey]);
+      return { live, error, refresh: () => setRefreshKey(value => value + 1) };
+    }
+
+    function SessionLiveMetric({ label, value, current, target }) {
+      const percent = Number.isFinite(current) && Number.isFinite(target) && target > 0
+        ? Math.min(100, Math.round((current / target) * 100)) : null;
+      return h('div', { style: styles.liveMetric },
+        h('span', { style: styles.inlineHint }, label),
+        h('strong', { style: styles.liveValue }, value),
+        percent == null ? null : h('div', { style: styles.liveMeter, role: 'progressbar', 'aria-label': label, 'aria-valuemin': 0, 'aria-valuemax': target, 'aria-valuenow': Math.min(current, target) },
+          h('span', { style: { display: 'block', width: `${percent}%`, height: '100%', background: 'var(--dsw-alias-brand-primary)' } }),
+        ),
+      );
+    }
+
+    function SessionLiveCard({ live, error }) {
+      if (!live) return h('section', { style: styles.liveCard, 'aria-label': 'Live trajectory status' },
+        h('div', { style: styles.liveHeader },
+          h('h3', { style: styles.compactCardTitle }, 'Live trajectory'),
+          h('span', { style: styles.sourceBadge }, error ? 'Unavailable' : 'Loading…'),
+        ),
+        error ? h('p', { role: 'alert', style: styles.error }, error) : null,
+      );
+      const trajectory = live.trajectory ?? {};
+      const detector = live.detector ?? {};
+      const mentor = live.mentor ?? {};
+      const effective = live.effective ?? {};
+      const result = detector.lastResult;
+      const summary = trajectory.state === 'disabled' ? 'Monitoring off'
+        : trajectory.state === 'detached' ? 'Chat detached'
+          : detector.state === 'disabled' ? 'Detector off'
+            : detector.state === 'running' ? 'Evaluating'
+            : detector.state === 'error' ? 'Detector error'
+              : result?.driftDetected ? 'Drift detected'
+                : result ? 'Within threshold'
+                  : trajectory.baselineSize < effective.baselineTarget ? 'Building baseline' : 'Monitoring';
+      const stateColor = summary === 'Within threshold' || summary === 'Monitoring'
+        ? 'var(--dsw-alias-state-success-primary)'
+        : summary === 'Drift detected' || summary === 'Detector error'
+          ? 'var(--dsw-alias-state-error-primary)'
+          : 'var(--dsw-alias-state-warn-primary)';
+      const kl = typeof result?.klDivergence === 'number'
+        ? `${result.klDivergence.toFixed(4)} / ${Number(result.threshold).toFixed(2)}`
+        : `— / ${Number(effective.threshold).toFixed(2)}`;
+      return h('section', { style: styles.liveCard, 'aria-label': 'Live trajectory status' },
+        h('div', { style: styles.liveHeader },
+          h('div', { style: styles.compactMeta },
+            h('h3', { style: { ...styles.compactCardTitle, padding: 0 } }, 'Live trajectory'),
+            h('strong', { role: 'status', 'aria-live': 'polite', style: { ...styles.label, fontSize: 13, color: stateColor } }, summary),
+          ),
+          h('span', { style: styles.sourceBadge }, live.attached ? 'Live chat' : 'Stored chat'),
+        ),
+        h('div', { style: styles.liveMetrics },
+          h(SessionLiveMetric, { label: 'Reference', value: `${trajectory.baselineSize ?? 0} / ${effective.baselineTarget ?? '—'}`, current: trajectory.baselineSize, target: effective.baselineTarget }),
+          h(SessionLiveMetric, { label: 'Live window', value: `${trajectory.windowSize ?? 0} / ${effective.windowTarget ?? '—'}`, current: trajectory.windowSize, target: effective.windowTarget }),
+          h(SessionLiveMetric, { label: 'Latest KL / threshold', value: kl }),
+          h(SessionLiveMetric, { label: 'Mentor', value: `${mentor.driftCount ?? 0} drift${mentor.driftCount === 1 ? '' : 's'} · ${mentor.state ?? 'unavailable'}` }),
+        ),
+        h('span', { style: { ...styles.inlineHint, whiteSpace: 'normal' } }, `${detector.evaluations ?? 0} calculation${detector.evaluations === 1 ? '' : 's'} · ${detector.drifts ?? 0} qualifying drift${detector.drifts === 1 ? '' : 's'} · latest activity ${formatTime(trajectory.lastEventAt)}`),
+        error ? h('p', { role: 'alert', style: styles.error }, error) : null,
+      );
+    }
+
     function SessionField({ field, label, type, settings, disabled, mutate }) {
       const overridden = Object.prototype.hasOwnProperty.call(settings.overrides, field);
       const value = overridden ? settings.overrides[field] : settings.base[field];
@@ -480,6 +583,7 @@ window.__ModuleLoader__.load({
       const [loading, setLoading] = useState(false);
       const [working, setWorking] = useState('');
       const [error, setError] = useState('');
+      const sessionLive = useSessionLiveStatus(sessionId);
       const scope = React.useRef({ id: sessionId, generation: 0, alive: true, busy: false, controller: null });
       if (scope.current.id !== sessionId) {
         scope.current.controller?.abort();
@@ -553,12 +657,13 @@ window.__ModuleLoader__.load({
             h('span', { style: styles.hint }, 'Only this chat'),
             visible ? h('span', { style: styles.sourceBadge }, `${overrideCount} override${overrideCount === 1 ? '' : 's'}`) : null,
           ),
-          h('button', { type: 'button', style: styles.compactButton, disabled: loading || Boolean(working), onClick: () => { void request(); } }, loading ? 'Loading…' : 'Reload'),
+          h('button', { type: 'button', style: styles.compactButton, disabled: loading || Boolean(working), onClick: () => { void request(); sessionLive.refresh(); } }, loading ? 'Loading…' : 'Reload'),
         ),
         h('div', { style: styles.sessionBody },
           loading ? h('p', { role: 'status', style: styles.body }, 'Loading chat settings…') : null,
           visible && !visible.masterEnabled ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Global monitoring is OFF. Chat settings are read-only and cannot bypass the global master switch.') : visible && !visible.writable ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Chat settings are read-only.') : null,
           visible ? h('div', { style: styles.sessionGrid },
+            h(SessionLiveCard, { live: sessionLive.live, error: sessionLive.error }),
             ...grouped.map(([title, fields]) => h('section', { key: title, style: title === 'Runtime' ? { ...styles.compactCard, gridColumn: '1 / -1' } : styles.compactCard, 'aria-label': `${title} settings` },
               h('h3', { style: styles.compactCardTitle }, title),
               ...fields.map(([field, label, type]) => h(SessionField, { key: field, field, label, type, settings: visible, disabled, mutate })),

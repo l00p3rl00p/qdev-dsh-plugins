@@ -16,11 +16,22 @@ function snapshot(sessionId = 'chat-A', overrides = {}, base = defaults(), revis
   const effective = { ...base, ...overrides }; effective.enabled = base.enabled && effective.enabled
   return { sessionId, revision, base: clone(base), overrides: clone(overrides), effective, sources: Object.fromEntries(Object.keys(base).map(field => [field, Object.hasOwn(overrides, field) ? 'chat' : 'global'])), threshold: [0.05, 0.1, 0.2, 0.3, 0.4][effective.preset], masterEnabled: base.enabled, writable: base.enabled }
 }
+function liveSnapshot(sessionId = 'chat-A') {
+  return {
+    sessionId, attached: true,
+    effective: { enabled: true, detectorEnabled: true, reanchoring: true, threshold: 0.2, baselineTarget: 4, windowTarget: 4 },
+    trajectory: { state: 'observing', sessionEvents: 7, assistantMessages: 5, baselineSize: 4, windowSize: 1, lastEventAt: 1700000000000, lastEventType: 'assistant/message' },
+    detector: { state: 'idle', pending: false, evaluations: 1, drifts: 0, lastResult: { sessionId, turn: 2, singleTurn: true, klDivergence: 0.12, threshold: 0.2, driftDetected: false, completedAt: 1700000000000 } },
+    mentor: { state: 'ready', turn: 2, driftCount: 0, carry: 0, decisionPending: false, escalated: false },
+  }
+}
 function backend() {
   const base = defaults(), records = new Map()
   function read(id) { const item = records.get(id) ?? { overrides: {}, revision: 0 }; return snapshot(id, item.overrides, base, item.revision) }
   return { base, read, records, async fetch(url, options) {
-    if (options.method !== 'POST') return response({ ok: true, settings: read(new URL(url, 'http://fixture').searchParams.get('sessionId')) })
+    const parsed = new URL(url, 'http://fixture')
+    if (options.method !== 'POST' && parsed.pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: liveSnapshot(parsed.searchParams.get('sessionId')) })
+    if (options.method !== 'POST') return response({ ok: true, settings: read(parsed.searchParams.get('sessionId')) })
     const { sessionId, expectedRevision, op, field, value } = JSON.parse(options.body)
     const current = read(sessionId)
     if (expectedRevision !== current.revision) return response({ ok: false, error: 'revision-conflict', settings: current }, 409)
@@ -33,8 +44,9 @@ function backend() {
 }
 
 function harness(fetch) {
-  const instances = new Map(), registrations = [], requests = [], updatesAfterDispose = []
-  let current, cursor, tree, dirty = false, props = { sessionId: 'chat-A' }, disposed = false, effects = [], visited
+  const instances = new Map(), registrations = [], requests = [], statusRequests = [], updatesAfterDispose = []
+  let current, cursor, tree, dirty = false, props = { sessionId: 'chat-A' }, disposed = false, effects = [], visited, timerId = 0
+  const timers = new Map()
   const hook = () => [current.hooks, cursor++]
   const React = {
     Fragment: Symbol.for('react.fragment'),
@@ -44,7 +56,14 @@ function harness(fetch) {
     useEffect(effect, deps) { const [hooks, index] = hook(); const old = hooks[index]; if (old?.deps && deps && old.deps.length === deps.length && deps.every((value, i) => Object.is(value, old.deps[i]))) return; const entry = { deps, cleanup: old?.cleanup }; hooks[index] = entry; effects.push(() => { entry.cleanup?.(); entry.cleanup = effect() }) },
   }
   let module
-  vm.runInNewContext(script, { AbortController, console, fetch: (url, options = {}) => { requests.push({ url, options }); return fetch(url, options) }, window: { __ModuleLoader__: { load(value) { module = value.factory(name => { assert.equal(name, 'react'); return React }) } } } })
+  vm.runInNewContext(script, { AbortController, console, fetch: (url, options = {}) => {
+    const target = new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status' ? statusRequests : requests
+    target.push({ url, options }); return fetch(url, options)
+  }, window: {
+    setInterval(callback) { const id = ++timerId; timers.set(id, callback); return id },
+    clearInterval(id) { timers.delete(id) },
+    __ModuleLoader__: { load(value) { module = value.factory(name => { assert.equal(name, 'react'); return React }) } },
+  } })
   module.apply({ configForms: { get() { throw new Error('Per-chat UI must not access the global form') } }, slots: { inject(name, effect) { return effect() }, register(options, component) { registrations.push({ options, component }); return () => {} } }, effect(effect) { return effect() } })
   const registration = registrations.find(item => item.options.name === 'conversation.view' && item.options.id === 'soup-session-settings')
   assert.ok(registration)
@@ -62,7 +81,7 @@ function harness(fetch) {
     return { ...node, props: { ...node.props, children: node.props.children.map((child, i) => expand(child, `${path}/${i}`)) } }
   }
   const api = {
-    requests, registration, registrations, updatesAfterDispose,
+    requests, statusRequests, registration, registrations, updatesAfterDispose,
     render() {
       assert.equal(disposed, false)
       for (let count = 0; count < 30; count++) {
@@ -82,6 +101,7 @@ function harness(fetch) {
     click(node) { const result = node.props.disabled ? undefined : node.props.onClick?.(); api.render(); return result },
     input(label, value) { api.control(label).props.onChange({ target: { value } }); api.render() },
     async settle() { for (let i = 0; i < 14; i++) { await Promise.resolve(); api.render() } },
+    poll() { for (const callback of timers.values()) callback(); api.render() },
     session(id) { props = { sessionId: id }; api.render() },
     dispose() { if (disposed) return; for (const instance of instances.values()) cleanup(instance); disposed = true },
   }
@@ -102,6 +122,7 @@ test('native SOUP conversation tab fetches immediately with inline controls, hea
     assert.match(script, /minHeight: 39/, 'compact session rows lost their tightened density')
     assert.match(script, /compact: true/, 'session toggles are not using the compact variant')
     assert.equal(h.requests.length, 1, 'mounted tab did not immediately fetch settings')
+    assert.equal(h.statusRequests.length, 1, 'mounted tab did not immediately fetch live trajectory status')
     assert.match(h.text(), /Loading chat settings/)
     assert.equal(h.button('Loading…').props.disabled, true)
     const get = h.requests[0]
@@ -115,12 +136,48 @@ test('native SOUP conversation tab fetches immediately with inline controls, hea
     assert.equal(h.nodes(node => node === h.button('Reload')).length, 1)
     assert.ok(header.props.children.some(node => node === h.button('Reload')), 'Reload is not in the compact header')
     assert.equal(h.button('Reload').props.disabled, false)
+    assert.match(h.text(), /Live trajectoryWithin thresholdLive chatReference4 \/ 4Live window1 \/ 4Latest KL \/ threshold0\.1200 \/ 0\.20Mentor0 drifts · ready/)
     await h.click(h.button('Reload')); await h.settle()
     assert.equal(h.requests.length, 2)
+    assert.equal(h.statusRequests.length, 2)
     assert.equal(get.options.signal.aborted, true)
+    assert.equal(h.statusRequests[0].options.signal.aborted, true)
     h.session(undefined); assert.equal(h.text(), '')
     assert.equal(h.requests[1].options.signal.aborted, true)
+    assert.equal(h.statusRequests[1].options.signal.aborted, true)
     assert.equal(h.requests.length, 2, 'a tab without a session fetched settings')
+    assert.equal(h.statusRequests.length, 2, 'a tab without a session fetched live status')
+  } finally { h.dispose() }
+})
+
+test('same-chat polling fences an older live response that resolves after the newer poll', async () => {
+  const server = backend(), older = deferred(), newer = deferred()
+  let liveRequest = 0
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname !== '/api/qdev-soup/session-status') return server.fetch(url, options)
+    liveRequest += 1
+    return liveRequest === 1 ? older.promise : newer.promise
+  })
+  try {
+    assert.equal(h.statusRequests.length, 1)
+    h.poll()
+    assert.equal(h.statusRequests.length, 2)
+    assert.equal(h.statusRequests[0].options.signal.aborted, true)
+    const current = liveSnapshot('chat-A')
+    current.detector.lastResult.klDivergence = 0.33
+    current.detector.lastResult.driftDetected = true
+    current.detector.drifts = 1
+    newer.resolve(response({ ok: true, live: current }))
+    await h.settle()
+    assert.match(h.text(), /Drift detected/)
+    assert.match(h.text(), /0\.3300 \/ 0\.20/)
+    const stale = liveSnapshot('chat-A')
+    stale.detector.lastResult.klDivergence = 0.01
+    older.resolve(response({ ok: true, live: stale }))
+    await h.settle()
+    assert.match(h.text(), /Drift detected/)
+    assert.match(h.text(), /0\.3300 \/ 0\.20/)
+    assert.doesNotMatch(h.text(), /0\.0100 \/ 0\.20/)
   } finally { h.dispose() }
 })
 
@@ -138,7 +195,7 @@ test('all seven inherited fields expose current global/effective values and a de
     assert.match(h.text(), /Global \/fixture\/python · Effective \/fixture\/python/)
     assert.equal(h.text(h.control('Chat effective KL threshold')), '0.20')
     assert.equal(h.control('Chat effective KL threshold').type, 'output')
-    assert.doesNotMatch(h.text(), /What SOUP sees|Average KL|qualifying drifts|Plan editor/)
+    assert.doesNotMatch(h.text(), /Plan editor|Suppress intervention|Edit original plan/)
   } finally { h.dispose() }
 })
 
