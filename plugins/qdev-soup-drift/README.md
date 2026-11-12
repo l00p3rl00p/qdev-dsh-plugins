@@ -37,42 +37,17 @@ If a bad SOUP Web client makes DSH inaccessible, recover without the browser usi
 
 ## Build, test, and install
 
-The canonical source is [qdev-dsh-plugins/plugins/qdev-soup-drift](https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift), **not** the historical private-source checkout.
+1. In DSH, open **Plugins → Add plugin** and install from an **immutable, reviewed commit SHA**:
 
-For a native **GitHub install**, open DSH **Plugins → Add plugin** and enter this exact pnpm Git source spec:
+   ```text
+   github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/qdev-soup-drift
+   ```
 
-```text
-github:l00p3rl00p/qdev-dsh-plugins#main&path:/plugins/qdev-soup-drift
-```
+   SOUP ships with committed `dist/`; the installation does **not** build source or require `prepare` / `allowBuilds` approval. Choose the SHA of the intended release, not a moving branch.
+2. SOUP uses `python3` by default. For drift detection, that interpreter must have the official `soup-cli` package installed. If it does not, set the plugin's `python` configuration to an interpreter that does. `SOUP_PYTHON` is an optional deployment override, **not an installation requirement**.
+3. After installing or updating, restart the existing DSH Web process once and verify the plugin loads, its UI appears, and live drift processing works. A successful package install or `--dump-config` entry alone is not runtime proof.
 
-Alternatively, from inside the DSH container:
-
-```sh
-dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#main&path:/plugins/qdev-soup-drift'
-dsh --profile web --dump-config
-```
-
-> **Superseded 2026-11-11:** the build-on-install text below is historical. `prepare` was removed and the built runtime is committed with the source, so no `allowBuilds` entry or Git build approval is needed. See "Prebuilt install payload" at the end of this file.
-
-**Git build approval (native DSH Web):** First use **Plugins → Add plugin** with the Git spec above. If pnpm refuses the source `prepare` script, DSH's own Plugin Manager records the exact pending `allowBuilds` key and offers **Allow these scripts and retry**. Review the named source and approve **only the intended plugin**. DSH writes the approval into the active Web profile's `pnpm-workspace.yaml` and retries the install. You do **not** have to pre-edit YAML or install via a tarball from the clean test Harness.
-
-As an alternative when the Web approval control is unavailable, use the exact key printed by the failed installer and explicitly add it under the *existing* profile `allowBuilds:` mapping (preserve other entries). The current pnpm 12 documentation permits a repository-wide `<package-name>@git+https://github.com/l00p3rl00p/qdev-dsh-plugins.git` key even for `github:` shorthand downloaded from `codeload.github.com`, but an exact commit key is narrower and preferred for a one-time approval. An approved `prepare` script runs on your machine with the profile user's permissions. Never use `pnpm approve-builds --all`, `dangerouslyAllowAllBuilds`, or `--ignore-scripts` to bypass this check.
-
-The `path:` fragment selects the actual package inside this monorepo; the `prepare` script builds and verifies the Host and Web assets before installation. It uses the DSH runtime's existing SDK packages and does not install another Cordis or DSH service implementation. Restart the existing DSH process after a replacement.
-
-For local source development, inside a checkout of the **canonical** repository:
-
-```sh
-cd plugins/qdev-soup-drift
-pnpm install
-SOUP_PYTHON="<path-to-soup-python>" pnpm run verify
-```
-
-QDev's dedicated interpreter contains official `soup-cli==0.77.1`. Other environments must set `SOUP_PYTHON` to an interpreter containing `soup_cli` and configure the same interpreter in the plugin settings or `cordis.patch.yml`. CI uses `python` after installing the pinned SOUP package.
-
-Install into the profile actually used by DSH Web. After adding or updating the package, restart the existing DSH Web process and open its token-bearing URL. Do not start a replacement Web server to validate this plugin.
-
-`pnpm run verify` typechecks, builds, and runs the package tests. A successful build, package installation, or `--dump-config` row proves only static packaging and Loader registration. It does **not** prove that the browser client rendered, session events reached the host, SOUP evaluated a live trajectory, an injected message entered the agent inbox, or a human escalation completed.
+**If changing code:** In `plugins/qdev-soup-drift`, run `pnpm install`, `pnpm run verify` (including the package tests), and `pnpm run build`. Commit regenerated `dist/` alongside the source changes. Do not depend on build-on-install.
 
 ## Native Settings and Plugins configuration
 
@@ -168,3 +143,18 @@ The original experimental sources remain under `experiments/`. Treat 0.5.3 as op
 ## Prebuilt install payload (added 2026-11-11)
 
 The GitHub install no longer builds on arrival. `dist/` is committed with the source and the `prepare` script was removed, because pnpm blocks Git-hosted build scripts (`ERR_PNPM_GIT_DEP_PREPARE_NOT_ALLOWED`). This supersedes the "Git build approval" and `prepare` paragraphs above: no `allowBuilds` entry is needed. After changing `src/`, run `pnpm run build` and commit the regenerated `dist/` in the same commit. Install a specific commit with `dsh plugin --profile web add 'github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/qdev-soup-drift'`.
+
+<details>
+<summary>Historical install instructions — superseded, do not execute</summary>
+
+The earlier build-on-install and pnpm approval procedure is retained only for historical context; current installation uses prebuilt `dist/` and an immutable commit SHA.
+
+> **Superseded 2026-11-11:** the build-on-install text below is historical. `prepare` was removed and the built runtime is committed with the source, so no `allowBuilds` entry or Git build approval is needed. See "Prebuilt install payload" at the end of this file.
+
+**Git build approval (native DSH Web):** First use **Plugins → Add plugin** with the Git spec above. If pnpm refuses the source `prepare` script, DSH's own Plugin Manager records the exact pending `allowBuilds` key and offers **Allow these scripts and retry**. Review the named source and approve **only the intended plugin**. DSH writes the approval into the active Web profile's `pnpm-workspace.yaml` and retries the install. You do **not** have to pre-edit YAML or install via a tarball from the clean test Harness.
+
+As an alternative when the Web approval control is unavailable, use the exact key printed by the failed installer and explicitly add it under the *existing* profile `allowBuilds:` mapping (preserve other entries). The current pnpm 12 documentation permits a repository-wide `<package-name>@git+https://github.com/l00p3rl00p/qdev-dsh-plugins.git` key even for `github:` shorthand downloaded from `codeload.github.com`, but an exact commit key is narrower and preferred for a one-time approval. An approved `prepare` script runs on your machine with the profile user's permissions. Never use `pnpm approve-builds --all`, `dangerouslyAllowAllBuilds`, or `--ignore-scripts` to bypass this check.
+
+The `path:` fragment selects the actual package inside this monorepo; the `prepare` script builds and verifies the Host and Web assets before installation. It uses the DSH runtime's existing SDK packages and does not install another Cordis or DSH service implementation. Restart the existing DSH process after a replacement.
+
+</details>
