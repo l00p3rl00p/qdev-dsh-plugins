@@ -33,7 +33,7 @@ async function fixture(t, config = {}, saved = {}) {
   const routes = new Map()
   const questions = []
   const calls = { open: 0, close: 0, register: 0, unregister: 0 }
-  ctx.provide('agents', { list: () => [...live.values()] })
+  ctx.provide('agents', { list: () => [...live.values()], get: (id) => live.get(String(id)) })
   ctx.provide('storageDomain', {
     async open(spec) {
       calls.open += 1
