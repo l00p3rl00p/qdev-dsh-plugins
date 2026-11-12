@@ -493,3 +493,28 @@ test('Convergence: outlier clusters show agreeing calculations away from the med
     assert.match(h.text(), /4 calculations, at or above the boundary/)
   } finally { h.dispose() }
 })
+
+test('Convergence: control chart flags a spike, repeated failures are named, elimination leaves what the evidence allows', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.2
+  const kls = [0.08, 0.09, 0.08, 0.07, 0.09, 0.08, 0.09, 0.08, 0.5]
+  live.detector.history = kls.map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: kl >= 0.2 }))
+  live.tools = [
+    { callId: 'a', name: 'web_fetch', startedAt: 1700000000500, endedAt: 1700000000600, error: true },
+    { callId: 'b', name: 'web_fetch', startedAt: 1700000005500, endedAt: 1700000005600, error: true },
+  ]
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /Control chart \(Six Sigma\)/)
+    assert.match(h.text(), /UCL/)
+    assert.match(h.text(), /Rule 1: one reading beyond a control limit/)
+    assert.match(h.text(), /Repeated failures/)
+    assert.match(h.text(), /web_fetch: failed 2 of 2 calls/)
+    assert.match(h.text(), /Still standing/)
+  } finally { h.dispose() }
+})

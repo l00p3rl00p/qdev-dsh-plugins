@@ -759,6 +759,115 @@ window.__ModuleLoader__.load({
       );
     }
 
+    // Six Sigma control chart (Appendix 11.5): statistical signal, separate from the decision threshold.
+    // Centre = mean of the chat's calculations; limits = centre +/- 3 sigma (sigma from the average moving range); lower limit floored at 0 (KL is not negative).
+    // Rules used (Western Electric style): rule 1 = one point beyond 3 sigma; rule 2 = 2 of 3 beyond 2 sigma on one side;
+    // rule 4 = 8 in a row on one side of the centre. Each flag is a statistical signal to investigate, not an event verdict.
+    const SPC_MIN_POINTS = 8;
+    function spcAnalysis(history) {
+      const values = history.map((point) => point.kl);
+      if (values.length < SPC_MIN_POINTS) return null;
+      const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+      const moving = values.slice(1).map((value, i) => Math.abs(value - values[i]));
+      const mrBar = moving.reduce((sum, value) => sum + value, 0) / moving.length;
+      const sigma = mrBar / 1.128; // individuals chart: sigma from the average moving range, so one spike cannot inflate its own limit
+      const ucl = mean + 3 * sigma;
+      const lcl = Math.max(0, mean - 3 * sigma);
+      const flags = [];
+      values.forEach((value, i) => {
+        if (value > ucl || value < lcl) flags.push({ index: i, rule: 'Rule 1', text: 'one reading beyond a control limit (3 sigma)' });
+      });
+      values.forEach((value, i) => {
+        if (i < 2) return;
+        const window = values.slice(i - 2, i + 1);
+        const above = window.filter((v) => v > mean + 2 * sigma).length;
+        const below = window.filter((v) => v < mean - 2 * sigma).length;
+        if (above >= 2 || below >= 2) flags.push({ index: i, rule: 'Rule 2', text: '2 of 3 readings beyond 2 sigma on one side' });
+      });
+      values.forEach((value, i) => {
+        if (i < 7) return;
+        const window = values.slice(i - 7, i + 1);
+        if (window.every((v) => v > mean) || window.every((v) => v < mean)) flags.push({ index: i, rule: 'Rule 4', text: '8 readings in a row on one side of the centre line' });
+      });
+      return { mean, sigma, ucl, lcl, flags };
+    }
+    function SpcChart({ history, spc }) {
+      const W = 300, H = 140, P = 10;
+      const top = Math.max(spc.ucl, ...history.map((p) => p.kl)) * 1.1 || 1;
+      const x = (i) => P + (history.length < 2 ? 0 : (i * (W - 2 * P)) / (history.length - 1));
+      const y = (v) => H - P - (Math.max(0, v) / top) * (H - 2 * P);
+      const points = history.map((p, i) => `${x(i).toFixed(1)},${y(p.kl).toFixed(1)}`).join(' ');
+      const flagged = new Set(spc.flags.map((f) => f.index));
+      return h('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Control chart of calculations with centre and control limits', style: { width: '100%', height: 'auto', display: 'block', marginTop: 6 } },
+        h('line', { x1: P, x2: W - P, y1: y(spc.ucl), y2: y(spc.ucl), stroke: 'var(--dsw-alias-state-error-primary)', strokeDasharray: '4 3' }),
+        h('line', { x1: P, x2: W - P, y1: y(spc.mean), y2: y(spc.mean), stroke: 'var(--dsw-alias-brand-primary)' }),
+        h('line', { x1: P, x2: W - P, y1: y(spc.lcl), y2: y(spc.lcl), stroke: 'var(--dsw-alias-state-error-primary)', strokeDasharray: '4 3' }),
+        h('polyline', { points, fill: 'none', stroke: 'currentColor', strokeWidth: 1.5 }),
+        history.map((p, i) => flagged.has(i) ? h('circle', { key: i, cx: x(i).toFixed(1), cy: y(p.kl).toFixed(1), r: 4, fill: 'var(--dsw-alias-state-error-primary)' }) : null),
+      );
+    }
+    function SpcSection({ history }) {
+      const spc = spcAnalysis(history);
+      return h('section', { style: styles.compactCard, 'aria-label': 'Control chart' },
+        h('span', { style: styles.label }, 'Control chart (Six Sigma)'),
+        spc === null
+          ? h('p', { style: styles.hint }, `Waiting for ${SPC_MIN_POINTS} calculations to set control limits.`)
+          : h('div', null,
+            h(SpcChart, { history, spc }),
+            h('p', { style: styles.hint }, `Centre ${spc.mean.toFixed(4)} · UCL ${spc.ucl.toFixed(4)} · LCL ${spc.lcl.toFixed(4)} · sigma ${spc.sigma.toFixed(4)}`),
+            spc.flags.length
+              ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, spc.flags.slice(0, 8).map((flag, i) => h('li', { key: `${flag.index}-${flag.rule}-${i}`, style: styles.body }, `${flag.rule}: ${flag.text} (calculation ${flag.index + 1})`)))
+              : h('p', { style: styles.hint }, 'No control-chart rule is violated. The process looks stable.'),
+          ),
+      );
+    }
+
+    // Repeated mistakes: a tool that keeps failing in this chat is a pattern to explain, not a single bad call.
+    function RepeatedFailuresSection({ tools }) {
+      const byName = {};
+      for (const tool of tools ?? []) {
+        byName[tool.name] = byName[tool.name] ?? { total: 0, failed: 0 };
+        byName[tool.name].total += 1;
+        if (tool.error) byName[tool.name].failed += 1;
+      }
+      const repeated = Object.entries(byName).filter(([, s]) => s.failed >= 2).sort((a, b) => b[1].failed - a[1].failed);
+      return h('section', { style: styles.compactCard, 'aria-label': 'Repeated failures' },
+        h('span', { style: styles.label }, 'Repeated failures'),
+        repeated.length
+          ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, repeated.map(([name, s]) => h('li', { key: name, style: styles.body }, `${name}: failed ${s.failed} of ${s.total} calls. The same mistake is repeating.`)))
+          : h('p', { style: styles.hint }, 'No tool failed more than once in this chat.'),
+      );
+    }
+
+    // Concept blindness, the elimination step: list candidate explanations, drop each one the evidence contradicts,
+    // and show what remains. Remaining candidates are not verified; judging them is the arbitration step for a human or agent.
+    function EliminationSection({ history, tools, spc, threshold }) {
+      const limit = Number(threshold) > 0 ? Number(threshold) : null;
+      const inWindowFails = (tools ?? []).filter((t) => t.error).length;
+      const crossings = history.filter((p) => p.drift).length;
+      const repeated = Object.values((tools ?? []).reduce((acc, t) => { acc[t.name] = (acc[t.name] ?? 0) + (t.error ? 1 : 0); return acc; }, {})).some((n) => n >= 2);
+      const nearLimit = limit !== null && history.length > 0 && history.every((p) => p.kl >= 0.5 * limit && p.kl < limit);
+      const candidates = [
+        { label: 'A real threshold crossing drives the readings', contradicted: crossings === 0 },
+        { label: 'Failing tool calls drive the readings', contradicted: inWindowFails === 0 },
+        { label: 'One tool keeps failing (a repeated mistake)', contradicted: !repeated },
+        { label: 'A special cause (control-chart rule violated)', contradicted: !spc || spc.flags.length === 0 },
+        { label: 'Steady riding just under the limit', contradicted: !nearLimit },
+      ];
+      const remaining = candidates.filter((c) => !c.contradicted);
+      const dropped = candidates.filter((c) => c.contradicted);
+      return h('section', { style: styles.compactCard, 'aria-label': 'Elimination' },
+        h('span', { style: styles.label }, 'What the evidence leaves (elimination)'),
+        remaining.length
+          ? h('div', null,
+            h('p', { style: styles.body }, 'Still standing. Not verified; a human or agent judges these:'),
+            h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, remaining.map((c) => h('li', { key: c.label, style: styles.body }, c.label))),
+          )
+          : h('p', { style: styles.hint }, 'Every candidate is contradicted by the evidence here. No qualified pattern to report.'),
+        dropped.length ? h('p', { style: styles.hint }, `Ruled out by the data: ${dropped.map((c) => c.label.toLowerCase()).join('; ')}.`) : null,
+      );
+    }
+
     function ConvergenceView({ sessionId }) {
       const sessionLive = useSessionLiveStatus(sessionId);
       const live = sessionLive.live;
@@ -827,6 +936,9 @@ window.__ModuleLoader__.load({
         ) : null,
         chosen ? h(ToolEvidenceSection, { tools: live?.tools ?? [], chosen }) : null,
         h(OutlierClustersSection, { history, threshold }),
+        h(SpcSection, { history }),
+        h(RepeatedFailuresSection, { tools: live?.tools ?? [] }),
+        h(EliminationSection, { history, tools: live?.tools ?? [], spc: spcAnalysis(history), threshold }),
         chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Evidence available' },
           h('span', { style: styles.label }, 'Evidence available'),
           h('p', { style: styles.hint }, 'SOUP calculations only. Tool calls, decisions, test outcomes and outlier subsets are not in this data yet.'),
