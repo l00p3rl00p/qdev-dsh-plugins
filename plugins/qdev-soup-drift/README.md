@@ -87,25 +87,17 @@ If a bad SOUP Web client makes DSH inaccessible, recover without the browser usi
 
 ## Build, test, and install
 
-Inside the DSH container, using the Scratchpad `main` checkout:
+1. In DSH, open **Plugins → Add plugin** and install the reviewed **0.6.3** build from an immutable commit SHA:
 
-```sh
-cd ~/scratchpad/plugins/qdev-soup-drift
-pnpm install --ignore-scripts
-SOUP_PYTHON=/home/qdev/llm-runtime/tools/venvs/soup/bin/python pnpm run verify
-# Review and commit only intended source, tests, and documentation before packaging.
-pnpm pack --pack-destination /tmp
-sha256sum /tmp/qdev-trajectory-drift-soup-0.6.3.tgz
-# Verify that digest against the recorded approved artifact, then install that exact file.
-dsh plugin --profile web add /tmp/qdev-trajectory-drift-soup-0.6.3.tgz
-dsh --profile web --dump-config
-```
+   ```text
+   github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/qdev-soup-drift
+   ```
 
-QDev's dedicated interpreter contains official `soup-cli==0.77.1`. Other environments must set `SOUP_PYTHON` to an interpreter containing `soup_cli` and configure the same interpreter in the plugin settings or `cordis.patch.yml`. CI uses `python` after installing the pinned SOUP package.
+   This package ships with committed `dist/`; no build-on-install, `prepare`, or `allowBuilds` approval is required. Use the SHA containing the tested 0.6.3 build, not a moving branch.
+2. The plugin defaults to `python3`. To enable drift detection, ensure the chosen interpreter has official `soup-cli` installed. If it does not, configure the plugin's `python` setting with the appropriate interpreter. `SOUP_PYTHON` is an optional override; it is **not required to install**.
+3. After installation or replacement, restart the existing DSH Web process once. Confirm the plugin and its per-chat UI load, then observe an actual SOUP drift evaluation. Installation success or `--dump-config` alone is insufficient.
 
-Install into the profile actually used by DSH Web. After adding or updating the package, restart the existing DSH Web process and open its token-bearing URL. Do not start a replacement Web server to validate this plugin.
-
-`pnpm run verify` typechecks, builds, and runs the package tests. A successful build, package installation, or `--dump-config` row proves only static packaging and Loader registration. It does **not** prove that the browser client rendered, session events reached the host, SOUP evaluated a live trajectory, an injected message entered the agent inbox, or a human escalation completed.
+**If changing source:** Run `pnpm install`, `pnpm run verify` (including the full 0.6.3 test suite), and `pnpm run build` from `plugins/qdev-soup-drift`. Commit regenerated `dist/` in the same change. A changed runtime must pass its checks before deployment.
 
 ## Native Settings and Plugins configuration
 
@@ -198,3 +190,32 @@ The deterministic worker/policy test drives three independent drift windows and 
 - `node_modules/`, `dist/`, generated tarballs, and `.pnpm-store/` are local install/build state and should remain untracked.
 
 The original experimental sources remain under `experiments/`. Version 0.6.3 preserves the human-accepted Feature 2 UI, isolation and persistence while removing eager retained-session replay from container startup. Feature 3 and later remain separate increments and are paused until the lazy-start repair is installed and restart-accepted.
+
+<details>
+<summary>Historical 0.6.3 local tarball workflow — superseded for Git installs</summary>
+
+The following records the earlier local packaging workflow. It is not the current Git-install procedure and must not be used as an instruction to install onto the main Harness.
+
+## Build, test, and install
+
+Inside the DSH container, using an earlier local source checkout:
+
+```sh
+cd <repository-checkout>/plugins/qdev-soup-drift
+pnpm install --ignore-scripts
+SOUP_PYTHON=<path-to-soup-python> pnpm run verify
+# Review and commit only intended source, tests, and documentation before packaging.
+pnpm pack --pack-destination /tmp
+sha256sum /tmp/qdev-trajectory-drift-soup-0.6.3.tgz
+# Verify that digest against the recorded approved artifact, then install that exact file.
+dsh plugin --profile web add /tmp/qdev-trajectory-drift-soup-0.6.3.tgz
+dsh --profile web --dump-config
+```
+
+QDev's dedicated interpreter contains official `soup-cli==0.77.1`. Other environments must set `SOUP_PYTHON` to an interpreter containing `soup_cli` and configure the same interpreter in the plugin settings or `cordis.patch.yml`. CI uses `python` after installing the pinned SOUP package.
+
+Install into the profile actually used by DSH Web. After adding or updating the package, restart the existing DSH Web process and open its token-bearing URL. Do not start a replacement Web server to validate this plugin.
+
+`pnpm run verify` typechecks, builds, and runs the package tests. A successful build, package installation, or `--dump-config` row proves only static packaging and Loader registration. It does **not** prove that the browser client rendered, session events reached the host, SOUP evaluated a live trajectory, an injected message entered the agent inbox, or a human escalation completed.
+
+</details>
