@@ -1,17 +1,38 @@
 # SOUP Appendix 11: hand-off
 
-Status date: 2026-11-12. Branch: `feature/soup-feature3-live-mentor` (origin: l00p3rl00p/qdev-dsh-plugins).
+Status date: 2026-11-12 (updated 2026-11-12, evening). Branch: `feature/soup-feature3-live-mentor` (origin: l00p3rl00p/qdev-dsh-plugins).
 
 ## Where things are
 
-| Item | State |
-|---|---|
-| Installed in the main Harness | `ffdad12` (package version still 0.8.0) |
-| Pushed, not installed | the Examples A–C tests (test-only change) |
-| Spec notes | `SOUP-CHAT2-BUILD-SPEC-v2.md` sections 9c, 9d, 9e |
-| Tests | 99 of 99 pass (`node --test test/*.test.mjs`) |
+Every row says whether the state is **verified** (seen on the running Harness or proven by a passing check) or **not verified** (built, tested only with fakes, or not run).
 
-Commits in order: `63d9341` (decision log), `ffdad12` (Appendix 11 gaps), `642f762` (install record), then the examples-test commit.
+| Item | State | Verified? |
+|---|---|---|
+| Branch `feature/soup-feature3-live-mentor` head | `af973fe` (pushed) | yes, in sync with origin |
+| Mentor plan save at full size | fixed: body cap derived from `MENTOR_LIMITS.plan`; `dist/` rebuilt | not on the live Harness |
+| Mentor "Use default" reverts the field | fixed client-side; loop from first attempt removed | not on the live Harness |
+| Sidebar tab + guide button branch | `soup-sidebar-tabtype`, head `6547cea` (pushed) | not on the live Harness |
+| Installed in the main Harness | `qdev-trajectory-drift-soup` installed from `6547cea` via `dsh plugin add`; profile lists it | install accepted; **Host restart not done**, so the new build is not live |
+| Rollback anchor (last known-good live build) | `ffdad12` / package 0.8.0 (what was live before this install) | — |
+| Tests | 100 of 100 pass on both branches | fakes only; not a live check |
+
+Commits in order on the working branch: `63d9341` (decision log), `ffdad12` (Appendix 11 gaps), `642f762` (install record), the examples-test commit, `9ee6823` (focus rule), `425d8e5` (hand-off), `3dccf9f` (sidebar pane, hot key), `3fbd8fd` (hot key removed), `af973fe` (Mentor fixes).
+
+Commits on `soup-sidebar-tabtype`: `cf6d591` (tab type), `6547cea` (guide entry opens the tab).
+
+## What is blocked on you
+
+- **Restart `dsh web`** (the install is accepted but the Host has not restarted). The hand-off's restart step. The agent cannot read the Host log or the auth token from this session.
+- **Hard-reload the browser** after the restart (lessons §8).
+- **Look for the SOUP button** in the chat guide, and confirm it opens the SOUP tab.
+
+## Open decisions already answered
+
+- Intent button: a SOUP button on the chat window, shown above the chat like Goal and Queue.
+- Scope: per chat.
+- Plan source: chosen by the user (like Plan or Goal), not the first message.
+- Intent storage: an Intent event is wanted, but **no changes to DSH are allowed**. Use the installed plugin event/record pattern instead (see open item A).
+- "Append" is named **Amend**; an amend adds an amendment.
 
 ## What is built
 
@@ -22,12 +43,28 @@ Commits in order: `63d9341` (decision log), `ffdad12` (Appendix 11 gaps), `642f7
 
 ## Open items (in order)
 
-1. **Focus rule (resolved, commit 9ee6823).** Selectable in the Convergence view: coherence ≥ 0.5 (default), coherence ≥ 0.7, or dispersion σ ≤ 0.10. The default is unchanged. The choice is not stored between page loads. See spec 9f. Example B is tested under each rule.
-2. **Live check of the drill-down.** Generate readings (see below), then open Convergence and confirm the new sections appear. Not yet seen on screen.
-3. **Domain-meaning text (11.5)**: aircraft, creative writing and governance wording. Not built; wording only.
-4. **Verified test-runner source.** Not built. Current outcomes are text patterns.
-5. **Outlier subsets on the quadrant.** Not built; they appear in their own section, which 11.3 allows.
-6. **Install of the test-only change.** Not needed: `dist/` and source are unchanged since `ffdad12`.
+**Done, kept for the record**
+
+1. **Focus rule (resolved, commit 9ee6823).** Selectable in the Convergence view: coherence ≥ 0.5 (default), coherence ≥ 0.7, or dispersion σ ≤ 0.10. Default unchanged. Not stored between page loads. Spec 9f.
+2. **Mentor plan size and "Use default"** (commit `af973fe`). Built and tested; the live check is item B.
+
+**Next, in order**
+
+A. **Make Mentor edits reach the model on every drift.** Found by trace: `reanchor.mjs` line 109 sends `FIRST_DRIFT_MESSAGE` on the first drift and never reads the Mentor store. Only the second drift uses the stored plan and amendments. Fix: build the reminder from the stored context on every drift. This is a SOUP-only change.
+
+B. **Live check (needs you).** Restart `dsh web`, hard-reload, then: save a long plan in Mentor, press "Use default", confirm the text reverts, and confirm the SOUP guide button opens the tab.
+
+C. **Per-chat Intent in SOUP's Mentor store.** Set, Amend (adds an amendment), pause, stop, and a SOUP button above the chat. Stored on disk with the Mentor context. The SOUP settings UI compiles and stores intents. **No DSH changes.** Persistence uses the plugin's own store; no core event is added.
+
+D. **Pick the persistence seam for intent events (research, read-only).** Look up installed plugins that add events or write to the chat trajectory and use their pattern. The SDK's `appendPluginRecord` is restricted to DSH's own experimental packages (`verify-plugin-record-callers`), so it is not available to SOUP. Confirm whether any allowed plugin path exists before designing around one.
+
+E. **Domain-meaning text (11.5)**: aircraft, creative writing and governance wording. Blocked on the source text; the spec file does not contain the examples.
+
+F. **Verified test-runner source.** Not built. Outcomes are still text patterns.
+
+G. **Outlier subsets on the quadrant.** Not built. They appear in their own section, which 11.3 allows.
+
+H. **Other SOUP tabs** (Settings, Live, Mentor, Details) still need the restrained layout pass. Decided: quieter, closer to the host (no new fonts or motion).
 
 ## How to generate readings in a live chat
 
