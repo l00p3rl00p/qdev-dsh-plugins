@@ -55,6 +55,17 @@ These are the decisions recorded for the build. Each one is final unless the own
 | A8 | Intent actions | Set, Amend, pause, stop. |
 | A9 | Settings UI | The SOUP settings UI provides the path to compile and store intents. |
 
+## 2a. Escalation bypass and register (owner decisions)
+
+| # | Topic | Decision |
+|---|---|---|
+| B1 | Escalation bypass switch | Two switches: a **global** one (must be on for any chat to use it) and a **per chat** one. |
+| B2 | Behaviour while bypass is on | The chat never escalates. Every drift sends the one-sentence first-drift message (section 1, first drift). |
+| B3 | Every 10th drift | Every 10th drift sends the full second-drift message (Gentle Mentor text, plan, amendments). |
+| B4 | Register | A running log per chat of each drift and what the model did after it. Kept across the whole mission. |
+| B5 | Clearing the register | Never cleared. There is no clear control; the log is kept for the whole mission. |
+| B6 | Register opt-in | Shown in the pop-up. The human opts in per chat, and the choice is saved with that chat's settings. |
+
 ## 3. Open items this file does not settle
 
 - The exact wording of the Intent button and its states (set, active, paused, stopped).
