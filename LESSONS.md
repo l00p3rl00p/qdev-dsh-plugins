@@ -325,3 +325,13 @@ text in this repository that describes `prepare`, `allowBuilds`, or Git build ap
 - **Test policy.** Tests that encode a removed UI move with their assertions, rather than being deleted. Tests that
   assert a privacy boundary narrow the boundary to the field that now carries the data (for example, the captured
   plan in the Gentle Mentor field only).
+
+## SOUP 0.8.0 "Detector error" — November 13, 2026
+
+- **Observed:** the Live and Details views showed "Detector error" on the running Harness (build 8, `qdev-trajectory-drift-soup@0.8.0`), with zero calculations.
+- **Cause:** the detector worker is spawned with the plugin's `python` setting, which defaults to `python3` (`drift.mjs` spawns `python` with no `env`, so the child inherits only the Harness environment). That interpreter cannot import `soup_cli`, so every evaluation failed with `ModuleNotFoundError`. The plugin README (line 143) already named this error.
+- **Why the suite missed it:** the test runs set `PYTHONPATH` to the venv that holds `soup_cli`, so the worker imported fine there. Production spawns without that path. A test environment that supplies a dependency the real launcher does not supply hides a missing-import defect.
+- **Rule 1 — configure the interpreter; never assume `python3`.** For any plugin that runs a Python worker, the interpreter is a required setting. Do not rely on the system default.
+- **Rule 2 — check the worker the way the plugin launches it.** Before calling a worker operational, run the exact command with an empty input in the production environment (`python3 soup_worker.py` with no `PYTHONPATH`). A passing test run under a different environment proves nothing about the launch.
+- **Rule 3 — no machine paths in tracked code.** The fix is the `python` setting (`/home/qdev/llm-runtime/tools/venvs/soup/bin/python` on this machine). Do not hard-code it in the plugin; that would break on any other machine and conflicts with the spec's placeholder rule.
+- **Status:** cause confirmed by running the worker; the setting itself is owner-applied in the Harness config and is not verified in the live UI yet.
