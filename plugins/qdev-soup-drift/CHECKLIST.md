@@ -49,7 +49,6 @@ Mark key: [x] done and in the repo · [~] built, not verified live · [ ] not bu
 
 - [x] Sidebar tab + guide button branch `soup-sidebar-tabtype`, head `6547cea` (pushed).
 - [~] Installed in the main Harness: profile lists `qdev-trajectory-drift-soup@0.8.0`. Which commit is live is not confirmed. [!] see conflicts.
-- [~] Host restart for the new build: pending (hand-off) or done (spec 9b). [!] conflict.
 - [x] Test suite: 108 of 108 pass on `feature/soup-feature3-live-mentor` (fakes plus real worker tests).
 - [ ] Live Web UI check: Live, Mentor, Details, Convergence, bypass control, register. Owner-only, after restart.
 - [ ] Owner check: three drifts in one chat show the three steps in order (plan §4, Feature 5).

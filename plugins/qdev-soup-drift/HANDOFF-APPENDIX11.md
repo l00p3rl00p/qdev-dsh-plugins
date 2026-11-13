@@ -12,7 +12,7 @@ Every row says whether the state is **verified** (seen on the running Harness or
 | Mentor plan save at full size | fixed: body cap derived from `MENTOR_LIMITS.plan`; `dist/` rebuilt | not on the live Harness |
 | Mentor "Use default" reverts the field | fixed client-side; loop from first attempt removed | not on the live Harness |
 | Sidebar tab + guide button branch | `soup-sidebar-tabtype`, head `6547cea` (pushed) | not on the live Harness |
-| Installed in the main Harness | `qdev-trajectory-drift-soup` installed from `6547cea` via `dsh plugin add`; profile lists it | install accepted; **Host restart not done**, so the new build is not live |
+| Installed in the main Harness | `qdev-trajectory-drift-soup` installed from `6547cea` via `dsh plugin add`; profile lists it | install accepted; which build is live is an open conflict (see CHECKLIST.md) |
 | Rollback anchor (last known-good live build) | `ffdad12` / package 0.8.0 (what was live before this install) | — |
 | Tests | 100 of 100 pass on both branches | fakes only; not a live check |
 
