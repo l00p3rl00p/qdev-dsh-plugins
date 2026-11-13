@@ -59,6 +59,11 @@ Mark key: [x] done and in the repo · [~] built, not verified live · [ ] not bu
 - [ ] Dated section appended to root LESSONS.md; one line each in plugin README.md and ROADMAP.md.
 - [ ] Report per feature with SHA and open owner checks.
 
+## Dropped by owner decision (2026-11-13)
+
+- **Sidebar tab and guide button** (`soup-sidebar-tabtype`, `6547cea`): dropped. It did not work and took too long. Not on the working branch; no live build depends on it.
+- **Live-build conflict**: closed. Owner confirms build 8 is running (installed `qdev-trajectory-drift-soup@0.8.0`).
+
 ## Conflicts for the owner to decide
 
 1. **Live build.** Hand-off: `6547cea` installed, restart pending. Spec 9b: `623fac8` live. Which is running?
