@@ -50,7 +50,7 @@ Commits on `soup-sidebar-tabtype`: `cf6d591` (tab type), `6547cea` (guide entry 
 
 **Next, in order**
 
-A. **Make Mentor edits reach the model on every drift.** Found by trace: `reanchor.mjs` line 109 sends `FIRST_DRIFT_MESSAGE` on the first drift and never reads the Mentor store. Only the second drift uses the stored plan and amendments. Fix: build the reminder from the stored context on every drift. This is a SOUP-only change.
+A. **Resolved by decision: the first drift stays one sentence.** `reanchor.mjs` line 109 sends `FIRST_DRIFT_MESSAGE` on the first drift and reads the Mentor store only on the second drift. The owner chose to keep this rule (the first nudge is one sentence; the plan and amendments appear on the second drift). No code change. Edits reach the model at the second drift.
 
 B. **Live check (needs you).** Restart `dsh web`, hard-reload, then: save a long plan in Mentor, press "Use default", confirm the text reverts, and confirm the SOUP guide button opens the tab.
 
