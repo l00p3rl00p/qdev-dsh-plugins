@@ -51,6 +51,7 @@ Mark key: [x] done and in the repo · [~] built, not verified live · [ ] not bu
 - [~] Installed in the main Harness: profile lists `qdev-trajectory-drift-soup@0.8.0`. Which commit is live is not confirmed. [!] see conflicts.
 - [x] Test suite: 108 of 108 pass on `feature/soup-feature3-live-mentor` (fakes plus real worker tests).
 - [ ] Live Web UI check: Live, Mentor, Details, Convergence, bypass control, register. Owner-only, after restart.
+- [ ] Spec section 9 not updated for the escalation bypass (B1–B6) and the Register tab. The spec still describes only what was built before 2026-11-13.
 - [ ] Owner check: three drifts in one chat show the three steps in order (plan §4, Feature 5).
 
 ## E. Release (plan §5)
@@ -66,7 +67,7 @@ Mark key: [x] done and in the repo · [~] built, not verified live · [ ] not bu
 - [x] Outlier clusters shown in their own section (client.js `OutlierClustersSection`, ~line 874), as spec 11.3 allows. Was wrongly listed as not built; the chart-marking part is still open.
 - [x] Escalation bypass control and drift register (in the Mentor card).
 - [ ] Intent (set, Amend, pause, stop, SOUP button above chat): not built. No `intent` in client.js or the Mentor record.
-- [ ] Register as its own View: not built.
+- [x] Register as its own tab in the SOUP tab row (client.js `RegisterView`; commit `c00a914`). Reads the same register data as the Mentor card.
 - [ ] Outlier points marked on the four-quadrant chart: not built.
 - [ ] Layout restraint on Settings, Live, Mentor, Details: not done.
 - [ ] Domain-meaning text (11.5): blocked on source text.
