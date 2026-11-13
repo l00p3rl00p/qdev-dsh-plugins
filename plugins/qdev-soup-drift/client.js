@@ -597,6 +597,42 @@ window.__ModuleLoader__.load({
         h(MentorTextField, { key: `message-${context.message ?? ''}`, label: 'Mentor message', value: context.message ?? '', customized: Boolean(context.customized?.message), disabled, onSave: save('message') }),
         h(MentorTextField, { key: `plan-${context.plan ?? ''}`, label: 'Current plan', value: context.plan ?? original, customized: Boolean(context.customized?.plan), disabled, onSave: save('plan') }),
         h(MentorAmendments, { key: `amend-${JSON.stringify(context.amendments ?? [])}`, items: context.amendments ?? [], customized: Boolean(context.customized?.amendments), disabled, onSave: save('amendments') }),
+        // Spec B1, B6: per-chat escalation bypass. It works only when the global switch is on.
+        h(EscalationBypassControl, { key: `bypass-${context.escalationBypass ? 1 : 0}-${context.escalationBypassGlobal ? 1 : 0}`, on: Boolean(context.escalationBypass), globalOn: Boolean(context.escalationBypassGlobal), disabled, onSave: save('escalationBypass') }),
+        h(DriftRegister, { entries: live?.mentor?.context?.register ?? [] }),
+      );
+    }
+
+    // Spec B4-B5: the register of drifts for this chat. Read-only, kept for the whole mission, no clear control.
+    function DriftRegister({ entries }) {
+      return h('div', { style: { display: 'grid', gap: 6, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--dsw-alias-border-l1)' } },
+        h('span', { style: styles.label }, `Drift register (${entries.length} recorded)`),
+        entries.length
+          ? h('ol', { style: { margin: 0, paddingLeft: 20, display: 'grid', gap: 4, maxHeight: 200, overflowY: 'auto' } }, entries.map((entry, i) => h('li', { key: `${entry.drift}-${entry.at}-${i}`, style: { ...styles.body, fontSize: 12 } },
+            `Drift ${entry.drift} · turn ${entry.turn} · sent ${entry.sent === 'full' ? 'full plan message' : 'first sentence'} · ${new Date(entry.at).toLocaleTimeString()}`,
+          )))
+          : h('p', { style: styles.hint }, 'No drifts recorded yet.'),
+      );
+    }
+
+    // Spec B1: a per-chat switch. It is inert while the global switch is off, and says so.
+    function EscalationBypassControl({ on, globalOn, disabled, onSave }) {
+      const [working, setWorking] = useState(false);
+      const [error, setError] = useState('');
+      const locked = disabled || working || !globalOn;
+      async function toggle(next) {
+        setWorking(true); setError('');
+        try { await onSave(next); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setWorking(false); }
+      }
+      return h('div', { style: { display: 'grid', gap: 6, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--dsw-alias-border-l1)' } },
+        h('label', { style: { display: 'flex', alignItems: 'center', gap: 8, color: 'var(--dsw-alias-label-primary)', fontSize: 13 } },
+          h('input', { type: 'checkbox', checked: on, disabled: locked, onChange: (event) => toggle(event.target.checked) }),
+          'Escalation bypass for this chat',
+        ),
+        h('p', { style: styles.hint }, globalOn
+          ? 'On: this chat never escalates to a human. Drifts send the first sentence, and every 10th drift sends the full plan.'
+          : 'Off globally. Turn on the global escalation bypass in SOUP settings to use this switch.'),
+        error ? h('p', { role: 'alert', style: styles.error }, error) : null,
       );
     }
 

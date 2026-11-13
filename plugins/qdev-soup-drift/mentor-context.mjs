@@ -3,7 +3,7 @@
 import { z } from 'zod'
 
 export const MENTOR_LIMITS = Object.freeze({ message: 4000, plan: 20000, amendments: 50, amendmentLength: 2000 })
-export const MENTOR_FIELDS = Object.freeze(['message', 'plan', 'amendments'])
+export const MENTOR_FIELDS = Object.freeze(['message', 'plan', 'amendments', 'escalationBypass'])
 
 export const MentorContextRecord = z.object({
   message: z.string().min(1).max(MENTOR_LIMITS.message).optional(),

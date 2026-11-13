@@ -425,6 +425,11 @@ export async function apply(ctx, config = {}) {
                     message: mentorContexts.get(id)?.message ?? GENTLE_MENTOR_MESSAGE,
                     plan: mentorContexts.get(id)?.plan ?? runtimes.get(id)?.originalPlan(id) ?? null,
                     amendments: mentorContexts.get(id)?.amendments ?? [],
+                    // Spec B4: the register for this chat, newest last, capped so the response stays small.
+                    register: [...registerTable.entries()].map(([, entry]) => entry).filter((entry) => entry.id === id).sort((a, b) => a.at - b.at).slice(-50),
+                    // Spec B1: the chat's own bypass switch, and whether the global switch allows it.
+                    escalationBypass: mentorContexts.get(id)?.escalationBypass === true,
+                    escalationBypassGlobal: resolved.escalationBypass === true,
                     customized: {
                         message: mentorContexts.get(id)?.message !== undefined,
                         plan: mentorContexts.get(id)?.plan !== undefined,

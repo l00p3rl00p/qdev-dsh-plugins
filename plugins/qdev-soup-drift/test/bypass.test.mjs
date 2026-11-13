@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createReanchor,FIRST_DRIFT_MESSAGE,secondDriftReminder,GENTLE_MENTOR_MESSAGE} from '../reanchor.mjs';
+import {applyMentorEdit,MENTOR_FIELDS} from '../mentor-context.mjs';
 
 // Spec B1-B5: the escalation bypass. Drives the same drift path the runtime uses (createReanchor.drift).
 const planEvent=(text)=>({type:'user/message',data:{id:'original',source:{kind:'user'},content:[{type:'text',text}]}});
@@ -65,4 +66,15 @@ test('register: a normal (bypass off) drift is also recorded',()=>{
   assert.equal(registered.length,2);
   assert.equal(registered[0].sent,'first');
   assert.equal(registered[1].sent,'full');
+});
+
+// Spec B1 and B6: the per-chat switch is a saved Mentor field, and only the two valid values are accepted.
+test('per-chat bypass is a saved Mentor field (spec B1)',()=>{
+  assert.ok(MENTOR_FIELDS.includes('escalationBypass'));
+  assert.deepEqual(applyMentorEdit({},'escalationBypass',true),{escalationBypass:true});
+  assert.deepEqual(applyMentorEdit({escalationBypass:true},'escalationBypass',null),{});
+});
+
+test('per-chat bypass rejects a non-boolean value',()=>{
+  assert.throws(()=>applyMentorEdit({},'escalationBypass','yes'));
 });
