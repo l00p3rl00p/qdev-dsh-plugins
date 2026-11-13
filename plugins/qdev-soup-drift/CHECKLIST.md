@@ -59,6 +59,19 @@ Mark key: [x] done and in the repo · [~] built, not verified live · [ ] not bu
 - [ ] Dated section appended to root LESSONS.md; one line each in plugin README.md and ROADMAP.md.
 - [ ] Report per feature with SHA and open owner checks.
 
+## Corrected against the code (2026-11-13)
+
+- [x] Five SOUP views: Settings, Live, Mentor, Details, Convergence (client.js lines 1318–1324).
+- [x] Evidence relationships graph (client.js `EvidenceRelationships`, ~line 765). Was wrongly listed as not built.
+- [x] Outlier clusters shown in their own section (client.js `OutlierClustersSection`, ~line 874), as spec 11.3 allows. Was wrongly listed as not built; the chart-marking part is still open.
+- [x] Escalation bypass control and drift register (in the Mentor card).
+- [ ] Intent (set, Amend, pause, stop, SOUP button above chat): not built. No `intent` in client.js or the Mentor record.
+- [ ] Register as its own View: not built.
+- [ ] Outlier points marked on the four-quadrant chart: not built.
+- [ ] Layout restraint on Settings, Live, Mentor, Details: not done.
+- [ ] Domain-meaning text (11.5): blocked on source text.
+- [!] "Detector error" shown on the Live and Details views in the running build. Cause not confirmed. Likely the worker's Python interpreter (`python3`, src/index.ts line 273) cannot import `soup_cli`. Needs the Harness log to confirm.
+
 ## Dropped by owner decision (2026-11-13)
 
 - **Sidebar tab and guide button** (`soup-sidebar-tabtype`, `6547cea`): dropped. It did not work and took too long. Not on the working branch; no live build depends on it.
