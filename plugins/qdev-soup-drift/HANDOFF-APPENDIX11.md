@@ -56,7 +56,7 @@ B. **Live check (needs you).** Restart `dsh web`, hard-reload, then: save a long
 
 C. **Per-chat Intent in SOUP's Mentor store.** Set, Amend (adds an amendment), pause, stop, and a SOUP button above the chat. Stored on disk with the Mentor context. The SOUP settings UI compiles and stores intents. **No DSH changes.** Persistence uses the plugin's own store; no core event is added.
 
-D. **Pick the persistence seam for intent events (research, read-only).** Look up installed plugins that add events or write to the chat trajectory and use their pattern. The SDK's `appendPluginRecord` is restricted to DSH's own experimental packages (`verify-plugin-record-callers`), so it is not available to SOUP. Confirm whether any allowed plugin path exists before designing around one.
+D. **Resolved by research: persistence seam for Intent.** Installed plugins that write plugin records to the session log (`forge-session`, `action-cards`, `client-ui-forge`, `translator`) all sit under DSH's own experimental packages. The SDK says `appendPluginRecord` may be called only from `packages/experimental/`, and the `verify-plugin-record-callers` gate enforces that in the repo. The runtime only checks the record name, not the caller. So SOUP must not write to the session log. **Decision: Intent is stored in SOUP's own Mentor store on disk**, which already persists per chat. No session-log write, no DSH change.
 
 E. **Domain-meaning text (11.5)**: aircraft, creative writing and governance wording. Blocked on the source text; the spec file does not contain the examples.
 
