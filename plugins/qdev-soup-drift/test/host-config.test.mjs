@@ -41,7 +41,8 @@ async function fixture(t, config = {}, saved = {}) {
       const records = spec.name === 'qdev_soup_drift_state' ? values : new Map()
       return {
         table(name) {
-          assert.equal(name, 'sessions')
+          // The register domain has its own 'entries' table; every other domain in this file uses 'sessions'.
+          assert.equal(name, spec.name === 'qdev_soup_register' ? 'entries' : 'sessions')
           return {
             entries: () => records.entries(),
             get: id => records.get(id),
@@ -128,8 +129,8 @@ async function fixture(t, config = {}, saved = {}) {
       assert.equal(fiber.config[key], ref, `configuration reference replaced: ${key}`)
     }
     assert.equal((await status()).lifecycle.startedAt, startedAt, 'Host remounted inside the same fiber')
-    // Mentor state, session settings, Live & Mentor history and Gentle Mentor context (Feature 4).
-    assert.equal(calls.open, 4)
+    // Mentor state, session settings, Live & Mentor history, Gentle Mentor context (Feature 4) and the escalation-bypass register (spec B4).
+    assert.equal(calls.open, 5)
     assert.equal(calls.close, 0)
     assert.equal(calls.register, 1)
     assert.equal(calls.unregister, 0)

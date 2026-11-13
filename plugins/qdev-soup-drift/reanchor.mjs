@@ -30,6 +30,10 @@ export function createReanchor({
   onStateChange = () => {},
   // Feature 4: per-chat Gentle Mentor context { message?, plan?, amendments? }. Read at each intervention.
   contextFor = () => ({}),
+  // Escalation bypass (spec B1-B3). Off by default, so existing behaviour is unchanged.
+  // When on, a chat never escalates: drifts send the first-drift sentence, and every 10th drift sends the full message.
+  bypassFor = () => false,
+  onRegister = () => {},
 }) {
   const secondDriftFields = (id, original) => {
     const override = contextFor(id) ?? {}
@@ -96,6 +100,15 @@ export function createReanchor({
         return 'stale-turn'
       }
       if (current.decisionPending) return 'awaiting-reset-decision'
+      if (bypassFor(id)) {
+        // Spec B2-B3: never escalate. Every 10th drift sends the full message; the rest send the first sentence.
+        current.detections += 1
+        const full = current.detections % 10 === 0
+        const reminder = full ? secondDriftReminder(secondDriftFields(id, original)) : FIRST_DRIFT_MESSAGE
+        onRegister({ id, turn: current.turn, drift: current.detections, sent: full ? 'full' : 'first', at: Date.now() })
+        inject({ id, turn: current.turn, attempt: current.detections, original: current.intent, reminder, report })
+        return 'injected'
+      }
       if (current.escalated) return 'already-escalated'
       current.detections += 1
       if (current.detections >= 3) {
@@ -106,7 +119,9 @@ export function createReanchor({
         escalate({ id, turn: current.turn, detections: current.detections, original: current.intent, question: HUMAN_QUESTION, report })
         return 'human'
       }
-      inject({ id, turn: current.turn, attempt: current.detections, original: current.intent, reminder: current.detections === 1 ? FIRST_DRIFT_MESSAGE : secondDriftReminder(secondDriftFields(id, original)), report })
+      const normalReminder = current.detections === 1 ? FIRST_DRIFT_MESSAGE : secondDriftReminder(secondDriftFields(id, original))
+      onRegister({ id, turn: current.turn, drift: current.detections, sent: current.detections === 1 ? 'first' : 'full', at: Date.now() })
+      inject({ id, turn: current.turn, attempt: current.detections, original: current.intent, reminder: normalReminder, report })
       return 'injected'
     },
     decide(id, reset) {

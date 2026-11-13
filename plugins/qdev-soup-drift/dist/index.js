@@ -31,6 +31,20 @@ const MENTOR_CONTEXT_DOMAIN = defineDomain({
     layout: 'per-record',
     tables: { sessions: domainTable(MentorContextRecord) },
 });
+const REGISTER_DOMAIN = defineDomain({
+    name: 'qdev_soup_register',
+    version: 1,
+    layout: 'per-record',
+    tables: {
+        entries: domainTable(z.object({
+            id: z.string(),
+            turn: z.number().int(),
+            drift: z.number().int().nonnegative(),
+            sent: z.enum(['first', 'full']),
+            at: z.number(),
+        })),
+    },
+});
 const LIVE_HISTORY_DOMAIN = defineDomain({
     name: 'qdev_soup_live_history',
     version: 1,
@@ -63,6 +77,7 @@ export const Config = s.object({
     enabled: s.boolean().default(true).volatile().description('Master switch for trajectory observation and intervention.'),
     detectorEnabled: s.boolean().default(true).volatile().description('Run the official SOUP drift detector for observed assistant messages.'),
     reanchoring: s.boolean().default(true).volatile().description('Deliver two Gentle Mentor reminders, then ask the human for clarification.'),
+    escalationBypass: s.boolean().default(false).description('Global escalation bypass (spec B1). When on, a chat may use its own bypass switch: it never escalates, and every 10th drift sends the full message.'),
     preset: s.number().min(0).max(4).step(1).default(2).volatile()
         .description('Five-position SOUP sensitivity selector; position 2 is threshold 0.2.'),
     baselineCount: s.number().min(1).max(100).step(1).default(4).volatile()
@@ -101,6 +116,9 @@ export async function apply(ctx, config = {}) {
     ctx.effect(() => () => mentorDomain.close());
     const mentorTable = mentorDomain.table('sessions');
     const initialMentorState = Object.fromEntries(mentorTable.entries());
+    const registerDomain = await ctx.storageDomain.open(REGISTER_DOMAIN);
+    ctx.effect(() => () => registerDomain.close());
+    const registerTable = registerDomain.table('entries');
     const liveDomain = await ctx.storageDomain.open(LIVE_HISTORY_DOMAIN);
     ctx.effect(() => () => liveDomain.close());
     const liveTable = liveDomain.table('sessions');
@@ -114,6 +132,8 @@ export async function apply(ctx, config = {}) {
     const readConfiguration = () => ({
         // The configured interpreter is authoritative; python3 is the portable default.
         python: config.python ?? 'python3',
+        // Global escalation bypass (spec B1): a plain, persisted setting, read as a value rather than volatile.
+        escalationBypass: config.escalationBypass === true,
         enabled: config.enabled.get() ?? true,
         detectorEnabled: config.detectorEnabled.get() ?? true,
         reanchoring: config.reanchoring.get() ?? true,
@@ -444,6 +464,12 @@ export async function apply(ctx, config = {}) {
             ...effectiveSettings(id),
             initialMentorState: { [id]: initialMentorState[id] },
             contextFor: (sessionKey) => mentorContexts.get(String(sessionKey)) ?? {},
+            // Spec B1: the bypass is on only when the global switch AND this chat's switch are both on.
+            bypassFor: (sessionKey) => resolved.escalationBypass === true && mentorContexts.get(String(sessionKey))?.escalationBypass === true,
+            onRegister: (entry) => {
+                // Spec B4-B5: the register is appended on every drift and never cleared.
+                void registerTable.put(`${entry.id}:${entry.drift}:${entry.at}`, entry).catch((error) => ctx.logger.warn('SOUP register write failed: %s', error instanceof Error ? error.message : String(error)));
+            },
             onMentorStateChange: updateMentorStatus,
             inject: ({ id, turn, attempt, reminder, report }) => {
                 const live = ensureSessionLive(id);

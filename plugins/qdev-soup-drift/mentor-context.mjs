@@ -9,6 +9,8 @@ export const MentorContextRecord = z.object({
   message: z.string().min(1).max(MENTOR_LIMITS.message).optional(),
   plan: z.string().min(1).max(MENTOR_LIMITS.plan).optional(),
   amendments: z.array(z.string().min(1).max(MENTOR_LIMITS.amendmentLength)).max(MENTOR_LIMITS.amendments).optional(),
+  // Per-chat escalation bypass (spec B1). Absent means off.
+  escalationBypass: z.boolean().optional(),
 }).strict()
 
 // Apply one field edit. value === null restores the default for that field.

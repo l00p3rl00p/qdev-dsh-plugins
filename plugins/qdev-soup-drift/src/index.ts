@@ -36,12 +36,29 @@ const SESSION_SETTINGS_DOMAIN = defineDomain({
 })
 
 // Feature 4: per-chat Gentle Mentor context (message, plan, amendments). Absent keys mean the defaults.
-type MentorContext = { message?: string; plan?: string; amendments?: string[] }
+type MentorContext = { message?: string; plan?: string; amendments?: string[]; escalationBypass?: boolean }
 const MENTOR_CONTEXT_DOMAIN = defineDomain({
   name: 'qdev_soup_mentor_context',
   version: 1,
   layout: 'per-record' as const,
   tables: { sessions: domainTable<string, MentorContext>(MentorContextRecord) },
+})
+
+// Spec B4-B5: the escalation-bypass register. One entry per drift, kept for the whole mission, never cleared.
+type RegisterEntry = { id: string; turn: number; drift: number; sent: 'first' | 'full'; at: number }
+const REGISTER_DOMAIN = defineDomain({
+  name: 'qdev_soup_register',
+  version: 1,
+  layout: 'per-record' as const,
+  tables: {
+    entries: domainTable<string, RegisterEntry>(z.object({
+      id: z.string(),
+      turn: z.number().int(),
+      drift: z.number().int().nonnegative(),
+      sent: z.enum(['first', 'full']),
+      at: z.number(),
+    })),
+  },
 })
 
 // Per-chat Live & Mentor history: last 50 calculations and markers, restored across Harness restarts.
@@ -101,6 +118,7 @@ export const Config = s.object({
   enabled: s.boolean().default(true).volatile().description('Master switch for trajectory observation and intervention.'),
   detectorEnabled: s.boolean().default(true).volatile().description('Run the official SOUP drift detector for observed assistant messages.'),
   reanchoring: s.boolean().default(true).volatile().description('Deliver two Gentle Mentor reminders, then ask the human for clarification.'),
+  escalationBypass: s.boolean().default(false).description('Global escalation bypass (spec B1). When on, a chat may use its own bypass switch: it never escalates, and every 10th drift sends the full message.'),
   preset: s.number().min(0).max(4).step(1).default(2).volatile()
     .description('Five-position SOUP sensitivity selector; position 2 is threshold 0.2.'),
   baselineCount: s.number().min(1).max(100).step(1).default(4).volatile()
@@ -236,6 +254,9 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
   ctx.effect(() => () => mentorDomain.close())
   const mentorTable = mentorDomain.table('sessions')
   const initialMentorState = Object.fromEntries(mentorTable.entries())
+  const registerDomain = await ctx.storageDomain.open(REGISTER_DOMAIN)
+  ctx.effect(() => () => registerDomain.close())
+  const registerTable = registerDomain.table('entries')
   const liveDomain = await ctx.storageDomain.open(LIVE_HISTORY_DOMAIN)
   ctx.effect(() => () => liveDomain.close())
   const liveTable = liveDomain.table('sessions')
@@ -250,6 +271,8 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
     // The configured interpreter is authoritative; python3 is the portable default.
 
     python: config.python ?? 'python3',
+    // Global escalation bypass (spec B1): a plain, persisted setting, read as a value rather than volatile.
+    escalationBypass: config.escalationBypass === true,
     enabled: config.enabled.get() ?? true,
     detectorEnabled: config.detectorEnabled.get() ?? true,
     reanchoring: config.reanchoring.get() ?? true,
@@ -585,6 +608,12 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
     ...effectiveSettings(id),
     initialMentorState: { [id]: initialMentorState[id] },
     contextFor: (sessionKey: string) => mentorContexts.get(String(sessionKey)) ?? {},
+    // Spec B1: the bypass is on only when the global switch AND this chat's switch are both on.
+    bypassFor: (sessionKey: string) => resolved.escalationBypass === true && mentorContexts.get(String(sessionKey))?.escalationBypass === true,
+    onRegister: (entry: { id: string; turn: number; drift: number; sent: 'first' | 'full'; at: number }) => {
+      // Spec B4-B5: the register is appended on every drift and never cleared.
+      void registerTable.put(`${entry.id}:${entry.drift}:${entry.at}`, entry).catch((error: unknown) => ctx.logger.warn('SOUP register write failed: %s', error instanceof Error ? error.message : String(error)))
+    },
     onMentorStateChange: updateMentorStatus,
     inject: ({ id, turn, attempt, reminder, report }: { id: string; turn: number; attempt: number; reminder: string; report: { kl_divergence: number; threshold: number } }) => {
       const live = ensureSessionLive(id)
