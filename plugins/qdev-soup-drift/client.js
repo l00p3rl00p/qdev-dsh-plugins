@@ -637,6 +637,21 @@ window.__ModuleLoader__.load({
     }
 
     // Details: its own tab. Telemetry for this chat, read-only, polling only while open.
+    // Register tab (spec B4-B5): the whole drift history for this chat, read-only, never cleared.
+    function RegisterView({ sessionId }) {
+      const sessionLive = useSessionLiveStatus(sessionId);
+      const entries = sessionLive.live?.mentor?.context?.register ?? [];
+      return h('div', { style: styles.sessionBody },
+        h('div', { style: styles.liveHeader },
+          h('h3', { style: { ...styles.compactCardTitle, padding: 0 } }, 'Register'),
+          h('button', { type: 'button', style: styles.compactButton, onClick: () => sessionLive.refresh() }, 'Refresh'),
+        ),
+        h('p', { style: styles.hint }, 'Every drift in this chat, and what the model received. Kept for the whole mission; there is no clear control.'),
+        sessionLive.error ? h('p', { role: 'alert', style: styles.error }, sessionLive.error) : null,
+        h(DriftRegister, { entries }),
+      );
+    }
+
     function SoupDetailsView({ sessionId }) {
       const sessionLive = useSessionLiveStatus(sessionId);
       const live = sessionLive.live;
@@ -1320,8 +1335,9 @@ window.__ModuleLoader__.load({
             h('button', { type: 'button', 'aria-pressed': view === 'mentor', style: styles.compactButton, onClick: () => setView('mentor') }, 'Mentor'),
             h('button', { type: 'button', 'aria-pressed': view === 'details', style: styles.compactButton, onClick: () => setView('details') }, 'Details'),
             h('button', { type: 'button', 'aria-pressed': view === 'convergence', style: styles.compactButton, onClick: () => setView('convergence') }, 'Convergence'),
+            h('button', { type: 'button', 'aria-pressed': view === 'register', style: styles.compactButton, onClick: () => setView('register') }, 'Register'),
           ),
-          view === 'convergence' ? h(ConvergenceView, { sessionId }) : view === 'details' ? h(SoupDetailsView, { sessionId }) : view === 'live' || view === 'mentor' ? h(LiveMentorView, { sessionId, part: view }) : h('div', { style: styles.sessionBody },
+          view === 'convergence' ? h(ConvergenceView, { sessionId }) : view === 'details' ? h(SoupDetailsView, { sessionId }) : view === 'live' || view === 'mentor' ? h(LiveMentorView, { sessionId, part: view }) : view === 'register' ? h(RegisterView, { sessionId }) : h('div', { style: styles.sessionBody },
           loading ? h('p', { role: 'status', style: styles.body }, 'Loading chat settings…') : null,
           visible && !visible.masterEnabled ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Global monitoring is OFF. Chat settings are read-only and cannot bypass the global master switch.') : visible && !visible.writable ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Chat settings are read-only.') : null,
           visible ? h('div', { style: styles.sessionGrid },
