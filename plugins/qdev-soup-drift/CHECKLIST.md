@@ -62,8 +62,6 @@ Mark key: [x] done and in the repo · [~] built, not verified live · [ ] not bu
 ## Conflicts for the owner to decide
 
 1. **Live build.** Hand-off: `6547cea` installed, restart pending. Spec 9b: `623fac8` live. Which is running?
-2. **Branch head.** Hand-off table says `af973fe`. Repo is `825a641`. The hand-off is stale.
-3. **Test count.** Hand-off and spec 9f say 100. Repo has 108.
 4. **Version.** Plan §5 says 0.7.0; spec §9 and `package.json` say 0.8.0.
 5. **Bypass and register.** In the spec (B1–B6) only, not in the plan or hand-off. Keep them as a new section, or fold them into §9?
 6. **Register placement.** Inside the Mentor card (built) or as its own `conversation.view` View (allowed, not built)?

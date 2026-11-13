@@ -8,13 +8,13 @@ Every row says whether the state is **verified** (seen on the running Harness or
 
 | Item | State | Verified? |
 |---|---|---|
-| Branch `feature/soup-feature3-live-mentor` head | `af973fe` (pushed) | yes, in sync with origin |
+| Branch `feature/soup-feature3-live-mentor` head | `825a641` (pushed; supersedes `af973fe`) | yes, in sync with origin |
 | Mentor plan save at full size | fixed: body cap derived from `MENTOR_LIMITS.plan`; `dist/` rebuilt | not on the live Harness |
 | Mentor "Use default" reverts the field | fixed client-side; loop from first attempt removed | not on the live Harness |
 | Sidebar tab + guide button branch | `soup-sidebar-tabtype`, head `6547cea` (pushed) | not on the live Harness |
 | Installed in the main Harness | `qdev-trajectory-drift-soup` installed from `6547cea` via `dsh plugin add`; profile lists it | install accepted; which build is live is an open conflict (see CHECKLIST.md) |
 | Rollback anchor (last known-good live build) | `ffdad12` / package 0.8.0 (what was live before this install) | — |
-| Tests | 100 of 100 pass on both branches | fakes only; not a live check |
+| Tests | 108 of 108 pass on the working branch | fakes plus real worker; not a live check |
 
 Commits in order on the working branch: `63d9341` (decision log), `ffdad12` (Appendix 11 gaps), `642f762` (install record), the examples-test commit, `9ee6823` (focus rule), `425d8e5` (hand-off), `3dccf9f` (sidebar pane, hot key), `3fbd8fd` (hot key removed), `af973fe` (Mentor fixes).
 
