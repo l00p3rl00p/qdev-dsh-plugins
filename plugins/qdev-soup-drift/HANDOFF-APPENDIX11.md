@@ -54,7 +54,9 @@ A. **Resolved by decision: the first drift stays one sentence.** `reanchor.mjs` 
 
 B. **Live check (needs you).** Restart `dsh web`, hard-reload, then: save a long plan in Mentor, press "Use default", confirm the text reverts, and confirm the SOUP guide button opens the tab.
 
-C. **Per-chat Intent in SOUP's Mentor store.** Set, Amend (adds an amendment), pause, stop, and a SOUP button above the chat. Stored on disk with the Mentor context. The SOUP settings UI compiles and stores intents. **No DSH changes.** Persistence uses the plugin's own store; no core event is added.
+C. **Per-chat Intent in SOUP's Mentor store.** Set, Amend (adds an amendment), pause, stop, and a SOUP button above the chat. **No DSH changes.**
+   - **Storage (decided):** add one optional `intent` field to `MentorContextRecord` in `mentor-context.mjs`, in the existing `qdev_soup_mentor_context` domain (version 1, table `sessions`). Every existing record stays valid because the field is optional. Writes go through the existing `contextTable.put` path (`src/index.ts` ~line 1028), so the intent persists on disk and survives a Harness restart.
+   - **Ladybug check:** the `codebase.ladybug` index confirms `mentor-context.mjs`, `saveMentorField` and `MentorTextField` are the relevant code. The database itself has no CLI or Python client installed here, so it was read as plain JSON.
 
 D. **Resolved by research: persistence seam for Intent.** Installed plugins that write plugin records to the session log (`forge-session`, `action-cards`, `client-ui-forge`, `translator`) all sit under DSH's own experimental packages. The SDK says `appendPluginRecord` may be called only from `packages/experimental/`, and the `verify-plugin-record-callers` gate enforces that in the repo. The runtime only checks the record name, not the caller. So SOUP must not write to the session log. **Decision: Intent is stored in SOUP's own Mentor store on disk**, which already persists per chat. No session-log write, no DSH change.
 
