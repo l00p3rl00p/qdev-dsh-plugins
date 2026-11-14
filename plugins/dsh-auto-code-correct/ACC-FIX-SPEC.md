@@ -87,6 +87,8 @@ Then pick the row:
 
 ### Step 2 — Compile against the running version
 
+> **HISTORICAL — do not execute.** This step records the 2026-11-11 diagnosis. Current `package.json` no longer pins versions: every `@deepseek-ai/dsh-*` devDependency uses the range `>=0.2.2-0 <0.3.0`, and `dsh-lsp-actions` uses `^0.5.17`. Exact versions are recorded only in `pnpm-lock.yaml`.
+
 On your branch, set every `@deepseek-ai/dsh-*` devDependency from `0.2.1-rc.5` to `0.2.2-rc.1`, reinstall,
 run `pnpm run typecheck`. Paste the real output. Type errors here are direct evidence of a changed contract;
 fix only those in files under `src/client/` and `src/typert.*`. If versions cannot be installed, stop and report.

@@ -107,7 +107,7 @@ pnpm install --no-frozen-lockfile
 pnpm run verify
 mkdir -p dist
 pnpm pack --pack-destination dist
-dsh plugin --profile web add ./dist/dsh-auto-code-correct-0.1.12.tgz
+dsh plugin --profile web add ./dist/dsh-auto-code-correct-0.1.13.tgz
 dsh --profile web --dump-config
 ```
 

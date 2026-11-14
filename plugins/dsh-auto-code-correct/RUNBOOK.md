@@ -21,7 +21,9 @@ The native `dsh plugin` command forwards to the target profile's pnpm package ma
 
 Deployment-specific; kept in private operations notes.
 
-### Confirm installed readiness dashboard (ACC 0.1.9)
+### Historical: confirm installed readiness dashboard (ACC 0.1.9 acceptance)
+
+> Historical acceptance procedure for the 0.1.9 package. It is kept for the record; for the current package, use the Installing steps below and verify the installed behavior the same way.
 
 After installing the **verified ACC 0.1.9** tarball in the active `web` profile and restarting DSH once, open Plugins → Installed → ACC and inspect **Environment readiness**. The initial check should resolve into a timestamp, project path, and per-tool statuses. Click **Refresh** and verify a new check completes. The error `cannot get property "remote.accReadiness" without inject` is a failure of the native Remote child-scope contract—not missing toolchains. Test both initially and after a browser reload. The source contract is also covered by `scripts/check-package.mjs`, but CI does **not** establish live settings readiness until this installed Web check is observed.
 
@@ -44,7 +46,7 @@ pnpm test
 pnpm run build
 mkdir -p dist
 pnpm pack --pack-destination dist
-dsh plugin --profile web add ./dist/dsh-auto-code-correct-0.1.9.tgz
+dsh plugin --profile web add ./dist/dsh-auto-code-correct-0.1.13.tgz
 dsh --profile web --dump-config
 ```
 
@@ -67,7 +69,7 @@ pnpm install --no-frozen-lockfile
 pnpm run verify
 mkdir -p dist
 pnpm pack --pack-destination dist
-dsh plugin --profile web add ./dist/dsh-auto-code-correct-0.1.9.tgz
+dsh plugin --profile web add ./dist/dsh-auto-code-correct-0.1.13.tgz
 dsh --profile web --dump-config
 ```
 

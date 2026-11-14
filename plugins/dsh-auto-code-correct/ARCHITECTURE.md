@@ -14,7 +14,7 @@ For successful native `write`, `edit`, and `str_replace_editor` operations, ACC 
 
 ## Reused LSP actions and QDev toolchain
 
-ACC uses the existing Apache-2.0 [dsh-lsp-actions](https://github.com/PerryLink/dsh-lsp-actions) at pinned version `0.5.17` as an ordinary package dependency. **It is one generic plugin for multiple language servers**, not one TypeScript-only language server. ACC uses its native Cordis registration instead of copying its LSP client. The provider supplies diagnostics, formatting, code actions, completion, symbols, inlay hints, signature help, and rename. DSH's own `dsh-lsp`/`dsh-lsp-stdio`/`dsh-tool-lsp` keep their four read-only navigation operations.
+ACC uses the existing Apache-2.0 [dsh-lsp-actions](https://github.com/PerryLink/dsh-lsp-actions) at caret range `^0.5.17` as an ordinary package dependency (the exact resolved version is recorded in `pnpm-lock.yaml`, not in `package.json`). **It is one generic plugin for multiple language servers**, not one TypeScript-only language server. ACC uses its native Cordis registration instead of copying its LSP client. The provider supplies diagnostics, formatting, code actions, completion, symbols, inlay hints, signature help, and rename. DSH's own `dsh-lsp`/`dsh-lsp-stdio`/`dsh-tool-lsp` keep their four read-only navigation operations.
 
 | Language | Existing command | Arguments | File extensions |
 |---|---|---|---|
