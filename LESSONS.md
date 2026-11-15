@@ -25,6 +25,12 @@ Reusable findings from ACC, SOUP, and Telemetry Seams. Implementation steps belo
 - An auxiliary plugin record belongs in the platform's ignorable plugin-record channel. Do not append unknown required core session events or fabricate parent tool events.
 - For telemetry, distinguish an observed event from an inferred interpretation. Missing environment metadata should be reported as unknown rather than invented.
 
+## Specify new plugin UI without overdesigning it
+
+- Name **where the UI lives** in the native DSH surface and give only 2–5 essential visual components; use actual installed extension points and leave nonessential visual decisions to the implementation.
+- State **what must not appear**, how each interaction works (including mouse/touch/conversation where relevant), and how the agent and human will use the surface together.
+- On a failed implementation, describe the **specific observed defect** and repair that behavior rather than restarting from a vague redesign prompt.
+
 ## Keep runtime recovery bounded
 
 - A broken browser plugin must remain removable through the native CLI without deleting the profile or rebuilding the Harness. Remove only the affected package and its explicit loader insertion, if present.
