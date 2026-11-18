@@ -1,8 +1,7 @@
 import { spawn } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
+import { PRESETS, startMeasurement } from './soup-core.mjs'
 
-export const PRESETS = Object.freeze([0.05, 0.1, 0.2, 0.3, 0.4])
-const WORKER = fileURLToPath(new URL('./soup_worker.py', import.meta.url))
+export { PRESETS }
 
 export function assistantText(event) {
   if (event?.type !== 'assistant/message' || event.data?.interrupted) return ''
@@ -36,7 +35,7 @@ export function createDetector({
   if (!Number.isInteger(workerTimeoutMs) || workerTimeoutMs < 1000) throw new Error('Invalid worker timeout')
 
   const states = new Map()
-  const children = new Set()
+  const measurements = new Set()
   let disposed = false
 
   function stateOf(id) {
@@ -89,69 +88,32 @@ export function createDetector({
     state.pending = true
     onEvaluationStart({ sessionId, turn, singleTurn, baselineSize: state.base.length, windowSize: window.length })
 
-    let child
-    try {
-      child = spawnProcess(python, [WORKER], { stdio: ['pipe', 'pipe', 'pipe'] })
-    } catch (error) {
+    let cancel
+    const settle = (error, result) => {
+      measurements.delete(cancel)
       finish(sessionId, state)
-      onError(error, { sessionId, turn, phase: 'spawn' })
-      return
-    }
-    children.add(child)
-    let output = ''
-    let stderr = ''
-    let settled = false
-    let timedOut = false
-    const timeout = setTimeout(() => {
-      if (settled) return
-      timedOut = true
-      child.kill('SIGTERM')
-      onError(new Error(`SOUP worker timed out after ${workerTimeoutMs}ms`), { sessionId, turn, phase: 'timeout' })
-    }, workerTimeoutMs)
-
-    const settle = () => {
-      if (settled) return false
-      settled = true
-      clearTimeout(timeout)
-      children.delete(child)
-      return true
-    }
-
-    child.stdout.on('data', (bytes) => {
-      output += bytes.toString()
-      if (output.length > 16384) child.kill('SIGTERM')
-    })
-    child.stderr.on('data', (bytes) => {
-      stderr += bytes.toString()
-      if (stderr.length > 4096) child.kill('SIGTERM')
-    })
-    child.on('error', (error) => {
-      if (!settle()) return
-      finish(sessionId, state)
-      if (!disposed) onError(error, { sessionId, turn, phase: 'process' })
-    })
-    child.on('close', (code) => {
-      if (!settle()) return
-      finish(sessionId, state)
-      if (disposed || timedOut) return
-      if (code !== 0) {
-        onError(new Error(`SOUP worker exit ${code}: ${stderr.slice(0, 500)}`), { sessionId, turn, phase: 'worker' })
+      if (error) {
+        if (!disposed || error.phase === 'spawn') onError(error, { sessionId, turn, phase: error.phase })
         return
       }
+      if (disposed) return
+      const report = { sessionId, turn, singleTurn, result }
       try {
-        const result = JSON.parse(output)
-        const report = { sessionId, turn, singleTurn, result }
         onEvaluation(report)
         if (result.drift_detected) onDrift(report)
-      } catch (error) {
-        onError(error, { sessionId, turn, phase: 'parse' })
+      } catch (consumerError) {
+        onError(consumerError, { sessionId, turn, phase: 'parse' })
       }
-    })
-    child.stdin.end(JSON.stringify({
+    }
+    cancel = startMeasurement({
+      python,
       reference: state.base.map((item) => item.text),
       live: window.map((item) => item.text),
       threshold: PRESETS[preset],
-    }))
+      timeoutMs: workerTimeoutMs,
+      spawnProcess,
+    }, settle)
+    measurements.add(cancel)
   }
 
   function observe(id, event) {
@@ -171,8 +133,8 @@ export function createDetector({
     seed,
     dispose() {
       disposed = true
-      for (const child of children) child.kill('SIGTERM')
-      children.clear()
+      for (const cancel of measurements) cancel()
+      measurements.clear()
       states.clear()
     },
   }

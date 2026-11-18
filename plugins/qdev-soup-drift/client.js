@@ -1367,7 +1367,7 @@ window.__ModuleLoader__.load({
       return sessionId ? h(SessionSettingsView, { key: `pane-${sessionId}`, sessionId: String(sessionId), defaultTab: 'convergence' }) : null;
     }
 
-    // No hot key here: reading an undeclared service (ctx.shortcuts) blocks activation. The user creates the hot key.
+    // No hot key here: it would read a service this plugin does not declare, which blocks activation. The user creates the hot key.
     return {
       name: 'qdev-trajectory-drift-soup-settings',
       inject: ['slots', 'configForms'],
