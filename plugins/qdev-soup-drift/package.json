@@ -18,6 +18,8 @@
     "icon.svg",
     "drift.mjs",
     "soup-core.mjs",
+    "status.mjs",
+    "session-registry.mjs",
     "monitor.mjs",
     "monitor-cli.mjs",
     "reanchor.mjs",

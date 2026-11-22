@@ -87,6 +87,10 @@ export type RuntimeStatus = {
     lastCompletedAt?: number
     averageKlDivergence?: number
     averageThresholdRatio?: number
+    recentThresholdRatio?: number
+    lastDriftAt?: number
+    lastDriftTurn?: number | null
+    droppedEvents: number
     humanSummary: 'Waiting for measurements' | 'Stable' | 'Approaching threshold' | 'Drifting' | 'Severe drift'
     lastResult?: { sessionId: string; turn: number | null; klDivergence: number; threshold: number; driftDetected: boolean; singleTurn: boolean }
   }

@@ -211,7 +211,7 @@ export function createRuntimeFactory({ ctx, resolved, agents, runtimes, pendingM
                     runningDetectors.delete(sessionId);
                 status.detector.state = runningDetectors.size ? 'running' : 'idle';
                 status.detector.evaluations += 1;
-                noteEvaluation(result);
+                noteEvaluation({ turn, result });
                 status.detector.lastCompletedAt = live.lastCompletedAt;
                 status.detector.lastResult = {
                     sessionId,
@@ -223,7 +223,9 @@ export function createRuntimeFactory({ ctx, resolved, agents, runtimes, pendingM
                 };
             },
             onError: (error, details = {}) => {
-                if (details.sessionId) {
+                // A downstream consumer failure (notify/Mentor/observers) or a drop diagnostic is not a measurement failure.
+                const measurement = !['consumer', 'drop', 'evidence'].includes(details.phase ?? '') && !details.phase?.startsWith('consumer:');
+                if (details.sessionId && measurement) {
                     const live = ensureSessionLive(details.sessionId);
                     if (live.pending)
                         runningDetectors.add(details.sessionId);

@@ -1,6 +1,8 @@
 import type { Context } from '@deepseek-ai/cordis'
 // @ts-expect-error JavaScript runtime has no declaration file.
 import { PRESETS } from '../runtime.mjs'
+// @ts-expect-error JavaScript status module has no declaration file.
+import { createStatus, createDriftSummary, deriveOperationalState, recordError as recordStatusError } from '../status.mjs'
 import { PACKAGE_NAME, SOURCE, VERSION } from './constants.js'
 import type { Effective, Intervention, MentorSnapshot, Resolved, RuntimeStatus, Table, MentorStoredState } from './types.js'
 import type { Agent } from '@deepseek-ai/dsh-agent'
@@ -16,40 +18,19 @@ export function createStatusBoard({ ctx, resolved, degraded, agents, runningDete
   effectiveSettings: (id: string) => Effective
   mentorTable: Table<MentorStoredState>
 }) {
-  const status: RuntimeStatus = {
+  // The shape and the rules (initial object, error recording, operational state, drift summary) live in the
+  // host-independent status.mjs; this module only binds them to the Harness (logger, agents, storage).
+  const status: RuntimeStatus = createStatus({
     identity: {
       name: PACKAGE_NAME,
       version: VERSION,
       description: 'SOUP-powered trajectory drift detection and Gentle Mentor reanchoring for DeepSeek Harness sessions.',
       source: SOURCE,
     },
-    configuration: { ...resolved, threshold: PRESETS[resolved.preset] },
-    lifecycle: { state: 'active', startedAt: Date.now(), liveAgents: 0, subscriptions: 4, degraded },
-    trajectory: {
-      state: resolved.enabled ? 'waiting' : 'disabled',
-      sessionEvents: 0,
-      assistantMessages: 0,
-      replayedEvents: 0,
-      sessionsObserved: 0,
-      baselineSize: 0,
-      baselineTarget: resolved.baselineCount,
-      windowSize: 0,
-      windowTarget: resolved.windowCount,
-    },
-    detector: {
-      state: !resolved.enabled || !resolved.detectorEnabled ? 'disabled' : 'idle',
-      evaluations: 0,
-      drifts: 0,
-      humanSummary: 'Waiting for measurements',
-    },
-    mentor: {
-      state: !resolved.enabled || !resolved.reanchoring ? 'disabled' : 'ready',
-      reminders: [],
-      driftCount: 0,
-      carriedDrifts: 0,
-    },
-    errors: [],
-  }
+    resolved,
+    threshold: PRESETS[resolved.preset],
+    degraded,
+  })
 
   const abortIntervention = (id: string): void => {
     const pending = interventions.get(id)
@@ -60,33 +41,24 @@ export function createStatusBoard({ ctx, resolved, degraded, agents, runningDete
     interventions.delete(id)
   }
   const refreshOperationalState = (): void => {
-    const configurations = [...agents.keys()].map(effectiveSettings)
-    const observing = resolved.enabled && (!configurations.length || configurations.some((value) => value.enabled))
-    const detecting = observing && (configurations.length ? configurations.some((value) => value.enabled && value.detectorEnabled) : resolved.detectorEnabled)
-    const mentoring = observing && (configurations.length ? configurations.some((value) => value.enabled && value.reanchoring) : resolved.reanchoring)
-    if (!observing) status.trajectory.state = 'disabled'
-    else if (status.trajectory.state === 'disabled') status.trajectory.state = 'waiting'
-    status.detector.state = !detecting ? 'disabled' : runningDetectors.size ? 'running' : 'idle'
-    status.mentor.state = !mentoring ? 'disabled' : status.mentor.resetDecision?.required ? 'escalated' : 'ready'
+    const next = deriveOperationalState({
+      resolved,
+      configurations: [...agents.keys()].map(effectiveSettings),
+      runningCount: runningDetectors.size,
+      trajectoryState: status.trajectory.state,
+      resetRequired: Boolean(status.mentor.resetDecision?.required),
+    })
+    status.trajectory.state = next.trajectory
+    status.detector.state = next.detector
+    status.mentor.state = next.mentor
   }
 
   const recordError = (error: unknown, details: { phase?: string; sessionId?: string } = {}): void => {
-    const message = error instanceof Error ? error.message : String(error)
-    status.errors.unshift({ at: Date.now(), message, ...details })
-    status.errors.splice(8)
-    if (status.detector.state !== 'disabled') status.detector.state = 'error'
+    const message = recordStatusError(status, error, details)
     ctx.logger.error('SOUP drift error phase=%s session=%s: %s', details.phase ?? 'runtime', details.sessionId ?? '-', message)
   }
-  let klTotal = 0
-  let ratioTotal = 0
-  const updateDriftSummary = (): void => {
-    // Different chats may have different thresholds; average each recorded sample's ratio.
-    const ratio = status.detector.evaluations ? ratioTotal / status.detector.evaluations : undefined
-    status.detector.averageThresholdRatio = ratio
-    status.detector.humanSummary = ratio === undefined
-      ? 'Waiting for measurements'
-      : ratio < 0.5 ? 'Stable' : ratio < 1 ? 'Approaching threshold' : ratio < 2 ? 'Drifting' : 'Severe drift'
-  }
+  // P4: cumulative averages stay, but humanSummary follows the RECENT evaluations.
+  const driftSummary = createDriftSummary()
   const mentorSnapshots = new Map<string, {
     sessionId: string
     turn: number | null
@@ -121,12 +93,10 @@ export function createStatusBoard({ ctx, resolved, degraded, agents, runningDete
     }
   }
 
-  // Called once per finished SOUP calculation, after status.detector.evaluations has been incremented.
-  const noteEvaluation = (result: { kl_divergence: number; threshold: number }): void => {
-    ratioTotal += result.kl_divergence / result.threshold
-    klTotal += result.kl_divergence
-    status.detector.averageKlDivergence = klTotal / status.detector.evaluations
-    updateDriftSummary()
+  // Called once per finished SOUP calculation.
+  const noteEvaluation = ({ turn, result }: { turn: number | null; result: { kl_divergence: number; threshold: number; drift_detected: boolean } }): void => {
+    driftSummary.record({ turn, result, at: Date.now() })
+    driftSummary.applyTo(status.detector)
   }
   return { status, abortIntervention, refreshOperationalState, recordError, noteEvaluation, mentorSnapshots, updateMentorStatus }
 }

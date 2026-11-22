@@ -5,6 +5,8 @@ import s from '@deepseek-ai/schemastery';
 import { createPluginRuntime, PRESETS } from '../runtime.mjs';
 // @ts-expect-error JavaScript settings module has no declaration file.
 import { createSessionSettings } from '../session-settings.mjs';
+// @ts-expect-error JavaScript session registry has no declaration file.
+import { createSessionRegistry } from '../session-registry.mjs';
 import { PACKAGE_NAME } from './constants.js';
 import { openTables } from './storage.js';
 import { createLive } from './live.js';
@@ -53,8 +55,16 @@ export async function apply(ctx, config = {}) {
     const agents = new Map();
     const seenSessions = new Set();
     const pendingMessages = new Map();
-    const runtimes = new Map();
-    const runningDetectors = new Set();
+    // Same Map/Set instances the registry owns (session -> runtime, running detectors).
+    const registry = createSessionRegistry({
+        resolveAgent: (id) => agents.get(id) ?? ctx.agents.get(id),
+        attachAgent: (agent) => attachAgent(agent),
+        replay: (agent, beforeSeq) => replayAgent(agent, beforeSeq),
+        report: (error, details) => board.recordError(error, details),
+    });
+    // P3: events that could not reach a runtime are counted (status.detector.droppedEvents) and diagnosed once.
+    const runtimes = registry.runtimes;
+    const runningDetectors = registry.running;
     const interventions = new Map();
     let applySessionSettings = () => { };
     const sessionSettings = createSessionSettings({
@@ -95,17 +105,6 @@ export async function apply(ctx, config = {}) {
         // A retained/pre-existing agent is replayed lazily when its next session event arrives.
         if (runtimes.has(id))
             applySessionSettings(id);
-    };
-    const activateSession = (id, event) => {
-        const existing = runtimes.get(id);
-        if (existing)
-            return existing;
-        const agent = agents.get(id) ?? ctx.agents.get(id);
-        if (!agent)
-            return undefined;
-        attachAgent(agent);
-        replayAgent(agent, Number(event.seq));
-        return runtimes.get(id);
     };
     applySessionSettings = (id) => {
         const next = effectiveSettings(id);
@@ -221,8 +220,10 @@ export async function apply(ctx, config = {}) {
         const type = event.type;
         if (type === 'plan/mode' || type === 'hook/result')
             observeDecision(sessionId, event);
-        const runtime = runtimes.get(sessionId) ?? activateSession(sessionId, event);
-        runtime?.observe(sessionId, event);
+        // The registry resolves/activates the runtime, replays history when an agent first resolves, and counts +
+        // diagnoses (never silently skips) an event it cannot deliver.
+        registry.observe(sessionId, event);
+        status.detector.droppedEvents = registry.droppedEvents;
     });
     registerRoutes({ ctx, status, resolved, agents, runtimes, interventions, sessionSettings, sessionLiveView, mentorContexts, contextTable, noteMissing });
     ctx.effect(() => async () => {
