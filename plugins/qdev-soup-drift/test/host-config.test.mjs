@@ -208,10 +208,17 @@ test('native Loader commits master/count/threshold saves into the mounted Host a
   assert.equal(s.configuration.threshold, 0.4)
   assert.equal(s.configuration.baselineCount, 3)
   assert.equal(s.configuration.windowCount, 1)
-  assert.equal(s.trajectory.baselineSize, 3, 'replacement detector did not seed the saved baseline count')
+  // P5 + decision C (intentional change; was: a replacement detector seeded the baseline): a settings save
+  // reconfigures the live detector, and the new baseline slot is filled at once from the EARLIEST session
+  // history (the drifting message already measured), so the baseline is 3/3 right after the save.
+  assert.equal(s.trajectory.baselineSize, 3, 'baseline growth must refill from the earliest history at save time')
   assert.equal(s.trajectory.baselineTarget, 3)
   assert.equal(s.trajectory.windowTarget, 1)
-  s = await f.evaluate()
+  // That baseline now contains the earlier drifting text, so a NEW, different drifting message is used.
+  const novel = 'quarterly tax filing deadlines and invoice reconciliation procedures'
+  const evaluationsBefore = s.detector.evaluations
+  f.assistant(novel, 1)
+  s = await f.until((x) => x.detector.evaluations === evaluationsBefore + 1, 'real SOUP worker did not measure the new window')
   assert.equal(s.detector.lastResult.threshold, 0.4)
   assert.equal(f.injected.length, 2)
   assert.equal(f.injected[1].source.attempt, 2, 'saving detector settings erased this turn\'s first strike')
@@ -306,7 +313,9 @@ test('master OFF invalidates an in-flight real SOUP worker across immediate OFF/
   const disabled = await f.status()
   assert.equal(disabled.detector.state, 'disabled')
   await f.update({ enabled: true, preset: 1 })
-  const s = await f.evaluate()
+  // Decision B (intentional change; was: the window was discarded on OFF and a fresh evaluate() was needed):
+  // the window in flight at OFF is kept and measured once after ON, under the NEW threshold.
+  const s = await f.until((x) => x.detector.evaluations === 1, 'kept in-flight window was not measured after ON')
   assert.equal(s.detector.lastResult.threshold, 0.1)
   // The killed process may close after its replacement; neither its result nor
   // its final observation may mutate the new detector or mentor generation.

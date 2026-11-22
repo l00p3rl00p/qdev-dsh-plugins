@@ -557,6 +557,13 @@ test('hard global master freezes both chats and rejects mutations without changi
   await f.update({ enabled: true })
   assert.equal((await f.settings(A)).effective.enabled, true)
   assert.equal((await f.settings(B)).effective.enabled, true)
+  // Decision B (intentional change): A's window that was in flight at OFF is kept and measured once after
+  // ON (A's own threshold); wait for it before measuring new windows so the counts stay exact.
+  const kept = await f.until((s) => s.detector.evaluations === disabled.detector.evaluations + 1, 'A kept in-flight window was not measured after ON')
+  assert.equal(kept.detector.lastResult.sessionId, A)
+  assert.equal(kept.detector.lastResult.threshold, 0.05)
+  await delay(150)
+  assert.equal((await f.status()).detector.evaluations, disabled.detector.evaluations + 1, 'kept window counted more than once')
   const a = await f.evaluate(A, 1, 2)
   assert.equal(a.detector.lastResult.threshold, 0.05)
   const b = await f.evaluate(B, 1, 2)
@@ -701,28 +708,30 @@ test('same-id agent disposal fences the old worker and resume retains two strike
   assert.equal(resumed.trajectory.baselineTarget, 1)
   assert.equal(resumed.trajectory.windowSize, 0)
   assert.ok(resumed.trajectory.replayedEvents > before.trajectory.replayedEvents)
-  assert.equal(resumed.detector.state, 'idle', 'disposed worker remained marked running')
-  // The terminated child closes asynchronously; neither that late close nor an
-  // already queued result may advance counters, deliver or persist strike three.
+  // Decision B (intentional change, was: 'idle' and the in-flight window discarded): the window that was in
+  // flight when the agent left is KEPT and measured once under the resumed agent.
+  assert.equal(resumed.detector.state, 'running', 'kept in-flight window was not re-measured on resume')
+  // Leak guards (kept on the new flow): nothing from the DISPOSED generation has asked a question, reached
+  // the resumed agent or been persisted at this point; only the kept window's own result may do that later.
+  assert.equal(f.questions.length, 0)
+  assert.equal(replacement.received.length, 0, 'old generation injected into the resumed agent')
+  assert.equal(mentorWrites(f), writes, 'old generation persisted an escalation into the resumed session')
+  // Its measurement is the third strike. The disposed worker's late close / queued result must not count
+  // again: exactly one more evaluation and drift, under the closed-chat global threshold.
+  await f.until((s) => s.detector.evaluations === before.detector.evaluations + 1, 'kept window never measured on resume')
   await delay(150)
   const settled = await f.status()
-  assert.equal(settled.detector.evaluations, before.detector.evaluations)
-  assert.equal(settled.detector.drifts, before.detector.drifts)
-  assert.deepEqual(settled.detector.lastResult, before.detector.lastResult)
-  assert.equal(f.injected.length, 2)
-  assert.equal(replacement.received.length, 0, 'old generation injected into the resumed agent')
-  assert.equal(f.questions.length, 0)
-  assert.equal(mentorWrites(f), writes, 'old generation persisted an escalation into the resumed session')
-  const fresh = await f.evaluate(A)
-  assert.equal(fresh.detector.evaluations, before.detector.evaluations + 1)
-  assert.equal(fresh.detector.lastResult.threshold, 0.3, 'resumed worker ignored closed-chat global save')
-  assert.equal(replacement.received.length, 1, 'fresh worker did not reach the new receiving agent')
+  assert.equal(settled.detector.evaluations, before.detector.evaluations + 1, 'kept window counted more than once')
+  assert.equal(settled.detector.drifts, before.detector.drifts + 1)
+  assert.equal(settled.detector.lastResult.threshold, 0.3, 'resumed worker ignored closed-chat global save')
+  // The retained two strikes were NOT reset: strike three escalates to the NEW agent, exactly once, never the old one.
+  assert.equal(replacement.received.length, 1, 'kept-window result did not reach the new receiving agent')
   assert.equal(replacement.received[0].source.form, 'escalation', 'resume granted a new reminder allowance')
-  assert.equal(f.injected.length, 3)
+  assert.equal(f.injected.length, 3, 'a stale generation also injected')
   assert.equal(f.questions.length, 1)
   assert.equal(f.questions[0].request.agent, replacement)
   const mentor = f.facility.get('qdev_soup_drift_state').table('sessions')
-  await f.until(() => mentor.get(A)?.decisionPending === true, 'fresh third strike was not durably recorded')
+  await f.until(() => mentor.get(A)?.decisionPending === true, 'third strike was not durably recorded')
   assert.deepEqual(mentor.get(A), { carry: 3, decisionPending: true })
 })
 

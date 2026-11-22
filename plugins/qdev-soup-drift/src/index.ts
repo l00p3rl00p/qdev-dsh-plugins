@@ -139,14 +139,20 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
     // or chat edits may update its configuration, but only reattachment can enable
     // and replay it, which prevents a closed chat from missing history on resume.
     const operational = agent ? next : { ...next, enabled: false }
-    const reset = existing ? existing.configure(operational) : Boolean(agent && next.enabled)
+    // Decision C: with a live agent, a baseline growth refills its new slots from the earliest session
+    // history (the material the old replace-the-detector path seeded), not from the next events.
+    const history = agent ? { history: () => agent.session.snapshotEvents() } : {}
+    const reset = existing ? existing.configure(operational, history) : Boolean(agent && next.enabled)
+    // P5: a threshold/window change keeps the collected windows (reset=false) but cancels and re-queues any
+    // in-flight measurement; decision B: re-enabling can START the kept window synchronously (configure above),
+    // so the running flag is cleared only when nothing is evaluating.
+    const evaluating = Boolean(existing?.isEvaluating(id))
+    if (!evaluating) runningDetectors.delete(id)
     if (reset) {
-      runningDetectors.delete(id)
       const live = sessionLive.get(id)
       if (live) {
-        live.baselineSize = 0
-        live.windowSize = 0
-        live.pending = false
+        // The detector keeps its windows across a suspend/resume; observation callbacks restore the counts.
+        if (!evaluating) live.pending = false
         delete live.lastError
       }
       if (status.trajectory.lastSessionId === id) {
