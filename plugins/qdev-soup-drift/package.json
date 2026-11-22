@@ -19,6 +19,7 @@
     "drift.mjs",
     "soup-core.mjs",
     "status.mjs",
+    "ARCHITECTURE.md",
     "session-registry.mjs",
     "monitor.mjs",
     "monitor-cli.mjs",
