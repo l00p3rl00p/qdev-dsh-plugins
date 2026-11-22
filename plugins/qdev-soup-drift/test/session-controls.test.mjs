@@ -11,16 +11,27 @@ const clone = value => JSON.parse(JSON.stringify(value))
 const response = (data, status = 200) => ({ ok: status >= 200 && status < 300, status, json: async () => data })
 const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no }); return { promise, resolve, reject } }
 const defaults = () => ({ python: '/fixture/python', enabled: true, detectorEnabled: true, reanchoring: true, preset: 2, baselineCount: 4, windowCount: 4 })
-const fields = { enabled: 'Monitoring', detectorEnabled: 'Drift detector', reanchoring: 'Gentle Mentor', preset: 'Sensitivity', baselineCount: 'Baseline messages', windowCount: 'Comparison window', python: 'Python interpreter' }
+const fields = { enabled: 'Monitoring', detectorEnabled: 'Drift detector', reanchoring: 'Gentle Mentor', preset: 'Sensitivity', baselineCount: 'Baseline messages', windowCount: 'Comparison window' }
 function snapshot(sessionId = 'chat-A', overrides = {}, base = defaults(), revision = 0) {
   const effective = { ...base, ...overrides }; effective.enabled = base.enabled && effective.enabled
   return { sessionId, revision, base: clone(base), overrides: clone(overrides), effective, sources: Object.fromEntries(Object.keys(base).map(field => [field, Object.hasOwn(overrides, field) ? 'chat' : 'global'])), threshold: [0.05, 0.1, 0.2, 0.3, 0.4][effective.preset], masterEnabled: base.enabled, writable: base.enabled }
+}
+function liveSnapshot(sessionId = 'chat-A') {
+  return {
+    sessionId, attached: true,
+    effective: { enabled: true, detectorEnabled: true, reanchoring: true, threshold: 0.2, baselineTarget: 4, windowTarget: 4 },
+    trajectory: { state: 'observing', sessionEvents: 7, assistantMessages: 5, baselineSize: 4, windowSize: 1, lastEventAt: 1700000000000, lastEventType: 'assistant/message' },
+    detector: { state: 'idle', pending: false, evaluations: 1, drifts: 0, lastResult: { sessionId, turn: 2, singleTurn: true, klDivergence: 0.12, threshold: 0.2, driftDetected: false, completedAt: 1700000000000 } },
+    mentor: { state: 'ready', turn: 2, driftCount: 0, carry: 0, decisionPending: false, escalated: false },
+  }
 }
 function backend() {
   const base = defaults(), records = new Map()
   function read(id) { const item = records.get(id) ?? { overrides: {}, revision: 0 }; return snapshot(id, item.overrides, base, item.revision) }
   return { base, read, records, async fetch(url, options) {
-    if (options.method !== 'POST') return response({ ok: true, settings: read(new URL(url, 'http://fixture').searchParams.get('sessionId')) })
+    const parsed = new URL(url, 'http://fixture')
+    if (options.method !== 'POST' && parsed.pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: liveSnapshot(parsed.searchParams.get('sessionId')) })
+    if (options.method !== 'POST') return response({ ok: true, settings: read(parsed.searchParams.get('sessionId')) })
     const { sessionId, expectedRevision, op, field, value } = JSON.parse(options.body)
     const current = read(sessionId)
     if (expectedRevision !== current.revision) return response({ ok: false, error: 'revision-conflict', settings: current }, 409)
@@ -33,8 +44,9 @@ function backend() {
 }
 
 function harness(fetch) {
-  const instances = new Map(), registrations = [], requests = [], updatesAfterDispose = []
-  let current, cursor, tree, dirty = false, props = { sessionId: 'chat-A' }, disposed = false, effects = [], visited
+  const instances = new Map(), registrations = [], requests = [], statusRequests = [], updatesAfterDispose = []
+  let current, cursor, tree, dirty = false, props = { sessionId: 'chat-A' }, disposed = false, effects = [], visited, timerId = 0
+  const timers = new Map()
   const hook = () => [current.hooks, cursor++]
   const React = {
     Fragment: Symbol.for('react.fragment'),
@@ -44,7 +56,14 @@ function harness(fetch) {
     useEffect(effect, deps) { const [hooks, index] = hook(); const old = hooks[index]; if (old?.deps && deps && old.deps.length === deps.length && deps.every((value, i) => Object.is(value, old.deps[i]))) return; const entry = { deps, cleanup: old?.cleanup }; hooks[index] = entry; effects.push(() => { entry.cleanup?.(); entry.cleanup = effect() }) },
   }
   let module
-  vm.runInNewContext(script, { AbortController, console, fetch: (url, options = {}) => { requests.push({ url, options }); return fetch(url, options) }, window: { __ModuleLoader__: { load(value) { module = value.factory(name => { assert.equal(name, 'react'); return React }) } } } })
+  vm.runInNewContext(script, { AbortController, console, fetch: (url, options = {}) => {
+    const target = new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status' ? statusRequests : requests
+    target.push({ url, options }); return fetch(url, options)
+  }, window: {
+    setInterval(callback) { const id = ++timerId; timers.set(id, callback); return id },
+    clearInterval(id) { timers.delete(id) },
+    __ModuleLoader__: { load(value) { module = value.factory(name => { assert.equal(name, 'react'); return React }) } },
+  } })
   module.apply({ configForms: { get() { throw new Error('Per-chat UI must not access the global form') } }, slots: { inject(name, effect) { return effect() }, register(options, component) { registrations.push({ options, component }); return () => {} } }, effect(effect) { return effect() } })
   const registration = registrations.find(item => item.options.name === 'conversation.view' && item.options.id === 'soup-session-settings')
   assert.ok(registration)
@@ -62,7 +81,7 @@ function harness(fetch) {
     return { ...node, props: { ...node.props, children: node.props.children.map((child, i) => expand(child, `${path}/${i}`)) } }
   }
   const api = {
-    requests, registration, registrations, updatesAfterDispose,
+    requests, statusRequests, registration, registrations, updatesAfterDispose,
     render() {
       assert.equal(disposed, false)
       for (let count = 0; count < 30; count++) {
@@ -82,6 +101,7 @@ function harness(fetch) {
     click(node) { const result = node.props.disabled ? undefined : node.props.onClick?.(); api.render(); return result },
     input(label, value) { api.control(label).props.onChange({ target: { value } }); api.render() },
     async settle() { for (let i = 0; i < 14; i++) { await Promise.resolve(); api.render() } },
+    poll() { for (const callback of timers.values()) callback(); api.render() },
     session(id) { props = { sessionId: id }; api.render() },
     dispose() { if (disposed) return; for (const instance of instances.values()) cleanup(instance); disposed = true },
   }
@@ -102,6 +122,7 @@ test('native SOUP conversation tab fetches immediately with inline controls, hea
     assert.match(script, /minHeight: 39/, 'compact session rows lost their tightened density')
     assert.match(script, /compact: true/, 'session toggles are not using the compact variant')
     assert.equal(h.requests.length, 1, 'mounted tab did not immediately fetch settings')
+    assert.equal(h.statusRequests.length, 0, 'Settings view fetched live status; only Live & Mentor may')
     assert.match(h.text(), /Loading chat settings/)
     assert.equal(h.button('Loading…').props.disabled, true)
     const get = h.requests[0]
@@ -115,38 +136,74 @@ test('native SOUP conversation tab fetches immediately with inline controls, hea
     assert.equal(h.nodes(node => node === h.button('Reload')).length, 1)
     assert.ok(header.props.children.some(node => node === h.button('Reload')), 'Reload is not in the compact header')
     assert.equal(h.button('Reload').props.disabled, false)
-    await h.click(h.button('Reload')); await h.settle()
-    assert.equal(h.requests.length, 2)
-    assert.equal(get.options.signal.aborted, true)
+    await h.click(h.button('Live')); await h.settle()
+    assert.equal(h.statusRequests.length, 1, 'Live & Mentor did not fetch live status once')
+    assert.match(h.text(), /Live trajectoryWithin thresholdLive chatReference4 \/ 4Live window1 \/ 4Latest KL \/ threshold0\.1200 \/ 0\.20Mentor0 drifts · ready/)
+    await h.click(h.button('Refresh')); await h.settle()
+    assert.equal(h.requests.length, 1, 'Refresh in Live & Mentor re-fetched settings')
+    assert.equal(h.statusRequests.length, 2)
+    assert.equal(h.statusRequests[0].options.signal.aborted, true)
     h.session(undefined); assert.equal(h.text(), '')
-    assert.equal(h.requests[1].options.signal.aborted, true)
-    assert.equal(h.requests.length, 2, 'a tab without a session fetched settings')
+    assert.equal(h.statusRequests[1].options.signal.aborted, true)
+    assert.equal(h.requests.length, 1, 'a tab without a session fetched settings')
+    assert.equal(h.statusRequests.length, 2, 'a tab without a session fetched live status')
   } finally { h.dispose() }
 })
 
-test('all seven inherited fields expose current global/effective values and a derived read-only threshold', async () => {
+test('same-chat polling fences an older live response that resolves after the newer poll', async () => {
+  const server = backend(), older = deferred(), newer = deferred()
+  let liveRequest = 0
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname !== '/api/qdev-soup/session-status') return server.fetch(url, options)
+    liveRequest += 1
+    return liveRequest === 1 ? older.promise : newer.promise
+  })
+  try {
+    await h.click(h.button('Live')); await h.settle()
+    assert.equal(h.statusRequests.length, 1)
+    h.poll()
+    assert.equal(h.statusRequests.length, 2)
+    assert.equal(h.statusRequests[0].options.signal.aborted, true)
+    const current = liveSnapshot('chat-A')
+    current.detector.lastResult.klDivergence = 0.33
+    current.detector.lastResult.driftDetected = true
+    current.detector.drifts = 1
+    newer.resolve(response({ ok: true, live: current }))
+    await h.settle()
+    assert.match(h.text(), /Drift detected/)
+    assert.match(h.text(), /0\.3300 \/ 0\.20/)
+    const stale = liveSnapshot('chat-A')
+    stale.detector.lastResult.klDivergence = 0.01
+    older.resolve(response({ ok: true, live: stale }))
+    await h.settle()
+    assert.match(h.text(), /Drift detected/)
+    assert.match(h.text(), /0\.3300 \/ 0\.20/)
+    assert.doesNotMatch(h.text(), /0\.0100 \/ 0\.20/)
+  } finally { h.dispose() }
+})
+
+test('all six inherited fields expose current global/effective values and a derived read-only threshold', async () => {
   const server = backend(), h = harness(server.fetch)
   try {
     await h.settle()
-    assert.equal(h.nodes(node => node.type === 'button' && h.text(node) === 'Use global').length, 7)
+    assert.equal(h.nodes(node => node.type === 'button' && h.text(node) === 'Use global').length, 6)
     for (const [field, label] of Object.entries(fields)) {
       assert.ok(h.control(`Chat ${label}`))
       assert.equal(h.control(`Use global for ${label}`).props.disabled, true)
     }
-    assert.equal(h.nodes(node => node.type === 'span' && h.text(node) === 'Inherited').length, 7)
+    assert.equal(h.nodes(node => node.type === 'span' && h.text(node) === 'Inherited').length, 6)
     assert.match(h.text(), /Global ON · Effective ON/)
-    assert.match(h.text(), /Global \/fixture\/python · Effective \/fixture\/python/)
     assert.equal(h.text(h.control('Chat effective KL threshold')), '0.20')
     assert.equal(h.control('Chat effective KL threshold').type, 'output')
-    assert.doesNotMatch(h.text(), /What SOUP sees|Average KL|qualifying drifts|Plan editor/)
+    assert.doesNotMatch(h.text(), /Plan editor|Suppress intervention|Edit original plan/)
   } finally { h.dispose() }
 })
 
-test('all seven overrides and individual resets use session-scoped revisioned POSTs, never global form mutations', async () => {
+test('all six overrides and individual resets use session-scoped revisioned POSTs, never global form mutations', async () => {
   const server = backend(), h = harness(server.fetch)
   try {
     await h.settle()
-    for (const [field, value] of Object.entries({ enabled: false, detectorEnabled: false, reanchoring: false, preset: 0, baselineCount: 1, windowCount: 100, python: '  /chat/python  ' })) {
+    for (const [field, value] of Object.entries({ enabled: false, detectorEnabled: false, reanchoring: false, preset: 0, baselineCount: 1, windowCount: 100 })) {
       const label = fields[field]
       if (typeof value === 'boolean') await h.click(h.control(`Chat ${label}`))
       else if (field === 'preset') await h.control(`Chat ${label}`).props.onChange({ target: { value: String(value) } })
@@ -204,13 +261,12 @@ test('hard global master OFF and independently read-only snapshots disable every
       }
       await h.control('Chat Monitoring').props.onClick()
       await h.control('Use global for Sensitivity').props.onClick()
-      await h.control('Save Python interpreter for this chat').props.onClick()
       assert.equal(posts(h).length, 0)
     } finally { h.dispose() }
   }
 })
 
-test('invalid count, interpreter and sensitivity drafts are rejected locally without a request', async () => {
+test('invalid count and sensitivity drafts are rejected locally without a request', async () => {
   const server = backend(), h = harness(server.fetch)
   try {
     await h.settle()
@@ -221,9 +277,6 @@ test('invalid count, interpreter and sensitivity drafts are rejected locally wit
         assert.match(h.text(h.node(node => node.props.role === 'alert')), /valid whole number/)
       }
     }
-    h.input('Chat Python interpreter', '  ')
-    await h.click(h.control('Save Python interpreter for this chat')); await h.settle()
-    assert.match(h.text(h.node(node => node.props.role === 'alert')), /non-empty interpreter/)
     for (const invalid of ['-1', '5', '0.5', 'invalid']) await h.control('Chat Sensitivity').props.onChange({ target: { value: invalid } })
     assert.equal(posts(h).length, 0)
   } finally { h.dispose() }
@@ -305,4 +358,324 @@ test('A/B session switches fence late GETs, stale handlers and writes; unmount c
     const currentRequest = h.requests.at(-1)
     h.dispose(); assert.equal(currentRequest.options.signal.aborted, true)
   } catch (error) { h.dispose(); throw error }
+})
+
+// Per-chat Live & Mentor reset decision. Ported from client-controls (Settings-panel tests),
+// which asserted the removed Settings panel. Same assertions, per-chat endpoint and sessionId.
+const decisionLive = () => { const live = liveSnapshot('chat-A'); live.mentor.decisionPending = true; return live }
+
+test('Live & Mentor reset Yes/No POST the Host action for this chat and refresh the card', async () => {
+  for (const reset of [true, false]) {
+    const server = backend()
+    const h = harness((url, options) => {
+      if (options?.method === 'POST') return response({ ok: true, result: { accepted: true } })
+      if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: decisionLive() })
+      return server.fetch(url, options)
+    })
+    try {
+      await h.click(h.button('Live')); await h.settle()
+      await h.click(h.button(reset ? 'Yes — reset to 0' : 'No — carry 3 forward')); await h.settle()
+      const post = posts(h)
+      assert.equal(post.length, 1)
+      assert.equal(post[0].url, '/qdev-soup-drift/status'); assert.equal(post[0].options.credentials, 'same-origin')
+      assert.deepEqual(JSON.parse(post[0].options.body), { action: 'reset-drift-count', sessionId: 'chat-A', reset })
+      assert.equal(h.statusRequests.length, 2, 'card did not refresh after the reset decision')
+    } finally { h.dispose() }
+  }
+})
+
+test('Live & Mentor reset busy guard: duplicate clicks send one POST, rejection shows and buttons restore', async () => {
+  const server = backend(), wait = deferred()
+  const h = harness((url, options) => {
+    if (options?.method === 'POST') return wait.promise
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: decisionLive() })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Live')); await h.settle()
+    const action = h.click(h.button('Yes — reset to 0')); await h.settle()
+    assert.equal(h.button('Yes — reset to 0').props.disabled, true)
+    assert.equal(h.button('No — carry 3 forward').props.disabled, true)
+    await h.button('No — carry 3 forward').props.onClick()
+    assert.equal(posts(h).length, 1)
+    wait.resolve(response({ ok: false, result: { reason: 'disabled' } }, 409))
+    await action; await h.settle()
+    assert.match(h.text(h.node(node => node.props.role === 'alert')), /disabled/)
+    assert.equal(Boolean(h.button('Yes — reset to 0').props.disabled), false)
+  } finally { h.dispose() }
+})
+
+test('Live & Mentor reset buttons are disabled with no POST when monitoring is OFF', async () => {
+  const server = backend(), live = decisionLive(); live.effective.enabled = false
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Live')); await h.settle()
+    for (const text of ['Yes — reset to 0', 'No — carry 3 forward']) {
+      assert.equal(h.button(text).props.disabled, true)
+      await h.button(text).props.onClick()
+    }
+    assert.equal(posts(h).length, 0)
+  } finally { h.dispose() }
+})
+
+test('Live & Mentor shows a status-endpoint failure and unmount aborts polling', async () => {
+  const server = backend()
+  const h = harness((url, options) => new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status' ? response({}, 503) : server.fetch(url, options))
+  await h.click(h.button('Live')); await h.settle()
+  assert.match(h.text(), /Session status returned 503/)
+  const signal = h.statusRequests[0].options.signal
+  h.dispose()
+  assert.equal(signal.aborted, true)
+})
+
+test('Live and Mentor are separate tabs: Mentor shows the Gentle Mentor prompt without the trajectory card', async () => {
+  const server = backend(), h = harness(server.fetch)
+  try {
+    await h.click(h.button('Mentor')); await h.settle()
+    assert.match(h.text(), /Gentle Mentor/)
+    assert.doesNotMatch(h.text(), /Live trajectory/, 'Mentor tab showed the live trajectory card')
+    await h.click(h.button('Live')); await h.settle()
+    assert.match(h.text(), /Live trajectory/)
+    assert.doesNotMatch(h.text(), /Gentle Mentor/, 'Live tab showed the Gentle Mentor section')
+  } finally { h.dispose() }
+})
+
+test('Details is its own tab: it shows telemetry, fetches live status while open, and is not in Mentor', async () => {
+  const server = backend(), h = harness(server.fetch)
+  try {
+    await h.click(h.button('Details')); await h.settle()
+    assert.match(h.text(), /Calculations/)
+    assert.match(h.text(), /Average KL against threshold/)
+    assert.doesNotMatch(h.text(), /Gentle Mentor/, 'Details showed the Gentle Mentor prompt')
+    assert.ok(h.statusRequests.length >= 1, 'Details did not fetch live status')
+    await h.click(h.button('Mentor')); await h.settle()
+    assert.doesNotMatch(h.text(), /Calculations/, 'Mentor tab showed telemetry')
+  } finally { h.dispose() }
+})
+
+test('Convergence tab: four-quadrant view, separated evidence sections, qualified near-boundary note', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.2
+  live.detector.history = [0.19, 0.19, 0.19, 0.19, 0.19].map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: false }))
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /Four-quadrant view/)
+    assert.match(h.text(), /Raw measurements/)
+    assert.match(h.text(), /Statistical measures/)
+    assert.match(h.text(), /Interpretation \(hypothesis, not a verified event\)/)
+    assert.match(h.text(), /Qualified near-boundary signal/)
+    assert.match(h.text(), /SOUP calculations, tool calls, decisions \(plan mode, hooks\) and test outcomes read from shell output text/)
+    assert.doesNotMatch(h.text(), /Gentle Mentor/)
+  } finally { h.dispose() }
+})
+
+test('Convergence: outlier clusters show agreeing calculations away from the median', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.2
+  const kls = [0.08, 0.08, 0.08, 0.08, 0.08, 0.08, 0.24, 0.242, 0.238, 0.24]
+  live.detector.history = kls.map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: kl >= 0.2 }))
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /Outlier clusters/)
+    assert.match(h.text(), /4 calculations, at or above the boundary/)
+  } finally { h.dispose() }
+})
+
+test('Convergence: control chart flags a spike, repeated failures are named, elimination leaves what the evidence allows', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.2
+  const kls = [0.08, 0.09, 0.08, 0.07, 0.09, 0.08, 0.09, 0.08, 0.5]
+  live.detector.history = kls.map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: kl >= 0.2 }))
+  live.tools = [
+    { callId: 'a', name: 'web_fetch', startedAt: 1700000000500, endedAt: 1700000000600, error: true, reason: 'Malformed edit: old_string not found at line 12' },
+    { callId: 'b', name: 'web_fetch', startedAt: 1700000005500, endedAt: 1700000005600, error: true, reason: 'Malformed edit: old_string not found at line 40' },
+  ]
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /Control chart \(Six Sigma\)/)
+    assert.match(h.text(), /UCL/)
+    assert.match(h.text(), /Rule 1: one reading beyond a control limit/)
+    assert.match(h.text(), /Repeated failures/)
+    assert.match(h.text(), /malformed edit: old_string not found at · 2 times/)
+    assert.match(h.text(), /Still standing/)
+  } finally { h.dispose() }
+})
+
+test('Convergence: tool by failure type reads one tool repeating versus one failure across tools', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.2
+  live.detector.history = [0.08, 0.09, 0.08, 0.07, 0.09, 0.08, 0.09, 0.08].map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: false }))
+  const fail = (callId, name, reason, at) => ({ callId, name, startedAt: at, endedAt: at + 50, error: true, reason })
+  live.tools = [
+    fail('t1', 'web_fetch', 'Request timed out after 30 seconds', 1700000000500),
+    fail('t2', 'web_fetch', 'Request timed out after 45 seconds', 1700000002500),
+    fail('e1', 'edit', 'Malformed edit: old_string not found at line 12', 1700000004500),
+    fail('e2', 'write', 'Malformed edit: old_string not found at line 40', 1700000006500),
+  ]
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /Tool by failure type/)
+    assert.match(h.text(), /"request timed out after # seconds" on web_fetch \(2 times\): the tool is probably misconfigured or not working/)
+    assert.match(h.text(), /"malformed edit: old_string not found at" across edit, write \(2 times\): the cause is more likely shared/)
+  } finally { h.dispose() }
+})
+
+test('Convergence: qualified convergence needs two independent sources; a recurring failure during elevated readings is corroborated', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.2
+  const kls = [0.08, 0.08, 0.08, 0.08, 0.15, 0.15, 0.15, 0.15]
+  live.detector.history = kls.map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: false }))
+  const fail = (callId, reason, at) => ({ callId, name: 'web_fetch', startedAt: at, endedAt: at + 50, error: true, reason })
+  live.tools = [
+    fail('t1', 'Request timed out after 30 seconds', 1700000004500),
+    fail('t2', 'Request timed out after 45 seconds', 1700000006500),
+  ]
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /Qualified convergence \(hypotheses, not verified events\)/)
+    assert.match(h.text(), /corroborated · The same failure keeps recurring: request timed out after # seconds/)
+    assert.match(h.text(), /Independent sources: tool telemetry \+ calculations/)
+    assert.match(h.text(), /Verifying a candidate needs evidence outside these sources/)
+  } finally { h.dispose() }
+})
+
+test('Convergence drill-down: point titles carry distance and persistence; contradicting readings, test outcomes and the relationship graph are shown for the window', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.2
+  const kls = [0.05, 0.05, 0.05, 0.05, 0.21]
+  live.detector.history = kls.map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: kl >= 0.2 }))
+  live.tools = [{ callId: 'b1', name: 'bash', startedAt: 1700000003000, endedAt: 1700000005000, error: false, outcome: { result: 'failed', summary: '5 passed, 2 failed in 0.4s' } }]
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /same quadrant for 1 window/, 'quadrant point title lacks persistence')
+    assert.match(h.text(), /Readings that contradict this window/)
+    assert.match(h.text(), /crossed the boundary in a low window/)
+    assert.match(h.text(), /These readings come from one KL series/)
+    assert.match(h.text(), /Test outcomes in this window/)
+    assert.match(h.text(), /failed · bash/)
+    assert.match(h.text(), /5 passed, 2 failed in 0\.4s/)
+    assert.match(h.text(), /Read from shell tool output text, not from a test runner/)
+    assert.match(h.text(), /A test run failed: 5 passed, 2 failed in 0\.4s/)
+    assert.match(h.text(), /Independent sources: test outcomes \+ calculations/)
+    assert.match(h.text(), /Evidence relationships/)
+    assert.match(h.text(), /Test outcomes 1 \(1 failed\)/)
+  } finally { h.dispose() }
+})
+
+test('Convergence: a focused cluster just under the boundary, persisting over several windows, is described as boundary-hugging', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.2
+  const kls = [0.19, 0.19, 0.19, 0.19, 0.19, 0.19, 0.19, 0.19]
+  live.detector.history = kls.map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.2, drift: false }))
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /repeatedly approaches the operating boundary without crossing it/)
+    assert.match(h.text(), /same quadrant for 4 windows/)
+  } finally { h.dispose() }
+})
+
+// Appendix 11.2 examples, as 5-reading windows (the view's window is 5). Values are already normalized, so the threshold is 0.5 and KL equals the value.
+const examplesHistory = (values) => values.map((kl, i) => ({ at: 1700000000000 + i * 1000, kl, threshold: 0.5, drift: kl >= 0.5 }))
+async function convergenceFor(values) {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.5
+  live.detector.history = examplesHistory(values)
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  await h.click(h.button('Convergence')); await h.settle()
+  return h
+}
+
+test('Appendix 11.2 Example A as a 5-reading window: tight just below 0.50, flagged as a qualified near-boundary signal, no crossings', async () => {
+  const h = await convergenceFor([0.49, 0.48, 0.47, 0.48, 0.48])
+  try {
+    assert.match(h.text(), /Mean 0\.480 · dispersion 0\.006 · coherence 0\.987/)
+    assert.match(h.text(), /Distance from the boundary 0\.020 · crossings in window 0/)
+    assert.match(h.text(), /Coherent and below the boundary/)
+    assert.match(h.text(), /Qualified near-boundary signal/)
+  } finally { h.dispose() }
+})
+
+test('Appendix 11.2 Example B as a 5-reading window: mean at the boundary with one crossing; the view labels its focus', async () => {
+  const h = await convergenceFor([0.49, 0.80, 0.23, 0.49, 0.49])
+  try {
+    assert.match(h.text(), /Mean 0\.500 · dispersion 0\.181 · coherence 0\.639/)
+    assert.match(h.text(), /crossings in window 1/)
+    // Spec 11.2 Example B reads as 'magnitude without focus' (scattered). The view's focus threshold is coherence >= 0.5, and this example's coherence is 0.639, so the view says FOCUSED/HIGH. Reported as an open decision, not changed here.
+    assert.match(h.text(), /Coherent and at or above the boundary/)
+    assert.doesNotMatch(h.text(), /Qualified near-boundary signal/)
+  } finally { h.dispose() }
+})
+
+test('Appendix 11.2 Example C as a 5-reading window: perfectly coherent, far below the boundary, no near-boundary note', async () => {
+  const h = await convergenceFor([0.005, 0.005, 0.005, 0.005, 0.005])
+  try {
+    assert.match(h.text(), /Mean 0\.005 · dispersion 0\.000 · coherence 1\.000/)
+    assert.match(h.text(), /Distance from the boundary 0\.495 · crossings in window 0/)
+    assert.doesNotMatch(h.text(), /Qualified near-boundary signal/)
+  } finally { h.dispose() }
+})
+
+test('Focus rule is selectable in Convergence: default keeps the coherence cut; dispersion and 0.7 cuts re-label Example B as scattered', async () => {
+  const server = backend()
+  const live = liveSnapshot('chat-A')
+  live.effective.threshold = 0.5
+  live.detector.history = examplesHistory([0.49, 0.80, 0.23, 0.49, 0.49])
+  const h = harness((url, options) => {
+    if (new URL(url, 'http://fixture').pathname === '/api/qdev-soup/session-status') return response({ ok: true, live: clone(live) })
+    return server.fetch(url, options)
+  })
+  try {
+    await h.click(h.button('Convergence')); await h.settle()
+    assert.match(h.text(), /Focus rule: focus = coherence at or above 0\.5/)
+    assert.match(h.text(), /Coherent and at or above the boundary/, 'default rule changed')
+    await h.click(h.button('Dispersion σ ≤ 0.10')); await h.settle()
+    assert.match(h.text(), /Focus rule: focus = dispersion \(σ\) at or below 0\.10/)
+    assert.match(h.text(), /Scattered and at or above the boundary/)
+    await h.click(h.button('Coherence ≥ 0.7')); await h.settle()
+    assert.match(h.text(), /Scattered and at or above the boundary/)
+    await h.click(h.button('Coherence ≥ 0.5 \(default\)')); await h.settle()
+    assert.match(h.text(), /Coherent and at or above the boundary/)
+  } finally { h.dispose() }
 })

@@ -2,7 +2,7 @@
 
 **SOUP-powered trajectory drift detection and Gentle Mentor reanchoring for DeepSeek Harness sessions.**
 
-Version **0.6.3** is a native DSH package with a Cordis Host plugin, a first-class **SOUP Drift** page in native DSH **Settings**, a matching **Plugins** row configuration surface, native per-chat inherited settings, packaged locale/icon assets, and authenticated Host operations. It observes committed session events, compares assistant-output token distributions with the official SOUP Python functions, delivers up to two Gentle Mentor reminders after qualifying drift, and asks the human for clarification on the third qualifying drift. The native UI explains average KL drift relative to the active threshold and asks whether to reset the three-strike count or carry it across turns.
+This release adds the per-chat Settings | Live & Mentor view (per-chat card, KL chart, reset decision, editable Gentle Mentor context) and keeps the card out of Settings. The current version is in package.json. It builds on 0.6.3, which is a native DSH package with a Cordis Host plugin, a first-class **SOUP Drift** page in native DSH **Settings**, a matching **Plugins** row configuration surface, native per-chat inherited settings, packaged locale/icon assets, and authenticated Host operations. It observes committed session events, compares assistant-output token distributions with the official SOUP Python functions, delivers up to two Gentle Mentor reminders after qualifying drift, and asks the human for clarification on the third qualifying drift. The native UI explains average KL drift relative to the active threshold and asks whether to reset the three-strike count or carry it across turns.
 
 The package identity is `qdev-trajectory-drift-soup`. The source directory remains `plugins/qdev-soup-drift/` for continuity.
 
@@ -18,6 +18,8 @@ The package identity is `qdev-trajectory-drift-soup`. The source directory remai
 
 The global master controls observation and interventions. The existing reminder, third-strike clarification, and qualified telemetry behavior remain unchanged. Historical build narratives and acceptance evidence live in the linked verification records, not in the install procedure.
 
+- **0.9.0 — SOUP separated from the plugin:** the drift measurement is `soup_worker.py` alone; everything else is a consumer. See "SOUP and the plugin are separate (0.9.0)" at the end. Built on 0.8.0; nothing from 0.7 or 0.8 was removed.
+
 ## Package contents
 
 - `src/index.ts` → `dist/index.js`: native Host plugin, Config schema, session subscriptions, delivery tracking, escalation, and status route.
@@ -26,6 +28,7 @@ The global master controls observation and interventions. The existing reminder,
 - `drift.mjs`, `runtime.mjs`, and `reanchor.mjs`: detector and intervention policy.
 - `soup_worker.py`: bridge to official `soup_cli.utils.drift_alarm` functions.
 - `cordis.patch.yml`: default Loader registration.
+- **0.9.0 additions:** `soup-core.mjs` (calls the worker), `monitor.mjs` and `monitor-cli.mjs` (the standalone drift monitor), and the Host split into `src/constants.ts`, `types.ts`, `storage.ts`, `live.ts`, `status-board.ts`, `live-view.ts`, `mentor-host.ts` and `routes.ts`, with `src/index.ts` as the thin wiring. All compile to `dist/`.
 
 ## Emergency escape — recover DSH without the browser
 
@@ -45,6 +48,8 @@ Every DSH Web plugin must follow the [shared plugin lessons](../plugin-lessons.m
 If a bad SOUP Web client makes DSH inaccessible, recover without the browser using `dsh plugin --profile web remove qdev-trajectory-drift-soup` from within the Harness container, then restart **once**. If SOUP is manually inserted into the active Cordis patch, remove only its entry as documented in the [shared recovery lesson](../plugin-lessons.md). Never delete the entire DSH profile or replace telemetry/correction plugins as collateral damage.
 
 ## Build, test, and install
+
+> **Superseded 2026-11-17 for 0.9.0:** use the commit SHA that contains the 0.9.0 build. The steps below are otherwise unchanged.
 
 1. In DSH, open **Plugins → Add plugin** and install the reviewed **0.6.3** build from an immutable commit SHA:
 
@@ -149,3 +154,23 @@ The deterministic worker/policy test drives three independent drift windows and 
 - `node_modules/`, `dist/`, generated tarballs, and `.pnpm-store/` are local install/build state and should remain untracked.
 
 The original experimental sources remain under `experiments/`. Version 0.6.3 preserves the human-accepted Feature 2 UI, isolation and persistence while removing eager retained-session replay from container startup. Feature 3 and later remain separate increments and are paused until the lazy-start repair is installed and restart-accepted.
+
+## SOUP and the plugin are separate (0.9.0)
+
+**SOUP measures drift. That is all `soup_worker.py` does.** It reads `{reference, live, threshold}` on stdin and prints `{drift_detected, kl_divergence, threshold, n_reference, n_live}`. It knows nothing about DSH, chats, the Gentle Mentor, settings or the UI, and it runs on its own:
+
+```text
+echo '{"reference":["a b c"],"live":["a b c"],"threshold":0.2}' | <path-to-python> soup_worker.py
+```
+
+Everything else is a consumer of that value, in this order:
+
+1. `soup_worker.py`: the official SOUP calculation (the only thing that detects drift).
+2. `soup-core.mjs`: starts the worker and returns its result.
+3. `drift.mjs`: collects assistant messages into a baseline and live windows.
+4. `monitor.mjs`: delivers one drift signal per calculation to any subscriber. `monitor-cli.mjs` runs it on a session log (JSON lines): `node monitor-cli.mjs --python <path-to-python> <session.jsonl>`.
+5. Consumers: the Gentle Mentor, the status board, the Live & Mentor view, per-chat settings and the HTTP routes. Each can be absent, switched off or failing without stopping 1 to 4.
+
+**Host.** Only the `agents` service is required. Storage, the web server and user questions are optional. A missing one is listed in `status.lifecycle.degraded`, and its consumer keeps state in memory only. Each finished calculation is also published on the Cordis context as the event `qdev-soup/signal` (`sessionId, turn, singleTurn, driftDetected, klDivergence, threshold, nReference, nLive, at`), so another plugin can listen without importing this package.
+
+**Open question for the owner:** with the default 4-message baseline and window at threshold 0.2, nearly every window on real chats reports drift (identical text gives KL 0.0, reworded same-topic text about 6.6, unrelated text about 16.5). The official calculation is unchanged; whether the threshold or window sizes need tuning has not been decided.

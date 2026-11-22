@@ -23,6 +23,9 @@ export function createPluginRuntime({
   onError = () => {},
   initialMentorState = {},
   onMentorStateChange = () => {},
+  contextFor = () => ({}),
+  bypassFor = () => false,
+  onRegister = () => {},
   spawnProcess,
 } = {}) {
   const mentor = createReanchor({
@@ -32,7 +35,15 @@ export function createPluginRuntime({
     reportStale,
     initialState: initialMentorState,
     onStateChange: onMentorStateChange,
+    contextFor,
+    bypassFor,
+    onRegister,
   })
+  // Consumers (mentor, notify, status callbacks) must never be able to stop the SOUP core:
+  // a throwing consumer is reported through onError and the core carries on.
+  const isolate = (consumer, phase, fn) => {
+    try { return fn() } catch (error) { try { onError(error, { phase: `consumer:${consumer}:${phase}` }) } catch {} }
+  }
   let settings = { python, preset, enabled, detectorEnabled, reanchoring, baselineCount, windowCount }
   let generation = 0
   let disposed = false
@@ -47,12 +58,12 @@ export function createPluginRuntime({
       enabled: next.enabled && next.detectorEnabled,
       workerTimeoutMs,
       spawnProcess,
-      onObservation: current(onObservation),
-      onEvaluationStart: current(onEvaluationStart),
-      onEvaluation: current(onEvaluation),
+      onObservation: current((v) => isolate('status', 'observation', () => onObservation(v))),
+      onEvaluationStart: current((v) => isolate('status', 'evaluationStart', () => onEvaluationStart(v))),
+      onEvaluation: current((v) => isolate('status', 'evaluation', () => onEvaluation(v))),
       onDrift: current(({ sessionId, turn, singleTurn, result }) => {
-        notify({ sessionId, turn, singleTurn, result })
-        if (settings.reanchoring) mentor.drift(sessionId, { ...result, turn, singleTurn })
+        isolate('notify', 'drift', () => notify({ sessionId, turn, singleTurn, result }))
+        if (settings.reanchoring) isolate('mentor', 'drift', () => mentor.drift(sessionId, { ...result, turn, singleTurn }))
       }),
       onError: current(onError),
     })
@@ -77,17 +88,18 @@ export function createPluginRuntime({
     },
     observe(id, event) {
       if (disposed || !settings.enabled) return
-      mentor.observe(id, event)
+      // Core first: measurement never waits on, or fails with, the mentor.
       detector.observe(id, event)
+      isolate('mentor', 'observe', () => mentor.observe(id, event))
     },
     replay(id, events) {
       if (disposed || !settings.enabled) return
       // Re-seeding a detector must not replay old turn boundaries and erase this turn's strikes.
       const firstIntent = events?.find((event) => event.type === 'user/message' && event.data?.source?.kind === 'user')
       const latestTurn = events?.findLast((event) => event.type === 'turn/start')
-      if (firstIntent) mentor.observe(id, firstIntent)
-      if (latestTurn) mentor.observe(id, latestTurn)
       detector.seed(id, events)
+      if (firstIntent) isolate('mentor', 'replay', () => mentor.observe(id, firstIntent))
+      if (latestTurn) isolate('mentor', 'replay', () => mentor.observe(id, latestTurn))
     },
     decideDriftReset(id, reset) {
       if (disposed || !settings.enabled) return { accepted: false, reason: 'disabled' }
@@ -95,6 +107,9 @@ export function createPluginRuntime({
     },
     mentorState(id) {
       return mentor.snapshot(id)
+    },
+    originalPlan(id) {
+      return mentor.plan(id)
     },
     dispose() {
       disposed = true

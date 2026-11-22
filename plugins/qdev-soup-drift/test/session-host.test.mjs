@@ -20,10 +20,14 @@ const { default: Storage } = await import(storageRequire.resolve('@deepseek-ai/d
 const HOST_URL = new URL('../dist/index.js', import.meta.url)
 const PYTHON = process.env.SOUP_PYTHON || 'python3'
 const API_PATH = '/api/qdev-soup/session-settings'
+const LIVE_PATH = '/api/qdev-soup/session-status'
 const STATUS_PATH = '/qdev-soup-drift/status'
 const A = 'soup_feature2_A'
 const B = 'soup_feature2_B'
 const COLD = 'soup_feature2_cold'
+// Live & Mentor history writes per calculation, so raw change counts are not evidence of mentor or settings writes.
+const mentorWrites = (f) => f.changes.filter((change) => change.domain === 'qdev_soup_drift_state').length
+const durableWrites = (f) => f.changes.filter((change) => change.domain !== 'qdev_soup_live_history').length
 const BASELINE = 'keep following the original implementation plan'
 const DRIFT = 'different unrelated output topic'
 const FIELDS = ['python', 'enabled', 'detectorEnabled', 'reanchoring', 'preset', 'baselineCount', 'windowCount']
@@ -57,7 +61,8 @@ async function temporaryRoot(t) {
 // storage hub/domain/JSON backend. Only external agents, BrowserAuth, questions,
 // HTTP carrier and session existence metadata are substituted. No profile state,
 // network listeners, credentials, model activation or stored transcript reads.
-async function fixture(t, { root, config = {}, liveIds = [A, B], optional = true, mountHost = true } = {}) {
+async function fixture(t, { root, config = {}, liveIds = [A, B], optional = true, mountHost = true,
+  onInject = () => {} } = {}) {
   root ??= await temporaryRoot(t)
   const ctx = new Context()
   const routes = new Map()
@@ -65,6 +70,7 @@ async function fixture(t, { root, config = {}, liveIds = [A, B], optional = true
   const questions = []
   const metadataReads = []
   const agentListReads = []
+  const agentGetReads = []
   const snapshotReads = []
   const changes = []
   const sessions = new Map(liveIds.map((id) => [id, Session.create(id)]))
@@ -73,7 +79,7 @@ async function fixture(t, { root, config = {}, liveIds = [A, B], optional = true
     session.snapshotEvents = () => { snapshotReads.push(id); return snapshotEvents() }
   }
   const live = new Map([...sessions].map(([id, session]) => [id, {
-    id, session, inject(message) { injected.push({ id, message }) },
+    id, session, inject(message) { injected.push({ id, message }); onInject(id, message) },
   }]))
   const coldHeader = Session.create(COLD).header
   let disposed = false
@@ -91,9 +97,11 @@ async function fixture(t, { root, config = {}, liveIds = [A, B], optional = true
     if (connection) {
       assert.equal(connection.browserPeer.signal.aborted, true)
       assert.equal(outsider.signal.aborted, true)
-      const response = await connection.createSharedFetchHandler('/api').fetch(
-        new Request(`http://localhost${API_PATH}?sessionId=${A}`), connection.browserPeer)
-      assert.equal(response.status, 404, 'native exact Fetch route outlived its Host fiber')
+      for (const path of [API_PATH, LIVE_PATH]) {
+        const response = await connection.createSharedFetchHandler('/api').fetch(
+          new Request(`http://localhost${path}?sessionId=${A}`), connection.browserPeer)
+        assert.equal(response.status, 404, 'native exact Fetch route outlived its Host fiber')
+      }
     }
     for (const item of questions) {
       if (!item.settled) assert.equal(item.request.signal.aborted, true, 'pending question outlived its Host')
@@ -107,7 +115,7 @@ async function fixture(t, { root, config = {}, liveIds = [A, B], optional = true
   t.after(close)
   ctx.provide('agents', {
     list: () => { agentListReads.push(Date.now()); return [...live.values()] },
-    get() { assert.fail('settings must not activate or resolve a model agent') },
+    get(id) { agentGetReads.push(String(id)); return live.get(String(id)) },
     create() { assert.fail('settings must not create a model agent') },
   })
   ctx.provide('webServer', {
@@ -168,9 +176,10 @@ async function fixture(t, { root, config = {}, liveIds = [A, B], optional = true
     assert.equal(fiber.state, 2, 'real Loader did not activate built Host')
     assert.ok(routes.has(STATUS_PATH), 'built Host status route missing')
   }
-  async function api({ method = 'GET', sessionId = A, body, auth = 'owner', headers = {}, rawBody } = {}) {
+  async function api({ method = 'GET', sessionId = A, body, auth = 'owner', headers = {}, rawBody,
+    path = API_PATH, search } = {}) {
     assert.ok(connection, 'this fixture intentionally lacks optional Connection')
-    const request = new Request(`http://localhost${API_PATH}${method === 'GET' ? `?sessionId=${encodeURIComponent(sessionId)}` : ''}`, {
+    const request = new Request(`http://localhost${path}${search ?? (method === 'GET' ? `?sessionId=${encodeURIComponent(sessionId)}` : '')}`, {
       method,
       headers: { host: 'localhost', origin: 'http://localhost',
         ...(auth === 'owner' ? { 'x-synthetic-owner': 'yes' } : {}),
@@ -189,6 +198,23 @@ async function fixture(t, { root, config = {}, liveIds = [A, B], optional = true
     const text = await response.text()
     return { code: response.status, headers: response.headers, text,
       body: response.headers.get('content-type')?.includes('application/json') ? JSON.parse(text) : undefined }
+  }
+  async function liveStatus(id = A) {
+    const response = await api({ path: LIVE_PATH, sessionId: id })
+    assert.equal(response.code, 200, response.text)
+    assert.equal(response.body.ok, true)
+    assert.equal(response.headers.get('cache-control'), 'no-store')
+    assert.equal(response.body.live.sessionId, id)
+    return response.body.live
+  }
+  async function untilLive(id, predicate, message) {
+    const deadline = Date.now() + 15000
+    while (Date.now() < deadline) {
+      const current = await liveStatus(id)
+      if (predicate(current)) return current
+      await delay(10)
+    }
+    assert.fail(`${message}: ${JSON.stringify(await liveStatus(id))}`)
   }
   async function settings(id = A) {
     const response = await api({ sessionId: id })
@@ -243,7 +269,7 @@ async function fixture(t, { root, config = {}, liveIds = [A, B], optional = true
   function append(id, type, data) {
     const session = sessions.get(id)
     assert.ok(session)
-    const event = ['user/message', 'assistant/message'].includes(type)
+    const event = ['user/message', 'assistant/message', 'tool/result'].includes(type)
       ? session.append(type, data, { surfaceOp: 'append' }) : session.append(type, data)
     ctx.emit('session/event', session, event)
     return event
@@ -256,7 +282,7 @@ async function fixture(t, { root, config = {}, liveIds = [A, B], optional = true
     await whileClosed(previous)
     const received = []
     const replacement = { id, session: previous.session, received,
-      inject(message) { received.push(message); injected.push({ id, message }) } }
+      inject(message) { received.push(message); injected.push({ id, message }); onInject(id, message) } }
     live.set(id, replacement)
     ctx.emit('agent/created', { agent: replacement })
     return replacement
@@ -286,9 +312,9 @@ async function fixture(t, { root, config = {}, liveIds = [A, B], optional = true
     assert.equal(s.detector.lastResult.sessionId, id)
     return s
   }
-  return { root, ctx, routes, live, sessions, injected, questions, metadataReads, agentListReads, snapshotReads, changes,
+  return { root, ctx, routes, live, sessions, injected, questions, metadataReads, agentListReads, agentGetReads, snapshotReads, changes,
     connection, outsider, backend, facility, storage, entry, fiber, api, settings, mutate, status,
-    resetRequest, update, append, replaceAgent, start, assistant, until, evaluate, close }
+    resetRequest, update, append, replaceAgent, start, assistant, until, evaluate, close, liveStatus, untilLive }
 }
 
 async function documents(root) {
@@ -321,16 +347,19 @@ test('Host mount is inert until the first real session event activates one chat'
   const f = await fixture(t)
   const mounted = await f.status()
   assert.deepEqual(f.agentListReads, [], 'Host mount enumerated retained agents')
+  assert.deepEqual(f.agentGetReads, [], 'Host mount resolved a retained agent')
   assert.deepEqual(f.snapshotReads, [], 'Host mount replayed retained transcripts')
   assert.equal(mounted.lifecycle.liveAgents, 0)
   assert.equal(mounted.trajectory.replayedEvents, 0)
 
   await f.update({ preset: 3 })
-  assert.deepEqual(f.agentListReads, [], 'volatile settings activated an idle chat')
+  assert.deepEqual(f.agentListReads, [], 'volatile settings enumerated idle chats')
+  assert.deepEqual(f.agentGetReads, [], 'volatile settings activated an idle chat')
   assert.deepEqual(f.snapshotReads, [], 'volatile settings replayed an idle chat')
 
   f.start(A, 1)
-  assert.equal(f.agentListReads.length, 1, 'first event did not resolve its receiving agent lazily')
+  assert.deepEqual(f.agentListReads, [], 'first event enumerated unrelated retained agents')
+  assert.deepEqual(f.agentGetReads, [A], 'first event did not resolve only its receiving agent lazily')
   assert.deepEqual(f.snapshotReads, [A], 'first event did not replay exactly its own chat')
   const active = await f.status()
   assert.equal(active.lifecycle.liveAgents, 1)
@@ -504,7 +533,7 @@ test('hard global master freezes both chats and rejects mutations without changi
   assert.equal((await f.status()).detector.state, 'running')
   await f.update({ enabled: false })
   const disabled = await f.status()
-  const changes = f.changes.length
+  const changes = durableWrites(f)
   for (const id of [A, B]) {
     const snapshot = await f.settings(id)
     assert.equal(snapshot.masterEnabled, false)
@@ -521,7 +550,7 @@ test('hard global master freezes both chats and rejects mutations without changi
   }
   await delay(100)
   sames(await f.status(), disabled)
-  assert.equal(f.changes.length, changes, 'OFF wrote settings or mentor state')
+  assert.equal(durableWrites(f), changes, 'OFF wrote settings or mentor state')
   assert.deepEqual((await f.settings(A)).overrides, saved)
   assert.equal(f.injected.length, 0)
   assert.equal(f.questions.length, 0)
@@ -649,7 +678,7 @@ test('same-id agent disposal fences the old worker and resume retains two strike
   const before = await f.evaluate(A)
   assert.deepEqual(f.injected.map(({ message }) => message.source.attempt), [1, 2])
   assert.equal(f.questions.length, 0)
-  const writes = f.changes.length
+  const writes = mentorWrites(f)
   const oldAgent = f.live.get(A)
   const fiber = f.entry.fiber
   f.assistant(A)
@@ -683,7 +712,7 @@ test('same-id agent disposal fences the old worker and resume retains two strike
   assert.equal(f.injected.length, 2)
   assert.equal(replacement.received.length, 0, 'old generation injected into the resumed agent')
   assert.equal(f.questions.length, 0)
-  assert.equal(f.changes.length, writes, 'old generation persisted an escalation into the resumed session')
+  assert.equal(mentorWrites(f), writes, 'old generation persisted an escalation into the resumed session')
   const fresh = await f.evaluate(A)
   assert.equal(fresh.detector.evaluations, before.detector.evaluations + 1)
   assert.equal(fresh.detector.lastResult.threshold, 0.3, 'resumed worker ignored closed-chat global save')
@@ -720,18 +749,275 @@ test('accepted reset retires Q1 so a late answer cannot reset Q2 guard after mas
   assert.equal(q2.request.signal.aborted, true)
   await f.update({ enabled: true })
   const before = await f.status()
-  const writes = f.changes.length
+  const writes = mentorWrites(f)
   const deliveries = f.injected.length
   q1.resolve({ answers: [{ id: 'trajectory-clarification', selected: [], custom: 'obsolete Q1 answer' },
     { id: 'reset-drift-count', selected: ['Yes — reset to 0'] }] })
   await delay(50)
   assert.equal(f.injected.length, deliveries, 'late retired Q1 delivered clarification after re-enable')
-  assert.equal(f.changes.length, writes, 'late retired Q1 reset the newer durable guard')
+  assert.equal(mentorWrites(f), writes, 'late retired Q1 reset the newer durable guard')
   assert.deepEqual(mentor.get(A), { carry: 3, decisionPending: true })
   assert.equal((await f.status()).mentor.driftCount, before.mentor.driftCount)
   await f.evaluate(A)
   assert.equal(f.injected.length, deliveries, 'late retired Q1 granted another reminder allowance')
   assert.equal(f.questions.length, 2, 'late retired Q1 permitted a duplicate escalation')
+})
+
+test('native live-status GET is owner-only, validates one safe existing id and never activates a cold chat', async (t) => {
+  const f = await fixture(t)
+  assert.equal((await f.api({ path: LIVE_PATH, auth: 'anonymous' })).code, 401)
+  const denied = await f.api({ path: LIVE_PATH, auth: 'nonowner' })
+  assert.equal(denied.code, 403)
+  assert.equal(denied.text, 'forbidden')
+  assert.deepEqual(f.metadataReads, [], 'rejected live reads reached session metadata')
+  const attached = await f.liveStatus(A)
+  assert.equal(attached.attached, true)
+  assert.deepEqual(f.metadataReads, [], 'attached live read needlessly read persistence')
+  assert.deepEqual(f.agentGetReads, [A], 'live read did not use one exact native agent lookup')
+  assert.deepEqual(f.agentListReads, [], 'live read enumerated retained agents')
+  assert.deepEqual(f.snapshotReads, [], 'live read replayed the attached transcript')
+  assert.equal((await f.status()).lifecycle.liveAgents, 0, 'live read attached a per-chat runtime')
+  for (const search of ['', '?sessionId=', '?sessionId=..%2Funsafe', `?sessionId=${A}&sessionId=${B}`]) {
+    const invalid = await f.api({ path: LIVE_PATH, search })
+    assert.equal(invalid.code, 400, search)
+    assert.equal(invalid.body.error, 'invalid-status')
+  }
+  const missing = await f.api({ path: LIVE_PATH, sessionId: 'soup_feature3_missing' })
+  assert.equal(missing.code, 404)
+  assert.equal(missing.body.error, 'session-not-found')
+  const cold = await f.liveStatus(COLD)
+  assert.equal(cold.attached, false)
+  assert.equal(cold.trajectory.state, 'detached')
+  assert.equal(cold.detector.state, 'detached')
+  assert.equal(cold.detector.evaluations, 0)
+  assert.equal(cold.detector.drifts, 0)
+  assert.equal(cold.detector.pending, false)
+  assert.equal(cold.trajectory.baselineSize, 0)
+  assert.equal(cold.trajectory.windowSize, 0)
+  assert.equal(cold.mentor.driftCount, 0)
+  assert.equal(cold.mentor.carry, 0)
+  assert.equal(cold.mentor.decisionPending, false)
+  assert.equal(cold.mentor.escalated, false)
+  assert.ok(f.metadataReads.includes(COLD))
+  for (const method of ['POST', 'PUT', 'DELETE', 'HEAD']) {
+    const notGet = await f.api({ path: LIVE_PATH, method, body: { sessionId: A } })
+    assert.equal(notGet.code, 404, `native exact GET route unexpectedly admitted ${method}`)
+  }
+  assert.deepEqual(await f.liveStatus(A), attached, 'read-only live requests changed attached state')
+  assert.equal(f.live.has(COLD), false)
+  assert.equal(f.changes.length, 0, 'live reads wrote a native domain record')
+  assert.equal(f.injected.length, 0)
+  assert.equal(f.questions.length, 0)
+  assert.equal((await f.status()).detector.evaluations, 0)
+})
+
+test('live per-chat progress, worker completion, latest KL and first/second Mentor strikes are isolated without another event', async (t) => {
+  const f = await fixture(t)
+  await f.mutate(A, 'preset', 0)
+  await f.mutate(A, 'baselineCount', 2)
+  await f.mutate(A, 'windowCount', 2)
+  const untouchedB = await f.liveStatus(B)
+  let a = await f.liveStatus(A)
+  assert.equal(a.attached, true)
+  assert.deepEqual(a.effective, { enabled: true, detectorEnabled: true, reanchoring: true,
+    threshold: 0.05, baselineTarget: 2, windowTarget: 2 })
+  f.start(A)
+  const baselineEvent = f.assistant(A, BASELINE)
+  a = await f.liveStatus(A)
+  assert.equal(a.trajectory.state, 'observing')
+  assert.equal(a.trajectory.baselineSize, 1)
+  assert.equal(a.trajectory.windowSize, 0)
+  assert.equal(a.trajectory.lastEventAt, baselineEvent.time)
+  assert.equal(a.trajectory.lastEventType, 'assistant/message')
+  assert.equal(a.detector.evaluations, 0)
+  f.assistant(A, BASELINE)
+  f.assistant(A)
+  a = await f.liveStatus(A)
+  assert.equal(a.trajectory.baselineSize, 2)
+  assert.equal(a.trajectory.windowSize, 1)
+  assert.equal(a.detector.pending, false)
+  f.assistant(A)
+  const eventCount = f.sessions.get(A).snapshotEvents().length
+  a = await f.liveStatus(A)
+  assert.equal(a.detector.pending, true)
+  assert.equal(a.detector.state, 'running')
+  a = await f.untilLive(A, (s) => s.detector.evaluations === 1, 'first Python result never reached live GET')
+  assert.equal(f.sessions.get(A).snapshotEvents().length, eventCount, 'worker completion required another session event')
+  assert.equal(a.detector.state, 'idle')
+  assert.equal(a.detector.pending, false)
+  assert.equal(a.detector.drifts, 1)
+  assert.equal(a.trajectory.windowSize, 0)
+  assert.equal(a.mentor.driftCount, 1, 'first reminder read a stale cached Mentor snapshot')
+  assert.equal(a.mentor.carry, 0)
+  assert.equal(a.mentor.decisionPending, false)
+  assert.equal(a.mentor.escalated, false)
+  const first = a.detector.lastResult
+  assert.deepEqual(Object.keys(first).sort(), ['sessionId', 'turn', 'singleTurn', 'klDivergence', 'threshold', 'driftDetected', 'completedAt'].sort())
+  assert.equal(first.sessionId, A)
+  assert.equal(first.threshold, 0.05)
+  assert.equal(first.turn, 1)
+  assert.equal(first.singleTurn, true)
+  assert.equal(first.driftDetected, true)
+  assert.ok(Number.isFinite(first.klDivergence) && first.klDivergence > first.threshold)
+  assert.ok(Number.isFinite(first.completedAt))
+  for (const count of [2, 3]) {
+    f.assistant(A)
+    f.assistant(A)
+    a = await f.untilLive(A, (s) => s.detector.evaluations === count, 'next Python result never reached live GET')
+    assert.equal(a.detector.drifts, count)
+    assert.equal(a.mentor.driftCount, count, `strike ${count} read stale Mentor state`)
+    assert.equal(a.detector.lastResult.threshold, 0.05)
+    assert.ok(a.detector.lastResult.completedAt >= first.completedAt)
+  }
+  assert.equal(a.mentor.carry, 3)
+  assert.equal(a.mentor.decisionPending, true)
+  assert.equal(a.mentor.escalated, true)
+  assert.equal(f.questions.length, 1)
+  // Feature 3: the per-chat view carries the last 50 calculations and markers, and nothing else as an array.
+  assert.deepEqual(Object.keys(a.detector).filter(key => Array.isArray(a.detector[key])).sort(), ['history', 'markers'], 'live endpoint exposed unexpected array fields')
+  assert.ok(a.detector.history.every(point => Object.keys(point).sort().join(',') === 'at,drift,kl,threshold'), 'history carries fields beyond measurements')
+  assert.ok(a.detector.markers.every(marker => ['crossing', 'reminder', 'escalation', 'clarification'].includes(marker.kind)), 'marker kind outside the allowed set')
+  // Transcript text may appear only in the Gentle Mentor plan field, never in trajectory, detector or effective settings.
+  assert.equal(JSON.stringify({ trajectory: a.trajectory, detector: a.detector, effective: a.effective }).includes('Implement the original plan'), false, 'live endpoint exposed transcript content outside the Gentle Mentor plan')
+  assert.ok(String(a.mentor.originalPlan).includes('Implement the original plan'), 'Gentle Mentor did not show the captured original plan')
+  assert.deepEqual(await f.liveStatus(B), untouchedB, 'A live measurements or Mentor state leaked into B')
+  f.start(B)
+  f.assistant(B, BASELINE)
+  f.assistant(B)
+  const b = await f.untilLive(B, (s) => s.detector.evaluations === 1, 'B worker result never reached live GET')
+  assert.equal(b.detector.drifts, 1)
+  assert.equal(b.detector.lastResult.sessionId, B)
+  assert.equal(b.detector.lastResult.threshold, 0.2)
+  assert.equal(b.mentor.driftCount, 1)
+  assert.deepEqual(await f.liveStatus(A), a, 'B live measurements or Mentor state leaked into A')
+})
+
+test('live queued windows remain running and pending after first completion until the second real worker finishes', async (t) => {
+  let firstCompletion
+  let f
+  f = await fixture(t, { config: { windowCount: 2 }, onInject(id, message) {
+    if (id === A && message.source.form === 'reminder' && message.source.attempt === 1) {
+      // This external-agent callback runs after result one, while result two's
+      // real child has just been started by finish()->pump(). Native GET executes
+      // before that child can close; no worker stub or session event is added.
+      firstCompletion = f.liveStatus(A)
+    }
+  } })
+  f.start(A)
+  f.assistant(A, BASELINE)
+  for (let i = 0; i < 4; i += 1) f.assistant(A)
+  const queued = await f.liveStatus(A)
+  assert.equal(queued.detector.evaluations, 0)
+  assert.equal(queued.detector.pending, true)
+  assert.equal(queued.detector.state, 'running')
+  assert.equal(queued.trajectory.windowSize, 2)
+  const count = f.sessions.get(A).snapshotEvents().length
+  const done = await f.untilLive(A, (s) => s.detector.evaluations === 2, 'queued real workers never drained')
+  assert.ok(firstCompletion, 'first real reminder did not capture its live snapshot')
+  const between = await firstCompletion
+  assert.equal(between.detector.evaluations, 1)
+  assert.equal(between.detector.pending, true, 'old completion cleared the next pending window')
+  assert.equal(between.detector.state, 'running', 'old completion marked the next real worker idle')
+  assert.equal(between.detector.lastResult.sessionId, A)
+  assert.equal(between.mentor.driftCount, 1)
+  assert.equal(done.detector.pending, false)
+  assert.equal(done.detector.state, 'idle')
+  assert.equal(done.detector.drifts, 2)
+  assert.equal(done.trajectory.windowSize, 0)
+  assert.equal(done.mentor.driftCount, 2)
+  assert.equal(f.sessions.get(A).snapshotEvents().length, count)
+  assert.equal(f.questions.length, 0)
+})
+
+test('live global/chat OFF states freeze only their proper scope and resume current effective settings', async (t) => {
+  const f = await fixture(t, { config: { reanchoring: false } })
+  for (const id of [A, B]) {
+    f.start(id)
+    f.assistant(id, BASELINE)
+    f.assistant(id)
+    await f.untilLive(id, (s) => s.detector.evaluations === 1, 'initial live measurement missing')
+  }
+  await f.mutate(A, 'enabled', false)
+  const chatOff = await f.liveStatus(A)
+  assert.equal(chatOff.effective.enabled, false)
+  assert.equal(chatOff.trajectory.state, 'disabled')
+  assert.equal(chatOff.detector.state, 'disabled')
+  assert.equal(chatOff.detector.pending, false)
+  assert.equal(chatOff.mentor.state, 'disabled')
+  f.assistant(A)
+  assert.deepEqual(await f.liveStatus(A), chatOff, 'chat OFF still updated per-chat live state')
+  f.assistant(B)
+  await f.untilLive(B, (s) => s.detector.evaluations === 2, 'chat A OFF disabled B live detector')
+  assert.deepEqual(await f.liveStatus(A), chatOff)
+  await f.mutate(A, 'enabled', undefined, 'unset')
+  await f.mutate(A, 'detectorEnabled', false)
+  const detectorOff = await f.liveStatus(A)
+  assert.equal(detectorOff.effective.enabled, true)
+  assert.equal(detectorOff.effective.detectorEnabled, false)
+  assert.equal(detectorOff.detector.state, 'disabled')
+  const observed = f.assistant(A)
+  const observing = await f.liveStatus(A)
+  assert.equal(observing.trajectory.lastEventAt, observed.time)
+  assert.equal(observing.trajectory.lastEventType, 'assistant/message')
+  assert.equal(observing.detector.evaluations, detectorOff.detector.evaluations)
+  f.assistant(B)
+  assert.equal((await f.liveStatus(B)).detector.pending, true, 'global OFF fixture had no pending real worker')
+  await f.update({ enabled: false })
+  const frozen = new Map()
+  for (const id of [A, B]) {
+    const s = await f.liveStatus(id)
+    assert.equal(s.effective.enabled, false)
+    assert.equal(s.trajectory.state, 'disabled')
+    assert.equal(s.detector.state, 'disabled')
+    assert.equal(s.detector.pending, false)
+    assert.equal(s.mentor.state, 'disabled')
+    frozen.set(id, s)
+  }
+  const writes = durableWrites(f)
+  for (const id of [A, B]) { f.assistant(id); f.append(id, 'turn/start', { turn: 2 }) }
+  await delay(50)
+  for (const id of [A, B]) assert.deepEqual(await f.liveStatus(id), frozen.get(id), 'global OFF still updated live state')
+  assert.equal(durableWrites(f), writes)
+  await f.update({ enabled: true })
+  assert.equal((await f.liveStatus(A)).detector.state, 'disabled', 'ON ignored A detector override')
+  assert.equal((await f.liveStatus(B)).effective.enabled, true)
+  await f.mutate(A, 'detectorEnabled', undefined, 'unset')
+  for (const id of [A, B]) {
+    const previous = (await f.liveStatus(id)).detector.evaluations
+    f.assistant(id, DRIFT, 2)
+    const resumed = await f.untilLive(id, (s) => s.detector.evaluations === previous + 1, 'live detector did not resume')
+    assert.equal(resumed.detector.lastResult.threshold, 0.2)
+    assert.equal(resumed.detector.pending, false)
+  }
+})
+
+test('live worker errors and recovery remain scoped to the failing chat without a later session event', async (t) => {
+  const f = await fixture(t, { config: { reanchoring: false } })
+  const missingPython = join(f.root, 'live-status-missing-python')
+  await assert.rejects(stat(missingPython), { code: 'ENOENT' })
+  await f.mutate(A, 'python', missingPython)
+  for (const id of [A, B]) { f.start(id); f.assistant(id, BASELINE) }
+  const bBefore = await f.liveStatus(B)
+  f.assistant(A)
+  const failed = await f.untilLive(A, (s) => s.detector.state === 'error', 'worker error never reached own live GET')
+  assert.ok(failed.detector.lastError, 'live failing chat omitted its worker error')
+  assert.equal(failed.detector.pending, false)
+  assert.equal(failed.detector.evaluations, 0)
+  assert.equal(failed.detector.drifts, 0)
+  assert.deepEqual(await f.liveStatus(B), bBefore, 'A worker error contaminated B live state')
+  f.assistant(B)
+  const b = await f.untilLive(B, (s) => s.detector.evaluations === 1, 'A worker error blocked B live completion')
+  assert.equal(b.detector.state, 'idle')
+  assert.equal(b.detector.lastError, undefined)
+  assert.equal(b.detector.lastResult.sessionId, B)
+  await f.mutate(A, 'python', undefined, 'unset')
+  f.assistant(A)
+  const resumed = await f.untilLive(A, (s) => s.detector.evaluations === 1, 'recovered worker never reached own live GET')
+  assert.equal(resumed.detector.state, 'idle')
+  assert.equal(resumed.detector.pending, false)
+  assert.equal(resumed.detector.lastResult.sessionId, A)
+  assert.equal(resumed.detector.lastResult.threshold, 0.2)
+  assert.deepEqual(await f.liveStatus(B), b, 'A recovery contaminated B live state')
 })
 
 test('Host core boots without optional Connection and sessionPersistence', async (t) => {
@@ -743,4 +1029,145 @@ test('Host core boots without optional Connection and sessionPersistence', async
   const s = await f.evaluate(A)
   assert.equal(s.detector.lastResult.threshold, 0.2)
   assert.equal(s.detector.lastResult.driftDetected, true)
+})
+
+test('Live & Mentor history survives a Host restart from its own storage row', async (t) => {
+  const root = await temporaryRoot(t)
+  const f = await fixture(t, { root, liveIds: [A] })
+  await f.mutate(A, 'preset', 0)
+  await f.mutate(A, 'baselineCount', 2)
+  await f.mutate(A, 'windowCount', 2)
+  f.start(A)
+  f.assistant(A, BASELINE)
+  f.assistant(A, BASELINE)
+  f.assistant(A)
+  f.assistant(A)
+  const before = await f.untilLive(A, (s) => s.detector.evaluations === 1, 'first Python result never reached live GET')
+  assert.equal(before.detector.history.length, 1)
+  // Storage writes are fire-and-forget; let the row land before the Host is closed.
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  await f.close()
+  // The chat still exists after a Harness restart; only in-memory state is gone.
+  const reopened = await fixture(t, { root, liveIds: [A] })
+  const after = await reopened.liveStatus(A)
+  assert.deepEqual(after.detector.history, before.detector.history, `history was not restored from the storage row after restart; restored=${after.detector.history.length} errors=${JSON.stringify(after.errors ?? []).slice(0, 400)}`)
+  assert.equal(after.detector.markers.some((marker) => marker.kind === 'crossing'), true, 'drift crossing marker was not restored')
+  await reopened.close()
+})
+
+test('Feature 4: Gentle Mentor edits are validated, owner-only, refused when OFF, and survive a restart', async (t) => {
+  const root = await temporaryRoot(t)
+  const f = await fixture(t, { root, liveIds: [A] })
+  const post = async (body, { owner = true } = {}) => {
+    const route = f.routes.get(STATUS_PATH)
+    assert.ok(route)
+    const payload = JSON.stringify(body)
+    const values = { host: 'localhost', origin: 'http://localhost', 'x-qdev-soup-action': 'session-mentor', ...(owner ? { 'x-synthetic-owner': 'yes' } : {}) }
+    const headers = { ...values, get(name) { return values[String(name).toLowerCase()] ?? null } }
+    let text
+    const response = { statusCode: 0, setHeader() {}, end(value) { text = value } }
+    await route.handler({ method: 'POST', headers, async *[Symbol.asyncIterator]() { yield payload } }, response)
+    return { code: response.statusCode, body: JSON.parse(text) }
+  }
+  assert.equal((await post({ sessionId: A, field: 'nope', value: 'x' })).code, 400, 'unknown field was accepted')
+  assert.equal((await post({ sessionId: A, field: 'message', value: 'x'.repeat(4001) })).code, 400, 'over-limit message was accepted')
+  const saved = await post({ sessionId: A, field: 'message', value: 'Stay on the card.' })
+  assert.equal(saved.code, 200)
+  assert.equal(saved.body.view.mentor.context.message, 'Stay on the card.')
+  assert.equal(saved.body.view.mentor.context.customized.message, true)
+  const refused = await post({ sessionId: A, field: 'message', value: 'Sneaky edit.' }, { owner: false })
+  assert.notEqual(refused.code, 200, 'non-owner edited the Gentle Mentor context')
+  await f.update({ enabled: false })
+  const off = await post({ sessionId: A, field: 'plan', value: 'Edit while OFF.' })
+  assert.equal(off.code, 409)
+  assert.equal(off.body.error, 'soup-disabled', 'master OFF gate must refuse the edit before the handler runs')
+  await f.update({ enabled: true })
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  await f.close()
+  const reopened = await fixture(t, { root, liveIds: [A] })
+  const after = await reopened.liveStatus(A)
+  assert.equal(after.mentor.context.message, 'Stay on the card.', 'Gentle Mentor message did not survive a restart')
+  assert.equal(after.mentor.context.customized.plan, false)
+  await reopened.close()
+})
+
+test('tool calls and results from DSH session events are recorded per chat and sent with the live status', async (t) => {
+  const f = await fixture(t)
+  f.start(A)
+  f.append(A, 'tool/call', { callId: 'c1', name: 'web_search', turn: 1, step: 1, arguments: {} })
+  f.append(A, 'tool/result', { turn: 1, step: 1, message: { source: { callId: 'c1' }, isError: true, content: [] } })
+  const live = await f.liveStatus(A)
+  assert.equal(live.tools.length, 1)
+  assert.equal(live.tools[0].name, 'web_search')
+  assert.equal(live.tools[0].error, true)
+  assert.ok(live.tools[0].endedAt >= live.tools[0].startedAt)
+  const other = await f.liveStatus(B)
+  assert.deepEqual(other.tools, [], 'tool calls leaked into another chat')
+})
+
+test('tool calls per chat survive a Host restart from their storage row', async (t) => {
+  const root = await temporaryRoot(t)
+  const f = await fixture(t, { root })
+  f.start(A)
+  f.append(A, 'tool/call', { callId: 'c1', name: 'web_search', turn: 1, step: 1, arguments: {} })
+  f.append(A, 'tool/result', { turn: 1, step: 1, message: { source: { callId: 'c1' }, isError: true, content: [] } })
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  await f.close()
+  const reopened = await fixture(t, { root })
+  const live = await reopened.liveStatus(A)
+  assert.equal(live.tools.length, 1, 'tool calls were not restored after restart')
+  assert.equal(live.tools[0].name, 'web_search')
+  assert.equal(live.tools[0].error, true)
+  await reopened.close()
+})
+
+test('a failed tool result keeps its reason text so failures can be grouped by type', async (t) => {
+  const f = await fixture(t)
+  f.start(A)
+  f.append(A, 'tool/call', { callId: 'r1', name: 'edit', turn: 1, step: 1, arguments: {} })
+  f.append(A, 'tool/result', { turn: 1, step: 1, message: { source: { callId: 'r1' }, isError: true, content: [{ type: 'text', text: 'Malformed edit: old_string not found at line 12' }] } })
+  const live = await f.liveStatus(A)
+  assert.equal(live.tools[0].error, true)
+  assert.equal(live.tools[0].reason, 'Malformed edit: old_string not found at line 12')
+})
+
+test('plan mode and hook decisions from DSH session events are recorded per chat and survive a Host restart', async (t) => {
+  const root = await temporaryRoot(t)
+  const f = await fixture(t, { root })
+  f.start(A)
+  f.append(A, 'plan/mode', { active: true })
+  f.append(A, 'hook/result', { decision: 'deny', exitCode: 2, stderrSummary: 'blocked by policy' })
+  const live = await f.liveStatus(A)
+  assert.deepEqual(live.decisions.map((d) => [d.kind, d.detail.split(' · ')[0]]), [['plan mode', 'turned on'], ['hook', 'deny (exit 2)']])
+  assert.match(live.decisions[1].detail, /blocked by policy/)
+  assert.deepEqual((await f.liveStatus(B)).decisions, [], 'decisions leaked into another chat')
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  await f.close()
+  const reopened = await fixture(t, { root })
+  const restored = await reopened.liveStatus(A)
+  assert.equal(restored.decisions.length, 2, 'decisions were not restored after restart')
+  assert.equal(restored.decisions[0].kind, 'plan mode')
+  await reopened.close()
+})
+
+test('test outcomes are read from shell tool output text only, labelled as text, and survive a Host restart', async (t) => {
+  const root = await temporaryRoot(t)
+  const f = await fixture(t, { root })
+  f.start(A)
+  const text = (value) => [{ type: 'text', text: value }]
+  f.append(A, 'tool/call', { callId: 'b1', name: 'bash', turn: 1, step: 1, arguments: {} })
+  f.append(A, 'tool/result', { turn: 1, step: 1, message: { source: { callId: 'b1' }, isError: false, content: text('collected 7 items\n5 passed, 2 failed in 0.4s') } })
+  f.append(A, 'tool/call', { callId: 'w1', name: 'web_search', turn: 1, step: 2, arguments: {} })
+  f.append(A, 'tool/result', { turn: 1, step: 2, message: { source: { callId: 'w1' }, isError: false, content: text('3 passed, 1 failed') } })
+  const live = await f.liveStatus(A)
+  const bash = live.tools.find((tool) => tool.callId === 'b1')
+  const search = live.tools.find((tool) => tool.callId === 'w1')
+  assert.deepEqual(bash.outcome, { result: 'failed', summary: '5 passed, 2 failed in 0.4s' })
+  assert.equal(search.outcome, undefined, 'a non-shell tool was read as a test run')
+  await new Promise((resolve) => setTimeout(resolve, 200))
+  await f.close()
+  const reopened = await fixture(t, { root })
+  const restored = await reopened.liveStatus(A)
+  assert.deepEqual(restored.tools.find((tool) => tool.callId === 'b1').outcome, { result: 'failed', summary: '5 passed, 2 failed in 0.4s' })
+  await reopened.close()
 })
