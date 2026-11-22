@@ -45,3 +45,31 @@ Peers read the contract (`validateDriftEvidence`, `validateInterventionEvidence`
 - **C:** a grown baseline is refilled from the earliest session history, never from the next arriving events.
 - **P3:** an event that should reach a runtime but cannot is counted (`droppedEvents`) and diagnosed once per session.
 - **P4:** the headline follows the recent calculations; the cumulative average is a separate figure.
+
+## Gentle Mentor actions: deciding is separate from carrying out (added 0.10.0, unreleased)
+
+**Mentor owns the decision** (`reanchor.mjs`): count strikes, send reminder 1 or reminder 2, ask the human on the third strike,
+reset or carry the count, publish the intervention evidence. **An action owns how a decision is carried out**
+(`mentor-actions.mjs`, no Cordis, DSH or zod imports).
+
+- **An action** is `{ name, run(request) }`. `run` may be sync or async and may return nothing or `{ ok?, error? }`
+  (`ok: false` means the action failed). `request` is frozen: `{ kind: 'reminder' | 'escalation', attempt, strikes, respondsTo, text }`,
+  where `respondsTo` is the drift evidence reference `{ sessionId, turn, kl_divergence, threshold }`. `attempt` is `null` for an escalation.
+- **Mentor receives an ordered list at construction** (`createReanchor({ actions })`, passed through `createPluginRuntime({ actions })`).
+  Actions are started in list order, after the decision and before the intervention evidence is published.
+- **Each action is isolated.** A throw or rejection is reported as `{ phase: 'consumer', consumer: 'action:<name>' }` and never stops the
+  other actions, the measurement, the evidence, or Mentor's state. Each action's result (`name`, `kind`, `ok`, `error`) goes to `onActionResult`;
+  the Host keeps the last six in `status.mentor.actionResults` (a new field; no existing field changed meaning).
+- **Old callbacks vs actions.** `inject` / `escalate` still work when no action is given (tests pin them). When an action list is
+  given it **replaces** them: they are not called, so a decision is never carried out twice.
+- **The first action is injection** (`createInjectAction`): put the reminder into the chat inbox, or the escalation message plus the human
+  question, wait for the Harness to confirm, record failures. The Harness side reaches it through one adapter object built in
+  `src/mentor-host.ts`; the Host passes `[inject]` and nothing else.
+- **What stays in the Host on purpose:** the inbox-splice confirmation (`src/index.ts`, `agent/inbox/spliced`) and `abortIntervention`
+  (`src/status-board.ts`). They react to Harness events (inbox, settings, disposal), not to a Mentor decision. Live markers, the bypass
+  register, the `qdev-soup/signal` publication and status updates are unchanged wiring.
+- **One behaviour difference, failure case only:** a delivery step that throws used to escape into the detector's `mentor` subscriber and
+  skip that drift's intervention evidence. It is now reported as consumer `action:inject` and the evidence is still published.
+
+Later, another skill, a Python script or a Rust program would be added as another action in the list; no detector code changes.
+**Non-decisions:** no global registry, no plugin platform, no event bus, no SDK, and nothing built beyond the inject action.

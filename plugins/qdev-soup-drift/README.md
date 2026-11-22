@@ -29,7 +29,7 @@ The global master controls observation and interventions. The existing reminder,
 - `drift.mjs`, `runtime.mjs`, and `reanchor.mjs`: detector and intervention policy.
 - `soup_worker.py`: bridge to official `soup_cli.utils.drift_alarm` functions.
 - `cordis.patch.yml`: default Loader registration.
-- **0.10.0 additions:** `adapter` and the evidence contracts inside `soup-core.mjs`, `status.mjs`, `session-registry.mjs`, `detector-settings.mjs`, `mentor-settings.mjs`, and `ARCHITECTURE.md`.
+- **0.10.0 additions:** `adapter` and the evidence contracts inside `soup-core.mjs`, `status.mjs`, `session-registry.mjs`, `detector-settings.mjs`, `mentor-settings.mjs`, `mentor-actions.mjs` (how Gentle Mentor carries out a decision; today only "inject the reminder"), and `ARCHITECTURE.md`.
 - **0.9.0 additions:** `soup-core.mjs` (calls the worker), `monitor.mjs` and `monitor-cli.mjs` (the standalone drift monitor), and the Host split into `src/constants.ts`, `types.ts`, `storage.ts`, `live.ts`, `status-board.ts`, `live-view.ts`, `mentor-host.ts` and `routes.ts`, with `src/index.ts` as the thin wiring. All compile to `dist/`.
 
 ## Emergency escape — recover DSH without the browser
