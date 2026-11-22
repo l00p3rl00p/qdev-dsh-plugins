@@ -18,7 +18,10 @@ export const DRIFT = 'different unrelated output topic'
 
 // Only external Host services are substituted. Config validation, Volatile refs,
 // fiber-scoped dispatch, Loader create/update, Host and SOUP workers are real.
-export async function fixture(t, config = {}, saved = {}) {
+// WHY the 4th argument (additive, defaults unchanged): the Mentor delivery pinning tests need to read the rows the Host
+// wrote (live markers, bypass register), seed rows it reads at mount (per-chat Mentor context, live history), and run
+// without the optional userQuestions service. Every existing caller passes three or fewer arguments and is unaffected.
+export async function fixture(t, config = {}, saved = {}, { seeds = {}, userQuestions = true } = {}) {
   const ctx = new Context()
   t.after(async () => {
     await ctx.fiber.dispose()
@@ -35,11 +38,13 @@ export async function fixture(t, config = {}, saved = {}) {
   const routes = new Map()
   const questions = []
   const calls = { open: 0, close: 0, register: 0, unregister: 0 }
+  const tables = new Map()
   ctx.provide('agents', { list: () => [...live.values()], get: (id) => live.get(String(id)) })
   ctx.provide('storageDomain', {
     async open(spec) {
       calls.open += 1
-      const records = spec.name === 'qdev_soup_drift_state' ? values : new Map()
+      const records = spec.name === 'qdev_soup_drift_state' ? values : new Map(Object.entries(seeds[spec.name] ?? {}))
+      tables.set(spec.name, records)
       return {
         table(name) {
           assert.equal(name, spec.name === 'qdev_soup_register' ? 'entries' : 'sessions')
@@ -64,7 +69,7 @@ export async function fixture(t, config = {}, saved = {}) {
       return () => { calls.unregister += 1; routes.delete(route.path) }
     },
   })
-  ctx.provide('userQuestions', {
+  if (userQuestions) ctx.provide('userQuestions', {
     ask(request) {
       // A manually settled answer deliberately permits a reply after abort. The
       // Host must guard stale continuations as well as cancelling native asks.
@@ -172,6 +177,6 @@ export async function fixture(t, config = {}, saved = {}) {
     for (let i = 0; i < count; i += 1) assistant(DRIFT, turn)
     return until((s) => s.detector.evaluations === before + 1, 'real SOUP worker did not finish exactly one window')
   }
-  return { ctx, agent, live, session, injected, questions, writes, values, calls, entry, fiber,
+  return { ctx, agent, live, session, injected, questions, writes, values, calls, entry, fiber, tables,
     request, status, update, append, start, assistant, until, evaluate, volatileEvents }
 }
