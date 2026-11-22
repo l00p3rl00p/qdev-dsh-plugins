@@ -78,3 +78,32 @@ test('per-chat bypass is a saved Mentor field (spec B1)',()=>{
 test('per-chat bypass rejects a non-boolean value',()=>{
   assert.throws(()=>applyMentorEdit({},'escalationBypass','yes'));
 });
+
+// Review finding: the bypass cadence must accumulate across turns, not restart at each turn/start.
+test('bypass on: the 10th drift sends the full message even when the drifts span two turns',()=>{
+  const injected=[];
+  const mentor=createReanchor({inject:x=>injected.push(x),escalate:()=>{},bypassFor:()=>true,contextFor:()=>({})});
+  mentor.observe('s',planEvent('The mission is unchanged.'));
+  const full=secondDriftReminder({message:GENTLE_MENTOR_MESSAGE,plan:'The mission is unchanged.',amendments:[]});
+  for(const turn of [7,8]){
+    mentor.observe('s',{type:'turn/start',data:{turn}});
+    for(let i=0;i<5;i++) assert.equal(mentor.drift('s',{drift_detected:true,turn}),'injected');
+  }
+  assert.equal(injected.length,10);
+  for(let i=0;i<9;i++) assert.equal(injected[i].reminder,FIRST_DRIFT_MESSAGE,`drift ${i+1}`);
+  assert.equal(injected[9].reminder,full,'drift 10 (the 5th of turn 8)');
+  assert.equal(injected[9].attempt,10);
+});
+
+test('bypass on: two chats count their drifts separately',()=>{
+  const injected=[];
+  const mentor=createReanchor({inject:x=>injected.push(x),escalate:()=>{},bypassFor:()=>true,contextFor:()=>({})});
+  for(const id of ['a','b']) mentor.observe(id,planEvent('Plan '+id));
+  for(const turn of [1,2]) for(const id of ['a','b']){
+    mentor.observe(id,{type:'turn/start',data:{turn}});
+    for(let i=0;i<3;i++) mentor.drift(id,{drift_detected:true,turn});
+  }
+  // 6 drifts each, so neither chat has reached its 10th: no full message may appear.
+  assert.equal(injected.length,12);
+  assert.ok(injected.every(x=>x.reminder===FIRST_DRIFT_MESSAGE));
+});

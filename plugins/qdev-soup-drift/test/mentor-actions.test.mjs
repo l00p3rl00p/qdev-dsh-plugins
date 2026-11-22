@@ -172,7 +172,7 @@ test('inject action (action level only): a chat with intervention disabled gets 
   assert.equal(h.mentor.state, 'reminding', 'the former code left the state at reminding here; kept')
 })
 
-test('inject action: a delivered reminder is queued once, tracked by message id, and keeps only the last six records', () => {
+test('inject action (recording adapter, not a real agent): a reminder handed to the adapter is queued once, tracked by message id, and keeps only the last six records', () => {
   const h = adapterFor({ agent: { id: 'c' } })
   const action = createInjectAction(h.adapter)
   for (let i = 1; i <= 8; i += 1) assert.deepEqual(action.run({ ...reminderRequest, attempt: i }), { ok: true })

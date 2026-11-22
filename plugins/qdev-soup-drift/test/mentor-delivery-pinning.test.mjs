@@ -1,5 +1,10 @@
-// PINNING tests for how Gentle Mentor carries out its decisions in the real Host (reminder delivery into the chat, the
+// PINNING tests for how Gentle Mentor carries out its decisions in the real Host (what it hands to the agent, the
 // escalation dialog, live markers, the bypass register, the older qdev-soup/signal publication).
+//
+// SCOPE: these pin the Host's OWN behaviour against a recording stand-in for the agent (host-fixture.mjs). `f.injected`
+// is the list of messages the Host handed over, and every "splice" below is an `agent/inbox/spliced` event emitted by
+// the test itself. Nothing here shows that a real Harness agent received, queued, spliced or displayed a message;
+// that is NOT-PROVEN (see the skipped test at the end of this file).
 // They are GUARDS, not RED tests: they describe today's behaviour and pass on the code before the action seam exists.
 // They must keep passing, unchanged, after the refactor. Real Cordis, Loader, Session, built dist/index.js, real SOUP worker.
 //
@@ -48,7 +53,7 @@ test('pin: the exact reminder and escalation messages, and the source each one c
   assert.deepEqual(f.injected[2].source, { kind: 'qdev-trajectory-drift-soup', form: 'escalation', kl: third.detector.lastResult.klDivergence, threshold: 0.2 })
 })
 
-test('pin: delivery bookkeeping, step by step, until the inbox confirms the splice', opts, async (t) => {
+test('pin (recording agent, hand-emitted splice event): reminder bookkeeping goes pending, then delivered, on the splice event', opts, async (t) => {
   const f = await fixture(t)
   f.start()
   f.assistant(BASELINE)
@@ -85,7 +90,7 @@ test('pin: delivery bookkeeping, step by step, until the inbox confirms the spli
   assert.deepEqual(s3.mentor.reminders.map((item) => [item.attempt, item.state]), [[1, 'delivered'], [2, 'pending']])
 })
 
-test('pin: the escalation record, the human dialog, and the clarification delivery', opts, async (t) => {
+test('pin (recording agent): the escalation record, the human dialog, and the clarification handed to the agent', opts, async (t) => {
   const f = await fixture(t)
   f.start()
   f.assistant(BASELINE)
@@ -145,7 +150,7 @@ test('pin: the choice to carry the count forward is reported with its own outcom
   assert.equal(after.mentor.carriedDrifts, 3)
 })
 
-test('pin: without the user-questions service the escalation message is still delivered and the failure is recorded', opts, async (t) => {
+test('pin (recording agent): without the user-questions service the escalation message is still handed over and the failure is recorded', opts, async (t) => {
   const f = await fixture(t, {}, {}, { userQuestions: false })
   f.start()
   f.assistant(BASELINE)
@@ -161,7 +166,7 @@ test('pin: without the user-questions service the escalation message is still de
   assert.equal(s.mentor.driftCount, 3)
 })
 
-test('pin: live markers appear (crossing, then each confirmed delivery)', opts, async (t) => {
+test('pin (hand-emitted splice events): live markers appear (crossing, then each splice confirmation)', opts, async (t) => {
   const f = await fixture(t)
   f.start()
   f.assistant(BASELINE)
@@ -247,3 +252,6 @@ test('pin: the older qdev-soup/signal event carries the monitor signal, once per
   // The order in which the Host's consumers acted on one drift (observed on the pre-refactor code).
   assert.deepEqual(order, ['signal', 'drift-evidence', 'inbox', 'intervention-evidence'])
 })
+
+// Not run: this is the claim the tests above deliberately do NOT make. Shown as skipped so it stays visible.
+test('end-to-end: a real Harness agent receives a Mentor reminder and the chat shows it', { skip: 'NOT-PROVEN: needs a live Harness agent loop with a model; no real-agent test exists in this suite' }, () => {})

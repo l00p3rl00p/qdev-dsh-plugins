@@ -1,5 +1,11 @@
 // Shared real-Host fixture for the A/B/C decision tests. Copied from host-config.test.mjs (which stays untouched):
 // real Cordis, Loader, Session, built dist/index.js and SOUP worker; only external Host services are supplied.
+//
+// WHAT THIS FIXTURE IS NOT: it has no real Harness agent. The `agent` below is a recording stand-in: its inject()
+// only appends the message to `injected`, and tests that need a splice confirmation emit the
+// `agent/inbox/spliced` session event by hand. So a test using this fixture can prove what the real Host hands to
+// the agent boundary and how it does its own bookkeeping, but it can NOT prove that a real agent received,
+// queued, spliced or displayed a message. That end-to-end delivery is NOT-PROVEN here (it needs a live Harness).
 import assert from 'node:assert/strict'
 import { setTimeout as delay } from 'node:timers/promises'
 import { Context } from '@deepseek-ai/cordis'
@@ -10,8 +16,10 @@ import { Session } from '@deepseek-ai/dsh-session'
 // Cordis's FiberState is a TypeScript const enum, erased from JavaScript exports.
 const ACTIVE = 2
 const HOST_URL = new URL('../dist/index.js', import.meta.url)
-// Configured interpreter only (main eb44a23): the worker needs the soup-cli venv, not the system python3.
-const PYTHON = process.env.SOUP_PYTHON || '/home/qdev/llm-runtime/tools/venvs/soup/bin/python'
+// Configured interpreter only: the worker needs an interpreter that has soup-cli, not whatever python3 is on PATH.
+// No machine-specific fallback: tests using this fixture pass `opts` (proof-helpers.mjs) and skip visibly without
+// SOUP_PYTHON; a caller that reaches fixture() without it gets an explicit, actionable error instead.
+const PYTHON = process.env.SOUP_PYTHON
 const STATUS_PATH = '/qdev-soup-drift/status'
 export const BASELINE = 'keep following the original implementation plan'
 export const DRIFT = 'different unrelated output topic'
@@ -22,6 +30,7 @@ export const DRIFT = 'different unrelated output topic'
 // wrote (live markers, bypass register), seed rows it reads at mount (per-chat Mentor context, live history), and run
 // without the optional userQuestions service. Every existing caller passes three or fewer arguments and is unaffected.
 export async function fixture(t, config = {}, saved = {}, { seeds = {}, userQuestions = true } = {}) {
+  if (!PYTHON) throw new Error('SOUP_PYTHON must name an interpreter that has soup_cli; set it (or skip this test with `opts` from proof-helpers.mjs)')
   const ctx = new Context()
   t.after(async () => {
     await ctx.fiber.dispose()
@@ -31,6 +40,7 @@ export async function fixture(t, config = {}, saved = {}, { seeds = {}, userQues
   })
   const session = Session.create('synthetic-soup-loader-chat')
   const injected = []
+  // Recording stand-in, NOT a Harness agent (see the header): inject() only records what the Host handed over.
   const agent = { id: session.id, session, inject(message) { injected.push(message) } }
   const live = new Map([[agent.id, agent]])
   const values = new Map(Object.entries(saved))
