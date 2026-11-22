@@ -10,6 +10,16 @@ export type LiveHistoryStored = {
   tools?: Array<{ callId: string; name: string; startedAt: number; endedAt: number | null; error: boolean; reason?: string; outcome?: TestOutcome }>
   decisions?: Array<{ at: number; kind: string; detail: string }>
 }
+// The evidence the detector (the first producer) and Gentle Mentor publish; defined in soup-core.mjs.
+export type DriftEvidence = Readonly<{
+  sessionId: string; turn: number | null; singleTurn: boolean
+  result: Readonly<{ drift_detected: boolean; kl_divergence: number; threshold: number; n_reference?: number; n_live?: number }>
+}>
+export type InterventionEvidence = Readonly<{
+  sessionId: string; turn: number | null; action: 'reminder' | 'escalation' | 'reset' | 'carry'
+  attempt: number | null; strikes: number; carry: number
+  respondsTo: Readonly<{ sessionId: string; turn: number | null; kl_divergence: number; threshold: number }> | null
+}>
 export type MentorStoredState = { carry: number; decisionPending: boolean }
 export type DeliveryRecord = {
   kind: 'reminder' | 'escalation' | 'clarification'
@@ -32,6 +42,8 @@ export type SessionLiveRecord = {
   evaluations: number
   drifts: number
   klTotal: number
+  // What Gentle Mentor did in this chat, counted from its published intervention evidence.
+  interventions?: { total: number; reminders: number; escalations: number; resets: number; carries: number }
   // Last 50 calculations and threshold/intervention markers for the Live & Mentor chart. Memory only.
   history: Array<{ at: number; kl: number; threshold: number; drift: boolean }>
   markers: Array<{ at: number; kind: 'crossing' | 'reminder' | 'escalation' | 'clarification' }>
@@ -103,6 +115,8 @@ export type RuntimeStatus = {
     carriedDrifts: number
     resetDecision?: { required: boolean; sessionId: string; turn: number | null }
   }
+  // Counted by a peer consumer from Gentle Mentor's intervention evidence (status.mjs).
+  interventions: { total: number; reminders: number; escalations: number; resets: number; carries: number; lastAt?: number }
   errors: Array<{ at: number; message: string; phase?: string; sessionId?: string }>
 }
 export type Effective = Omit<RuntimeStatus['configuration'], 'threshold'>

@@ -162,3 +162,58 @@ export function createDriftEvidence({ sessionId, turn, singleTurn, result }) {
   if (!check.ok) throw new TypeError(`Invalid drift evidence: ${check.errors.join('; ')}`)
   return freeze(evidence)
 }
+
+// ---- Intervention evidence: DERIVED from drift evidence by a consumer (Gentle Mentor) when it acts.
+// It references the drift evidence it answered (Evidence -> Consumers -> Derived evidence -> Consumers).
+export const INTERVENTION_EVIDENCE_VERSION = 1
+export const INTERVENTION_EVIDENCE_EVENT = `qdev-soup/intervention-evidence/v${INTERVENTION_EVIDENCE_VERSION}`
+export const INTERVENTION_ACTIONS = Object.freeze(['reminder', 'escalation', 'reset', 'carry'])
+
+/**
+ * Check an intervention evidence object (published by Gentle Mentor when it acts).
+ *   sessionId   string
+ *   turn        integer | null   turn Mentor acted in
+ *   action      'reminder' | 'escalation' | 'reset' | 'carry'
+ *   attempt     integer | null   reminder number (1, 2); null for the other actions
+ *   strikes     integer >= 0     Mentor's qualifying-drift count AFTER the action
+ *   carry       integer >= 0     strikes carried across turns AFTER the action
+ *   respondsTo  { sessionId, turn, kl_divergence, threshold } | null
+ *               the drift evidence this action answers (identity + measured numbers). null only
+ *               for reset/carry when the escalating drift is unknown (e.g. after a restart).
+ */
+export function validateInterventionEvidence(value) {
+  const errors = []
+  if (!isObject(value)) return { ok: false, errors: ['evidence must be an object'] }
+  if (!sessionOk(value.sessionId)) errors.push('sessionId must be a non-empty string')
+  if (!isTurn(value.turn)) errors.push('turn must be an integer or null')
+  if (!INTERVENTION_ACTIONS.includes(value.action)) errors.push(`action must be one of ${INTERVENTION_ACTIONS.join(', ')}`)
+  if (!(value.attempt === null || isCount(value.attempt))) errors.push('attempt must be a non-negative integer or null')
+  if (value.action === 'reminder' && !(Number.isInteger(value.attempt) && value.attempt >= 1)) errors.push('a reminder needs attempt >= 1')
+  if (!isCount(value.strikes)) errors.push('strikes must be a non-negative integer')
+  if (!isCount(value.carry)) errors.push('carry must be a non-negative integer')
+  const ref = value.respondsTo
+  if (ref === null) {
+    if (value.action === 'reminder' || value.action === 'escalation') errors.push('a reminder/escalation must reference the drift evidence (respondsTo)')
+  } else if (!isObject(ref)) errors.push('respondsTo must be an object or null')
+  else {
+    if (!sessionOk(ref.sessionId)) errors.push('respondsTo.sessionId must be a non-empty string')
+    if (!isTurn(ref.turn)) errors.push('respondsTo.turn must be an integer or null')
+    if (!isNum(ref.kl_divergence)) errors.push('respondsTo.kl_divergence must be a finite number')
+    if (!isNum(ref.threshold)) errors.push('respondsTo.threshold must be a finite number')
+  }
+  return errors.length ? { ok: false, errors } : { ok: true }
+}
+
+/** Reference a drift evidence by identity (session, turn) plus the numbers it carried. */
+export const referenceTo = (drift) => drift && {
+  sessionId: drift.sessionId, turn: drift.turn,
+  kl_divergence: drift.result.kl_divergence, threshold: drift.result.threshold,
+}
+
+/** Build the (frozen) intervention evidence. Throws when it does not satisfy the contract. */
+export function createInterventionEvidence({ sessionId, turn, action, attempt = null, strikes, carry, respondsTo = null }) {
+  const evidence = { sessionId, turn, action, attempt, strikes, carry, respondsTo: respondsTo ? { ...respondsTo } : null }
+  const check = validateInterventionEvidence(evidence)
+  if (!check.ok) throw new TypeError(`Invalid intervention evidence: ${check.errors.join('; ')}`)
+  return freeze(evidence)
+}

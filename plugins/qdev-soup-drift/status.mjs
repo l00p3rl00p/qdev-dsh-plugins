@@ -1,5 +1,6 @@
-// Host-independent status decisions (P2). No DSH, cordis or zod imports: src/index.ts only wires
+// Host-independent status decisions (P2). No DSH, cordis or zod imports: src/*.ts only wires
 // these into the Harness, so the rules below can be tested without a running host.
+import { validateInterventionEvidence } from './soup-core.mjs'
 
 const MAX_ERRORS = 8
 
@@ -33,7 +34,25 @@ export function createStatus({ identity, resolved, threshold, degraded = [], now
       driftCount: 0,
       carriedDrifts: 0,
     },
+    // Counted by a PEER consumer from Mentor's intervention evidence (createInterventionStatusHandler).
+    interventions: { total: 0, reminders: 0, escalations: 0, resets: 0, carries: 0 },
     errors: [],
+  }
+}
+
+/**
+ * Status as a consumer of DERIVED evidence: counts what Gentle Mentor did, reading only the
+ * intervention evidence contract. Throws on a malformed object (the seam isolates and reports it).
+ */
+export function createInterventionStatusHandler({ status, now = Date.now }) {
+  return (evidence) => {
+    const check = validateInterventionEvidence(evidence)
+    if (!check.ok) throw new TypeError(`Invalid intervention evidence: ${check.errors.join('; ')}`)
+    const counters = { reminder: 'reminders', escalation: 'escalations', reset: 'resets', carry: 'carries' }
+    status.interventions[counters[evidence.action]] += 1
+    status.interventions.total += 1
+    status.interventions.lastAt = now()
+    status.interventions.last = { sessionId: evidence.sessionId, turn: evidence.turn, action: evidence.action, attempt: evidence.attempt, strikes: evidence.strikes }
   }
 }
 

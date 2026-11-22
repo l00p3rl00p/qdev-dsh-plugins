@@ -1,3 +1,5 @@
+import { createInterventionEvidence } from './soup-core.mjs'
+
 // Feature 5: the first qualifying drift injects exactly this sentence and nothing else.
 export const FIRST_DRIFT_MESSAGE = 'I think what you are doing is interesting; however, I would like to return focus to the current plan.'
 // The Gentle Mentor message used by the second qualifying drift. Editable per chat in Feature 4.
@@ -34,6 +36,10 @@ export function createReanchor({
   // When on, a chat never escalates: drifts send the first-drift sentence, and every 10th drift sends the full message.
   bypassFor = () => false,
   onRegister = () => {},
+  // DERIVED evidence: Mentor publishes what it did (see soup-core.mjs). It is a consumer of drift evidence AND a
+  // producer of intervention evidence; who listens is not its business.
+  publish = () => {},
+  reportEvidenceError = () => {},
 }) {
   const secondDriftFields = (id, original) => {
     const override = contextFor(id) ?? {}
@@ -74,6 +80,17 @@ export function createReanchor({
     onStateChange(publicState(id, current))
   }
 
+  // Evidence is derived and optional: building or publishing it must never change the policy outcome.
+  function announce(id, current, action, extra) {
+    try {
+      publish(createInterventionEvidence({
+        sessionId: String(id), turn: current.turn, action, strikes: current.detections, carry: current.carry, ...extra,
+      }))
+    } catch (error) {
+      try { reportEvidenceError(error, { sessionId: String(id), turn: current.turn, phase: 'evidence' }) } catch { /* last resort */ }
+    }
+  }
+
   return {
     observe(id, event) {
       const current = get(id)
@@ -100,6 +117,8 @@ export function createReanchor({
         return 'stale-turn'
       }
       if (current.decisionPending) return 'awaiting-reset-decision'
+      // Reference to the drift evidence this action answers (identity + the measured numbers).
+      const respondsTo = { sessionId: String(id), turn: reportTurn, kl_divergence: report.kl_divergence, threshold: report.threshold }
       if (bypassFor(id)) {
         // Spec B2-B3: never escalate. Every 10th drift sends the full message; the rest send the first sentence.
         current.detections += 1
@@ -107,6 +126,7 @@ export function createReanchor({
         const reminder = full ? secondDriftReminder(secondDriftFields(id, original)) : FIRST_DRIFT_MESSAGE
         onRegister({ id, turn: current.turn, drift: current.detections, sent: full ? 'full' : 'first', at: Date.now() })
         inject({ id, turn: current.turn, attempt: current.detections, original: current.intent, reminder, report })
+        announce(id, current, 'reminder', { attempt: current.detections, respondsTo })
         return 'injected'
       }
       if (current.escalated) return 'already-escalated'
@@ -116,12 +136,16 @@ export function createReanchor({
         current.decisionPending = true
         current.escalated = true
         changed(id, current)
+        // Remembered so a later reset/carry decision can reference the drift that caused the escalation.
+        current.escalatedOn = respondsTo
         escalate({ id, turn: current.turn, detections: current.detections, original: current.intent, question: HUMAN_QUESTION, report })
+        announce(id, current, 'escalation', { respondsTo })
         return 'human'
       }
       const normalReminder = current.detections === 1 ? FIRST_DRIFT_MESSAGE : secondDriftReminder(secondDriftFields(id, original))
       onRegister({ id, turn: current.turn, drift: current.detections, sent: current.detections === 1 ? 'first' : 'full', at: Date.now() })
       inject({ id, turn: current.turn, attempt: current.detections, original: current.intent, reminder: normalReminder, report })
+      announce(id, current, 'reminder', { attempt: current.detections, respondsTo })
       return 'injected'
     },
     decide(id, reset) {
@@ -137,6 +161,8 @@ export function createReanchor({
       current.decisionPending = false
       current.escalated = false
       changed(id, current)
+      announce(id, current, reset === true ? 'reset' : 'carry', { respondsTo: current.escalatedOn ?? null })
+      current.escalatedOn = null
       return { accepted: true, reset: reset === true, ...publicState(id, current) }
     },
     snapshot(id) {

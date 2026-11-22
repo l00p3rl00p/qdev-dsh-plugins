@@ -25,6 +25,8 @@
     "reanchor.mjs",
     "runtime.mjs",
     "session-settings.mjs",
+    "detector-settings.mjs",
+    "mentor-settings.mjs",
     "mentor-context.mjs",
     "soup_worker.py",
     "cordis.patch.yml",

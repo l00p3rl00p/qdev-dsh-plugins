@@ -86,6 +86,8 @@ export function createLiveView({ resolved, agents, live, initialLive, initialMen
         carry: mentor.carry,
         decisionPending: mentor.decisionPending,
         escalated: mentor.escalated,
+        // What Gentle Mentor did in this chat (counted from its intervention evidence; delivery is status.mentor.reminders).
+        actions: record?.interventions ?? { total: 0, reminders: 0, escalations: 0, resets: 0, carries: 0 },
         originalPlan: runtimes.get(id)?.originalPlan(id) ?? null,
         // Effective Gentle Mentor prompt parts; "customized" says which fields a chat has overridden.
         context: {

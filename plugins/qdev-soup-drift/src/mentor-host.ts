@@ -1,4 +1,6 @@
 import type { Context } from '@deepseek-ai/cordis'
+// @ts-expect-error JavaScript status module has no declaration file.
+import { createInterventionStatusHandler } from '../status.mjs'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
 // @ts-expect-error JavaScript runtime has no declaration file.
@@ -7,7 +9,16 @@ import { createPluginRuntime } from '../runtime.mjs'
 import { toSignal } from '../monitor.mjs'
 import type { Live } from './live.js'
 import type { StatusBoard } from './status-board.js'
-import type { DeliveryRecord, Effective, Intervention, MentorContext, MentorStoredState, RegisterEntry, Resolved, Table } from './types.js'
+import type { DeliveryRecord, DriftEvidence, InterventionEvidence, Effective, Intervention, MentorContext, MentorStoredState, RegisterEntry, Resolved, Table } from './types.js'
+
+// Host-native seam: Cordis already routes named events between plugins (ctx.on / ctx.parallel), so no bus of our
+// own is introduced. Provisional names; the version is part of the name (DRIFT_/INTERVENTION_EVIDENCE_EVENT in soup-core.mjs).
+declare module '@deepseek-ai/cordis' {
+  interface Events {
+    'qdev-soup/drift-evidence/v1'(evidence: DriftEvidence): void
+    'qdev-soup/intervention-evidence/v1'(evidence: InterventionEvidence): void
+  }
+}
 
 const messageText = (answer: { answers: Array<{ selected: string[]; custom?: string }> }): string => {
   const item = answer.answers[0]
@@ -33,6 +44,22 @@ export function createRuntimeFactory({ ctx, resolved, agents, runtimes, pendingM
   noteMissing: (service: string) => void
 }) {
   const { ensureSessionLive, persistLive } = live
+  // Status is a PEER consumer of Mentor's derived evidence (intervention evidence), not part of Mentor.
+  const interventionStatus = createInterventionStatusHandler({ status: board.status })
+  // WHY ctx.parallel and not ctx.emit: Cordis `emit` calls listeners in a bare map, so one throwing listener stops
+  // every later listener and the exception escapes into SOUP. `parallel` runs every listener and aggregates failures
+  // into one rejection, recorded here as a consumer diagnostic (never a measurement failure).
+  const publishNative = (sessionId: string, send: () => Promise<void>): void => {
+    if (board.status.lifecycle.state !== 'active') return
+    const report = (error: unknown): void => {
+      const failures = error instanceof AggregateError ? error.errors : [error]
+      for (const failure of failures) board.recordError(failure, { phase: 'consumer', sessionId })
+    }
+    try { send().catch(report) } catch (error) { report(error) }
+  }
+  // Event names are literals so they are type-checked against the Events augmentation above.
+  const nativeDrift = (evidence: DriftEvidence): void => publishNative(evidence.sessionId, () => ctx.parallel('qdev-soup/drift-evidence/v1', evidence))
+  const nativeIntervention = (evidence: InterventionEvidence): void => publishNative(evidence.sessionId, () => ctx.parallel('qdev-soup/intervention-evidence/v1', evidence))
   const { status, abortIntervention, recordError, noteEvaluation, updateMentorStatus } = board
   const deliver = (agent: Agent, record: DeliveryRecord, text: string, form: 'reminder' | 'escalation' | 'clarification', report?: { kl_divergence?: number; threshold?: number }): void => {
     const effective = effectiveSettings(String(agent.id))
@@ -248,6 +275,17 @@ export function createRuntimeFactory({ ctx, resolved, agents, runtimes, pendingM
       recordError(error, details)
     },
     })
+    // Peer consumers wired beside Mentor: the status counter and the native Cordis publication.
+    runtime.subscribe('intervention', (evidence: InterventionEvidence) => {
+      interventionStatus(evidence)
+      const record = ensureSessionLive(evidence.sessionId)
+      const counts = record.interventions ??= { total: 0, reminders: 0, escalations: 0, resets: 0, carries: 0 }
+      const key = ({ reminder: 'reminders', escalation: 'escalations', reset: 'resets', carry: 'carries' } as const)[evidence.action]
+      counts[key] += 1
+      counts.total += 1
+    }, 'status-interventions')
+    runtime.subscribe('evaluation', nativeDrift, 'native-drift-evidence')
+    runtime.subscribe('intervention', nativeIntervention, 'native-intervention-evidence')
     runtimes.set(id, runtime)
     return runtime
   }

@@ -57,3 +57,24 @@ test('M1: an async throwing runtime notify subscriber does not escape and Mentor
     assert.deepEqual(unhandled, [])
   } finally { process.off('unhandledRejection', onUnhandled) }
 })
+
+test('M1: an async throwing intervention-evidence subscriber is a named consumer failure, never unhandled', opts, async () => {
+  process.on('unhandledRejection', onUnhandled)
+  try {
+    const injected = [], errors = []
+    let peer = 0
+    const rt = createPluginRuntime({ python: PY, preset: 0, baselineCount: 1, windowCount: 1,
+      inject: (x) => injected.push(x), onError: (e, d) => errors.push(d) })
+    rt.subscribe('intervention', async () => { throw new Error('async intervention boom') }, 'asyncIv')
+    rt.subscribe('intervention', () => { peer += 1 }, 'peerIv')
+    rt.observe('s', { type: 'turn/start', data: { turn: 1 } })
+    rt.observe('s', { type: 'user/message', data: { source: { kind: 'user' }, content: [{ type: 'text', text: 'plan' }] } })
+    rt.observe('s', event(REF)); rt.observe('s', event(LIVE))
+    await until(() => peer >= 1); await sleep(200)
+    rt.dispose()
+    assert.equal(injected.length, 1, 'Mentor outcome changed by the failing consumer')
+    assert.equal(peer, 1, 'a peer was stopped by the async failure')
+    assert.deepEqual(errors.filter((e) => e.phase === 'consumer').map((e) => e.consumer), ['asyncIv'])
+    assert.deepEqual(unhandled, [], 'async rejection escaped isolation')
+  } finally { process.off('unhandledRejection', onUnhandled) }
+})
