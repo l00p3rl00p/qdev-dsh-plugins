@@ -10,6 +10,16 @@
 //   scores, false-alarm behaviour or tokenisation; where a scenario needs a drift it says so as a precondition.
 // NOT DONE: no import of any plugin module, no private helper is called, nothing of SOUP is mocked.
 //
+// WHAT A PASS MEANS (read this before trusting a verdict):
+//   Each check has a scope. 'plugin' (the default) observes what the real plugin, real Loader/Context and real worker
+//   do. 'standin' observes something that only the in-memory stand-in services can show: what was handed to the
+//   stand-in agent's inject(), a question object held by the stand-in userQuestions, an `agent/inbox/spliced` event
+//   that THIS SCRIPT emits itself, or an `agent/created` event emitted by this script. None of that shows what a real
+//   Harness agent, inbox, question dialog or chat does.
+//   A requirement listed in REAL_BOUNDARY below is a claim about that real behaviour. Its PASS is therefore never
+//   awarded from stand-in checks: it is reported NOT-PROVEN (with the plugin-side result kept in the text). A FAIL is
+//   always kept as FAIL, because a stand-in that already shows a wrong behaviour is real evidence of a defect.
+//
 // Usage (inside the harness container, cwd = a staged copy of the plugin that ALSO contains this file,
 // because the bare imports below resolve from the plugin's node_modules):
 //   SOUP_PYTHON=<venv python> node mission-scenarios.mjs --label 0.6.3 [--only ID,ID]
@@ -61,6 +71,13 @@ const R = {
   'M6': ['Settings saved by an old release load unchanged (no errors, same values, still measures).', 'user scenario list; ARCHITECTURE.md section 2 "existing saved configuration loads as before"', 'doc'],
 }
 
+// Requirements that are claims about REAL Harness behaviour, and the real boundary each one needs. These can only be
+// PASS when a real Harness exercised that boundary, which this script cannot do; see "WHAT A PASS MEANS" above.
+const REAL_BOUNDARY = {
+  M2: 'the real agent inbox receiving the reminders and the real question dialog shown to the human',
+  M7: 'the real agent inbox, the Harness splice confirmation (here emitted by this script) and the real chat transcript',
+}
+
 // ---- conversation corpora (natural language; used with the default sizes baseline 4 / window 4 / threshold 0.2)
 const ON = [
   'I will implement cursor based pagination for the orders endpoint first. The handler reads the limit and cursor query parameters, validates them, and passes them to the repository so the database returns a stable page of orders.',
@@ -90,7 +107,8 @@ const INTERV_NAMES = ['qdev-soup/intervention-evidence/v1']
 // ---- result plumbing -------------------------------------------------------------------------------------
 const out = {}                                   // id -> {checks:[], notes:[], forced}
 const need = (id) => (out[id] ??= { checks: [], notes: [], forced: null })
-const check = (id, name, pass, observed) => need(id).checks.push({ name, pass: !!pass, observed })
+// scope: 'plugin' (default) or 'standin' (only a stand-in service or an event emitted by this script can show it).
+const check = (id, name, pass, observed, scope = 'plugin') => need(id).checks.push({ name, pass: !!pass, observed, scope })
 const note = (id, text) => need(id).notes.push(text)
 const crashed = (ids, e) => { for (const id of ids) need(id).forced = { verdict: 'NOT-PROVEN', why: `scenario could not run: ${e?.stack?.split('\n').slice(0, 2).join(' ') ?? e}` } }
 const js = (x) => JSON.stringify(x)
@@ -100,6 +118,7 @@ process.on('uncaughtException', (e) => { uncaught.push(String(e?.message ?? e)) 
 process.on('unhandledRejection', (e) => { uncaught.push('unhandledRejection: ' + String(e?.message ?? e)) })
 
 // ---- fixture: real Loader + real built entry; only external DSH services are in-memory stand-ins ---------
+// `injected` is the stand-in agent's inbox: inject() only records what the plugin handed over. It is not a Harness agent.
 async function fixture({ config = {}, withAgent = true, before, injectThrows = false } = {}) {
   const ctx = new Context()
   const routes = new Map()
@@ -252,9 +271,9 @@ async function s1() {
     check('M1', 'status route reports the worker-reported drift (drift flag true, drift count 3)', lr?.driftDetected === true && s?.detector?.drifts === 3, { driftDetected: lr?.driftDetected, drifts: s?.detector?.drifts })
     check('M1', 'an independent peer (ctx.on only) received a drift fact with the drift flag true for each drifting window', tapM1.length === 3 && tapM1.every((x) => x && x.drift === true), { received: tapM1.length, drift_flags: tapM1.map((x) => x && x.drift) })
     // M2
-    check('M2', 'reminder, reminder, escalation injected to the agent in that order', js(forms(f)) === js(['reminder', 'reminder', 'escalation']), { forms: forms(f) })
-    check('M2', 'exactly one human clarification question raised (on the third drift)', f.questions.length === 1, { questions: f.questions.length })
-    check('M2', 'status shows 3 strikes and a pending reset decision', s?.mentor?.driftCount === 3 && s?.mentor?.resetDecision?.required === true, { driftCount: s?.mentor?.driftCount, resetDecision: s?.mentor?.resetDecision })
+    check('M2', 'reminder, reminder, escalation handed to the stand-in agent in that order', js(forms(f)) === js(['reminder', 'reminder', 'escalation']), { forms: forms(f) }, 'standin')
+    check('M2', 'exactly one human clarification question requested from the stand-in question service (on the third drift)', f.questions.length === 1, { questions: f.questions.length }, 'standin')
+    check('M2', 'status shows 3 strikes and a pending reset decision', s?.mentor?.driftCount === 3 && s?.mentor?.resetDecision?.required === true, { driftCount: s?.mentor?.driftCount, resetDecision: s?.mentor?.resetDecision }, 'standin')
     // M5: visibility
     const paths = ['configuration.threshold', 'trajectory.baselineSize', 'trajectory.windowSize', 'trajectory.sessionEvents', 'detector.state', 'detector.evaluations', 'detector.drifts', 'detector.humanSummary', 'detector.lastResult.klDivergence', 'detector.lastResult.threshold', 'detector.lastResult.driftDetected', 'mentor.driftCount', 'mentor.reminders', 'mentor.resetDecision', 'errors']
     const get = (o, p) => p.split('.').reduce((a, k) => (a == null ? undefined : a[k]), o)
@@ -327,8 +346,8 @@ async function s4() {
   const healthy = await run({}), off = await run({ config: { reanchoring: false } }), broken = await run({ injectThrows: true })
   check('P1', 'no exception escaped into the host process while Mentor failed', uncaught.length === u0, { escaped: uncaught.slice(u0) })
   const same = (a, b) => a.kl === b.kl && a.thr === b.thr && a.evaluations === b.evaluations
-  check('P1', 'control: Mentor on measures and reminds', healthy.evaluations === 1 && healthy.injected === 1, { kl: healthy.kl, injected: healthy.injected })
-  check('P1', 'Mentor switched OFF: identical KL/threshold/evaluations, no reminder', same(off, healthy) && off.injected === 0, { off: { kl: off.kl, thr: off.thr, injected: off.injected }, healthy: { kl: healthy.kl, thr: healthy.thr } })
+  check('P1', 'control: Mentor on measures and hands a reminder to the stand-in agent', healthy.evaluations === 1 && healthy.injected === 1, { kl: healthy.kl, injected: healthy.injected }, 'standin')
+  check('P1', 'Mentor switched OFF: identical KL/threshold/evaluations, no reminder', same(off, healthy) && off.injected === 0, { off: { kl: off.kl, thr: off.thr, injected: off.injected }, healthy: { kl: healthy.kl, thr: healthy.thr } }, 'standin')
   check('P1', 'Mentor delivery BROKEN (agent inbox throws): identical KL/threshold/evaluations, detector not in error', same(broken, healthy) && broken.state !== 'error', { broken: { kl: broken.kl, thr: broken.thr, state: broken.state, errors: broken.errors.map((e) => `${e.phase}:${e.message}`) }, healthy: { kl: healthy.kl } })
   check('A2', 'Mentor OFF: peer still receives the fact', off.facts.length === 1 && !!off.facts[0], { facts: off.facts })
   check('A2', 'Mentor OFF: status route still shows the measurement', off.evaluations === 1 && typeof off.kl === 'number', { evaluations: off.evaluations, lastResult: lastResult(off.s) })
@@ -352,7 +371,7 @@ async function s5() {
     check('P7', 'no exception escaped into the host process', uncaught.length === u0, { escaped: uncaught.slice(u0) })
     check('P7', 'both failing peers actually ran and failed (control)', t.thrown >= 1 && r.thrown >= 1, { thrower_calls: t.thrown, rejecter_calls: r.thrown })
     check('P7', 'SOUP still completed all 3 measurements; detector not flipped to error', s?.detector?.evaluations === 3 && s?.detector?.state !== 'error', { evaluations: s?.detector?.evaluations, state: s?.detector?.state })
-    check('P7', 'Mentor unaffected: two reminders and one escalation delivered', js(forms(f)) === js(['reminder', 'reminder', 'escalation']) && f.questions.length === 1, { forms: forms(f), questions: f.questions.length })
+    check('P7', 'Mentor unaffected: two reminders and one escalation handed to the stand-in agent', js(forms(f)) === js(['reminder', 'reminder', 'escalation']) && f.questions.length === 1, { forms: forms(f), questions: f.questions.length }, 'standin')
     check('P7', 'a healthy peer registered AFTER the failing ones still received every fact', Math.max(0, ...Object.values(ok.names)) === 3, { received_per_channel: ok.names, of: 3 })
     check('P7', 'a healthy intervention peer still received every intervention', okI.got.length === 3, { received: okI.got.length, of: 3 })
     check('P7', 'the failures are recorded and labelled "consumer"; none is labelled parse/worker/other', errs.length >= 1 && nonConsumer.length === 0, { errors: errs.map((e) => ({ phase: e.phase, message: e.message })) })
@@ -404,7 +423,7 @@ async function s7() {
     f2.sayAll(MARGINAL.slice(2))
     const c = await f2.until((x) => f2.evals(x) >= 1)
     check('A5', 'Mentor-only change: detector baseline/window unchanged by the save', a?.trajectory?.baselineSize === b?.trajectory?.baselineSize && a?.trajectory?.windowSize === b?.trajectory?.windowSize, { before: [a?.trajectory?.baselineSize, a?.trajectory?.windowSize], after: [b?.trajectory?.baselineSize, b?.trajectory?.windowSize] })
-    check('A5', 'Mentor-only change: detector still measures the kept window with the same threshold; Mentor now silent', lastResult(c)?.threshold === 0.2 && lastResult(c)?.driftDetected === true && f2.injected.length === 0, { lastResult: lastResult(c), injected: f2.injected.length, mentor_state: c?.mentor?.state })
+    check('A5', 'Mentor-only change: detector still measures the kept window with the same threshold; Mentor now silent', lastResult(c)?.threshold === 0.2 && lastResult(c)?.driftDetected === true && f2.injected.length === 0, { lastResult: lastResult(c), injected: f2.injected.length, mentor_state: c?.mentor?.state }, 'standin')
   } finally { await f2.dispose() }
   const f3 = await fixture()
   try {
@@ -417,8 +436,8 @@ async function s7() {
     await f3.window(OFF)                                        // strike 2 expected, not strike 1 again
     const c = (await f3.until((x) => x?.mentor?.driftCount >= 2, 4000)) ?? await f3.status()
     const attempts = f3.injected.map((m) => m?.source?.attempt)
-    check('A5', 'Detector-only OFF/ON: Mentor strikes not reset; the next drift is reminder attempt 2, not 1 again', js(attempts) === js([1, 2]), { reminder_attempts: attempts, detector_state_while_off: b?.detector?.state, status_mentor_driftCount_samples: [a?.mentor?.driftCount, b?.mentor?.driftCount, c?.mentor?.driftCount] })
-    note('A5', 'status.mentor.driftCount lagged the real strike count after a reminder in this run; the stand-in never sends agent/inbox/spliced delivery confirmations, so that lag may be a stand-in artifact (unverified). The strike check uses the delivered reminder attempt numbers instead.')
+    check('A5', 'Detector-only OFF/ON: Mentor strikes not reset; the next drift is reminder attempt 2, not 1 again', js(attempts) === js([1, 2]), { reminder_attempts: attempts, detector_state_while_off: b?.detector?.state, status_mentor_driftCount_samples: [a?.mentor?.driftCount, b?.mentor?.driftCount, c?.mentor?.driftCount] }, 'standin')
+    note('A5', 'status.mentor.driftCount lagged the real strike count after a reminder in this run; the stand-in never sends agent/inbox/spliced confirmations, so that lag may be a stand-in artifact (unverified). The strike check uses the reminder attempt numbers handed to the stand-in agent instead.')
   } finally { await f3.dispose() }
 }
 
@@ -466,7 +485,7 @@ async function s9() {
     f.live.set(f.agent.id, f.agent); f.ctx.emit('agent/created', { agent: f.agent })
     f.say(OFF[2])
     const after = await f.until((x) => f.evals(x) >= 1, 8000)
-    check('P3', 'once an agent resolves, new events are measured again', !!after, { evaluations: after ? f.evals(after) : f.evals(await f.status()) })
+    check('P3', 'once an agent resolves (stand-in registry updated and agent/created emitted by this script), new events are measured again', !!after, { evaluations: after ? f.evals(after) : f.evals(await f.status()) }, 'standin')
   } finally { await f.dispose() }
 }
 
@@ -516,7 +535,7 @@ async function s11() {
     precondition('P8', refFacts.length === 3 && refFacts.every((x) => x && x.drift === true), js(refFacts))
     check('P8', 'both failing peers actually ran and failed (control)', t.thrown >= 1 && r.thrown >= 1, { thrower_calls: t.thrown, rejecter_calls: r.thrown })
     check('P8', 'SOUP still counted all 3 evaluations and the detector did not flip to error', s?.detector?.evaluations === 3 && s?.detector?.state !== 'error', { evaluations: s?.detector?.evaluations, state: s?.detector?.state })
-    check('P8', 'Mentor still acted: two reminders and one escalation', js(forms(f)) === js(['reminder', 'reminder', 'escalation']) && f.questions.length === 1, { forms: forms(f), questions: f.questions.length })
+    check('P8', 'Mentor still acted: two reminders and one escalation handed to the stand-in agent', js(forms(f)) === js(['reminder', 'reminder', 'escalation']) && f.questions.length === 1, { forms: forms(f), questions: f.questions.length }, 'standin')
     check('P8', 'a healthy peer on the same channel still received every signal', ok.got.length === 3, { received: ok.got.length, of: 3 })
     check('P8', 'no exception escaped into the host process', uncaught.length === u0, { escaped: uncaught.slice(u0) })
     check('P8', 'failures are recorded with phase "consumer" only (not consumer:status:evaluation, parse or worker)', errs.length >= 1 && errs.every((e) => e.phase === 'consumer'), { errors: errs.map((e) => ({ phase: e.phase, consumer: e.consumer, message: e.message })) })
@@ -533,14 +552,14 @@ async function s12() {
     const first = f.injected[0]
     const text = first?.content?.map?.((b) => b?.text ?? '').join('\n') ?? ''
     precondition('M7', lastResult(s1)?.driftDetected === true, js(lastResult(s1)))
-    check('M7', 'the first drift queues exactly one reminder in the agent inbox', f.injected.length === 1 && first?.source?.form === 'reminder', { forms: forms(f) })
-    check('M7', 'the queued reminder has text', text.length > 0, { length: text.length })
+    check('M7', 'the first drift hands exactly one reminder to the stand-in agent', f.injected.length === 1 && first?.source?.form === 'reminder', { forms: forms(f) }, 'standin')
+    check('M7', 'the queued reminder has text', text.length > 0, { length: text.length }, 'standin')
     const rec = s1?.mentor?.reminders?.[0]
-    check('M7', 'status lists that reminder as pending, tied to the queued message', s1?.mentor?.reminders?.length === 1 && rec?.state === 'pending' && rec?.messageId === String(first?.id), { reminders: s1?.mentor?.reminders?.length, state: rec?.state, messageId_matches: rec?.messageId === String(first?.id) })
+    check('M7', 'status lists that reminder as pending, tied to the queued message', s1?.mentor?.reminders?.length === 1 && rec?.state === 'pending' && rec?.messageId === String(first?.id), { reminders: s1?.mentor?.reminders?.length, state: rec?.state, messageId_matches: rec?.messageId === String(first?.id) }, 'standin')
     const e = f.ev('agent/inbox/spliced', { inserted: [{ id: first?.id, source: first?.source }] })
     const s2 = await f.status()
     const done = s2?.mentor?.reminders?.[0]
-    check('M7', 'once the Harness confirms the inbox splice, the reminder is delivered and the outcome says so', done?.state === 'delivered' && done?.eventSeq === Number(e.seq) && /delivered/.test(s2?.mentor?.lastOutcome ?? ''), { state: done?.state, eventSeq: done?.eventSeq, expected_seq: Number(e.seq), lastOutcome: s2?.mentor?.lastOutcome })
+    check('M7', 'after the splice event THIS SCRIPT emits (not a real Harness confirmation), the plugin marks the reminder delivered and says so', done?.state === 'delivered' && done?.eventSeq === Number(e.seq) && /delivered/.test(s2?.mentor?.lastOutcome ?? ''), { state: done?.state, eventSeq: done?.eventSeq, expected_seq: Number(e.seq), lastOutcome: s2?.mentor?.lastOutcome }, 'standin')
   } finally { await f.dispose() }
 }
 
@@ -561,7 +580,16 @@ for (const id of Object.keys(R)) {
   let verdict, why = ''
   if (!o || (!o.forced && !o.checks.length)) { verdict = 'NOT-PROVEN'; why = 'no scenario produced a check for this requirement' }
   else if (o.forced) { verdict = o.forced.verdict; why = o.forced.why }
-  else { const failed = o.checks.filter((c) => !c.pass); verdict = failed.length ? 'FAIL' : 'PASS'; why = failed.length ? `${failed.length} of ${o.checks.length} checks failed: ${failed.map((c) => c.name).join(' | ')}` : `${o.checks.length} of ${o.checks.length} checks observed` }
+  else {
+    const failed = o.checks.filter((c) => !c.pass)
+    verdict = failed.length ? 'FAIL' : 'PASS'
+    why = failed.length ? `${failed.length} of ${o.checks.length} checks failed: ${failed.map((c) => c.name).join(' | ')}` : `${o.checks.length} of ${o.checks.length} checks observed`
+    // A PASS for a claim about real Harness behaviour needs the real boundary. Stand-in checks cannot supply it.
+    if (verdict === 'PASS' && REAL_BOUNDARY[id] && o.checks.some((c) => c.scope === 'standin')) {
+      verdict = 'NOT-PROVEN'
+      why = `plugin-side result: ${why} (${o.checks.filter((c) => c.scope === 'standin').length} of them observed only through stand-in services). NOT a pass: this requirement needs ${REAL_BOUNDARY[id]}, which this run did not exercise.`
+    }
+  }
   counts[verdict] += 1
   console.log('RESULT ' + js({ id, build: LABEL, version: pkg.version, statement, source, sourceKind, verdict, why, checks: o?.checks ?? [], notes: o?.notes ?? [] }))
 }

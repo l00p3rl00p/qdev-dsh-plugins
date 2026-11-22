@@ -11,9 +11,23 @@ statement, PASS / FAIL / NOT-PROVEN and the values actually observed. A NOT-PROV
 any pass count so the scorecard cannot read greener than reality.
 
 The scenarios run black-box through the public boundary (built package entry mounted by the real Cordis
-Loader, real soup_worker.py and soup_cli) inside the Harness container with docker exec only. The runner is
-mission-scenarios.mjs next to this file. The Studio kernel container has no docker, so there the notebook shows
-the LAST SAVED live results and says so; run it on the Mac (marimo MCP run_notebook) to refresh them.
+Loader, real soup_worker.py and soup_cli) inside a Harness container. The runner is mission-scenarios.mjs next to
+this file. A kernel without docker (for example a Studio container) shows the LAST SAVED results and says so; run
+the notebook where `docker` can reach the Harness container to refresh them.
+
+WHAT A PASS MEANS: the runner talks to the real plugin and worker but supplies in-memory stand-ins for the Harness
+services (agents, storage, web server, user questions). Each check is tagged [plugin] or [stand-in]. A requirement
+that is a claim about real Harness behaviour (M2, M7) is never PASS from stand-in checks: it shows NOT-PROVEN with the
+plugin-side result in its text. FAIL is always kept.
+
+REQUIRED CONFIGURATION to run live (no machine-specific defaults are built in):
+  SOUP_HARNESS_CONTAINER  name of a running Harness container with Node and the plugin dependencies
+  SOUP_PYTHON             path INSIDE that container of a Python with the official soup-cli
+  SOUP_BUILD_A            plugin directory of the older build to compare (no default; leave empty to skip Build A)
+Optional: SOUP_BUILD_B (default: the plugin this notebook sits in), SOUP_STAGE_DIR (directory INSIDE the container
+that receives the staged copies, emptied per build; default /tmp/soup-notebook-stage).
+Each build directory must contain installed node_modules and its built dist/. Copies are streamed in with `tar` through `docker exec -i`
+and every staged file is hash-checked inside the container before anything runs.
 
 TRUST NOTE: the official SOUP worker / soup_cli is a trusted given. This scorecard uses it but does not evaluate it:
 no row grades its KL values, false-alarm behaviour, tokenisation or agreement with another run.
@@ -27,10 +41,13 @@ app = marimo.App(width="full")
 
 @app.cell
 def _():
+    import hashlib
     import json
     import os
+    import shlex
     import shutil
     import subprocess
+    import tempfile
     import time
     from concurrent.futures import ThreadPoolExecutor
     from datetime import datetime
@@ -38,7 +55,80 @@ def _():
 
     import marimo as mo
 
-    return Path, ThreadPoolExecutor, datetime, json, mo, os, shutil, subprocess, time
+    return Path, ThreadPoolExecutor, datetime, hashlib, json, mo, os, shlex, shutil, subprocess, tempfile, time
+
+
+@app.cell
+def _(hashlib, os, shlex, shutil, subprocess):
+    # ONE staging contract between this notebook and the Harness container (no bind mount or shared directory is assumed):
+    #   1. build the copy to run in a temporary directory on THIS machine;
+    #   2. empty the destination directory inside the container, then stream the copy in as a tar archive through
+    #      `docker exec -i ... tar -x` (files end up owned by the container user, so the next run can empty them again);
+    #   3. read SHA-256 hashes of every staged file back from inside the container and require them to equal ours.
+    # Anything that fails (no docker, no container, destination not writable, hash mismatch) raises StagingError with
+    # what to fix. Files already present in the container are never reused: the destination is emptied first.
+    class StagingError(RuntimeError):
+        pass
+
+    def docker(*args, timeout=300):
+        exe = shutil.which("docker")
+        if exe is None:
+            raise StagingError("`docker` was not found on PATH: run this notebook where the docker CLI can reach the Harness container")
+        return subprocess.run([exe, *args], capture_output=True, text=True, timeout=timeout)
+
+    def docker_must(*args, what, timeout=300):
+        done = docker(*args, timeout=timeout)
+        if done.returncode != 0:
+            raise StagingError(f"{what} failed (exit {done.returncode}): {(done.stderr or done.stdout).strip()[:500]}")
+        return done
+
+    def local_manifest(root):
+        found = {}
+        for base, dirs, files in os.walk(root):
+            dirs[:] = [d for d in dirs if d not in ("node_modules", ".git")]
+            for name in files:
+                path = os.path.join(base, name)
+                if os.path.islink(path):
+                    continue
+                with open(path, "rb") as handle:
+                    found["./" + os.path.relpath(path, root)] = hashlib.sha256(handle.read()).hexdigest()
+        return found
+
+    def container_manifest(container, dest):
+        done = docker_must(
+            "exec", "-w", dest, container, "sh", "-c",
+            "find . \\( -name node_modules -o -name .git \\) -prune -o -type f -print0 | sort -z | xargs -0 -r sha256sum",
+            what="reading the staged files back from the container",
+        )
+        return {line[66:]: line[:64] for line in done.stdout.splitlines() if len(line) > 66}
+
+    def ship(local_dir, container, dest):
+        """Copy local_dir into dest inside the container and prove the container holds exactly these files."""
+        docker_must(
+            "exec", container, "sh", "-c", f"rm -rf {shlex.quote(dest)} && mkdir -p {shlex.quote(dest)}",
+            what=f"emptying {dest} in container {container!r} (is the container running, and is that directory writable by its user? set SOUP_STAGE_DIR)",
+        )
+        exe = shutil.which("docker")
+        pack = subprocess.Popen(["tar", "-C", local_dir, "-cf", "-", "."], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                env={**os.environ, "COPYFILE_DISABLE": "1"})  # COPYFILE_DISABLE: no macOS ._ metadata files
+        unpack = subprocess.run([exe, "exec", "-i", container, "tar", "-xf", "-", "-C", dest], stdin=pack.stdout,
+                                capture_output=True, timeout=900)
+        pack.stdout.close()
+        pack_err = pack.stderr.read().decode(errors="replace").strip()
+        if pack.wait() != 0 or unpack.returncode != 0:
+            raise StagingError(f"transferring the copy into {container}:{dest} failed: {pack_err or unpack.stderr.decode(errors='replace').strip()[:500]}")
+        mine, theirs = local_manifest(local_dir), container_manifest(container, dest)
+        missing = sorted(set(mine) - set(theirs))
+        extra = sorted(set(theirs) - set(mine))
+        different = sorted(k for k in mine.keys() & theirs.keys() if mine[k] != theirs[k])
+        if missing or extra or different:
+            raise StagingError(
+                f"staged files in {container}:{dest} do not match the files staged here: "
+                f"{len(missing)} missing {missing[:5]}, {len(extra)} unexpected {extra[:5]}, {len(different)} different {different[:5]}"
+            )
+        return {"files": len(mine), "from": local_dir, "to": f"{container}:{dest}", "hashes_equal": True}
+
+    return StagingError, docker, ship
 
 
 @app.cell
@@ -54,20 +144,23 @@ def _(Path, mo, os):
     build_a = mo.ui.text(value=os.environ.get("SOUP_BUILD_A", ""), label="Build A plugin directory (older build to compare, e.g. 0.6.3; set SOUP_BUILD_A or type a path)", full_width=True)
     build_b = mo.ui.text(value=os.environ.get("SOUP_BUILD_B", str(here.parent)), label="Build B plugin directory (0.9.0 / 0.10.0 line, may be in progress)", full_width=True)
     runner = mo.ui.text(value=str(here / "mission-scenarios.mjs"), label="Scenario runner (standalone Node script)", full_width=True)
-    container = mo.ui.text(value=os.environ.get("SOUP_HARNESS_CONTAINER", "quatrus-harness-deepseek-harness"), label="Harness container (docker exec only)", full_width=True)
-    py = mo.ui.text(value="/home/qdev/llm-runtime/tools/venvs/soup/bin/python", label="SOUP_PYTHON inside the container (official soup_cli)", full_width=True)
+    container = mo.ui.text(value=os.environ.get("SOUP_HARNESS_CONTAINER", ""), label="Harness container name (required to run live)", full_width=True)
+    py = mo.ui.text(value=os.environ.get("SOUP_PYTHON", ""), label="SOUP_PYTHON inside the container (official soup_cli; required to run live)", full_width=True)
+    stage_dir = mo.ui.text(value=os.environ.get("SOUP_STAGE_DIR", "/tmp/soup-notebook-stage"), label="Staging directory inside the container (emptied per build)", full_width=True)
     live_switch = mo.ui.switch(value=True, label="Run scenarios live now (needs docker on this kernel)")
     broken_switch = mo.ui.switch(value=True, label="Include broken-copy proof (scorecard must be able to FAIL)")
-    mo.vstack([build_a, build_b, runner, container, py, mo.hstack([live_switch, broken_switch], justify="start")])
-    return broken_switch, build_a, build_b, container, here, live_switch, py, runner
+    mo.vstack([build_a, build_b, runner, container, py, stage_dir, mo.hstack([live_switch, broken_switch], justify="start")])
+    return broken_switch, build_a, build_b, container, here, live_switch, py, runner, stage_dir
 
 
 @app.cell
 def _(container, live_switch, shutil, subprocess):
-    # Can THIS kernel reach docker? (The Studio container cannot; the Mac-side marimo MCP can.)
+    # Can THIS kernel reach docker? (A kernel inside a container usually cannot; one with the docker CLI and socket can.)
     docker_ok = False
     docker_why = "docker CLI not found on this kernel"
-    if shutil.which("docker"):
+    if shutil.which("docker") and not container.value.strip():
+        docker_why = "no Harness container named: set SOUP_HARNESS_CONTAINER"
+    elif shutil.which("docker"):
         _p = subprocess.run(["docker", "exec", container.value, "true"], capture_output=True, text=True, timeout=30)
         docker_ok = _p.returncode == 0
         docker_why = "docker exec works" if docker_ok else f"docker exec failed: {_p.stderr.strip()[:200]}"
@@ -76,10 +169,15 @@ def _(container, live_switch, shutil, subprocess):
 
 
 @app.cell
-def _(Path, ThreadPoolExecutor, broken_switch, build_a, build_b, container, go_live, json, py, runner, shutil, subprocess, time):
-    # Stage copies under /tmp (the host /tmp is mounted at /home/qdev/github in the container), then run the runner.
-    STAGE_ROOT = Path("/tmp/soupscore-nb")
-    CONT_ROOT = "/home/qdev/github/soupscore-nb"
+def _(Path, StagingError, ThreadPoolExecutor, broken_switch, build_a, build_b, container, go_live, json, mo, py, runner, shutil, ship, stage_dir, subprocess, tempfile, time):
+    # Build each copy in a temporary directory here, stream it in with tar through docker exec (ship() hash-checks it inside the container),
+    # then run the runner from that verified directory. See the staging contract in the helper cell.
+    mo.stop(
+        bool(go_live and not py.value.strip()),
+        mo.callout(mo.md("**Not run.** Set `SOUP_PYTHON` (a Python with the official soup-cli, as a path inside the Harness container) and re-run."), kind="warn"),
+    )
+    STAGE_ROOT = Path(tempfile.mkdtemp(prefix="soupscore-nb-"))
+    CONT_ROOT = stage_dir.value.rstrip("/") + "/soupscore"
 
     def stage(src, name, patch=None):
         dst = STAGE_ROOT / name
@@ -96,7 +194,7 @@ def _(Path, ThreadPoolExecutor, broken_switch, build_a, build_b, container, go_l
         return applied
 
     def run_stage(name, label, only=""):
-        cmd = ["docker", "exec", "-w", f"{CONT_ROOT}/{name}", "-e", f"SOUP_PYTHON={py.value}", container.value,
+        cmd = [shutil.which("docker") or "docker", "exec", "-w", f"{CONT_ROOT}/{name}", "-e", f"SOUP_PYTHON={py.value}", container.value,
                "node", "mission-scenarios.mjs", "--label", label] + (["--only", only] if only else [])
         t0 = time.time()
         p = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
@@ -144,23 +242,33 @@ def _(Path, ThreadPoolExecutor, broken_switch, build_a, build_b, container, go_l
     break_results = {}
     brk_applied = {}
     if go_live:
+        def _ship(name):
+            # Stage verified or the run is reported as crashed below; stale or partial files are never executed.
+            return ship(str(STAGE_ROOT / name), container.value, f"{CONT_ROOT}/{name}")
+
         def _a():
             stage(build_a.value, "buildA")
+            _ship("buildA")
             return run_stage("buildA", "A")
 
         def _b():
             stage(build_b.value, "buildB")
+            _ship("buildB")
             return run_stage("buildB", "B")
 
-        jobs = {"A": _a, "B": _b}
+        # Build A is an explicit input with no default: without it only Build B runs.
+        jobs = {"B": _b} if not build_a.value.strip() else {"A": _a, "B": _b}
         if broken_switch.value:
             for _k, _v in BREAKS.items():
+                if not build_a.value.strip() and _k not in PREFIX:
+                    continue  # these copies are made from Build A, which was not given
                 def _mk(_kk=_k, _vv=_v):
                     if _kk in PREFIX:
                         _ap = stage_prefix(build_b.value, "broken-" + _kk, PREFIX[_kk])
                     else:
                         _ap = stage(build_a.value, "broken-" + _kk, _vv["patch"])
                     brk_applied[_kk] = _ap
+                    _ship("broken-" + _kk)
                     return run_stage("broken-" + _kk, "A-broken:" + _kk, _vv["only"])
 
                 jobs["broken:" + _k] = _mk
@@ -174,6 +282,7 @@ def _(Path, ThreadPoolExecutor, broken_switch, build_a, build_b, container, go_l
                         _out = {"label": _name, "rows": {}, "summary": None, "seconds": 0, "exit": -1, "stderr": f"runner crashed: {_e}"}
                     (break_results if _name.startswith("broken:") else results)[_name.replace("broken:", "")] = _out
         _collect()
+        shutil.rmtree(STAGE_ROOT, ignore_errors=True)  # the local staging copies only; the container copies stay for inspection
         saved = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "results": results, "broken": break_results, "break_defs": {_n: {"what": _d["what"], "base": _d.get("base", "A"), "applied": brk_applied.get(_n)} for _n, _d in BREAKS.items()}, "python": py.value}
         (Path(__file__).with_name("soup_mission_scorecard_results.json")).write_text(json.dumps(saved, indent=1))
         provenance = f"LIVE run at {saved['ts']}"
@@ -231,6 +340,7 @@ def _(mo, provenance, results):
         return _c
 
     standing = [
+        "M2 and M7 are claims about a real agent inbox, question dialog and chat. They are checked here only through stand-in services (and a splice event this script emits itself), so they are NOT-PROVEN even when every plugin-side check passes; the plugin-side result is in the row text.",
         "Real DeepSeek Harness loading the build: NOT done. Only the Cordis Loader plus stand-in agents/storage/web/questions services.",
         "Browser rendering of the SOUP panel/tab, and a human reading the status there: NOT done.",
         "Grader claim ids: none exist; nothing here carries one.",
@@ -291,7 +401,7 @@ def _(ORDER, json, mo, results):
                     continue
                 _lines = [f"**{_r['verdict']}**: {_r['why']}", ""]
                 for _c in _r["checks"]:
-                    _lines.append(f"- {'PASS' if _c['pass'] else 'FAIL'}: {_c['name']}  \n  observed: `{json.dumps(_c['observed'])[:700]}`")
+                    _lines.append(f"- {'PASS' if _c['pass'] else 'FAIL'} [{'stand-in' if _c.get('scope') == 'standin' else 'plugin'}]: {_c['name']}  \n  observed: `{json.dumps(_c['observed'])[:700]}`")
                 for _n in _r["notes"]:
                     _lines.append(f"- note: {_n}")
                 _items[f"{_i}  {_r['verdict']}  {_r['statement'][:80]}"] = mo.md("\n".join(_lines))
@@ -335,7 +445,7 @@ def _(docker_ok, docker_why, mo, shutil):
     mo.md(f"""
     ## How this ran
     - docker reachable from this kernel: **{docker_ok}** ({docker_why}); `docker` on PATH: {bool(shutil.which('docker'))}
-    - Execution: staging copies under `/tmp/soupscore-nb`, then `docker exec -w <stage> -e SOUP_PYTHON=... <harness> node mission-scenarios.mjs`. No start/stop/restart; the live container, its profile and config are not modified.
+    - Execution: copies built in a temporary directory here, streamed with `tar` through `docker exec -i` into the staging directory inside the container, every staged file hash-checked there, then `docker exec -w <stage> -e SOUP_PYTHON=... <harness> node mission-scenarios.mjs`. No start/stop/restart; the live container, its profile and config are not modified.
     - Stand-ins (external DSH services only): `agents` (list/get), `storageDomain` (in memory), `webServer` (route table), `userQuestions` (manual promise). Everything else is real: Cordis Loader, built `dist/index.js`, dsh-session events, `soup_worker.py`, `soup_cli`.
     - Peers are written inside the scenarios and use only `ctx.on`.
     """)
