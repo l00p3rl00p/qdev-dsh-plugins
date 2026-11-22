@@ -84,17 +84,18 @@ async function fixture(t, config = {}, saved = {}) {
   assert.equal(entry.fiber.state, ACTIVE)
   assert.ok(routes.has(STATUS_PATH), 'built Host did not mount')
   const fiber = entry.fiber
-  const refs = { ...fiber.config }
+  // Cordis 4.1 (DSH 0.2.2) moved the object the plugin receives to fiber.effectiveConfig; 4.0.5 has only fiber.config.
+  const refs = { ...(fiber.effectiveConfig ?? fiber.config) }
   const volatileEvents = []
   const rootEvents = []
   ctx.on('loader/volatile-update', (paths) => rootEvents.push(paths))
   fiber.ctx.on('loader/volatile-update', (paths) => {
     volatileEvents.push({ paths, values: Object.fromEntries(
-      Object.entries(fiber.config).map(([key, value]) => [key, value?.get ? value.get() : value]),
+      Object.entries(fiber.effectiveConfig ?? fiber.config).map(([key, value]) => [key, value?.get ? value.get() : value]),
     ) })
   })
   const hooks = () => Object.fromEntries(['agent/created', 'agent/disposed', 'session/event']
-    .map((name) => [name, (ctx.events._hooks[name] ?? []).filter((hook) => hook.ctx.fiber === fiber).length]))
+    .map((name) => [name, (ctx.events._hooks[name] ?? []).filter((hook) => hook.ctx === fiber.ctx).length]))
   const initialHooks = hooks()
   assert.deepEqual(initialHooks, { 'agent/created': 1, 'agent/disposed': 1, 'session/event': 1 })
 
@@ -126,7 +127,7 @@ async function fixture(t, config = {}, saved = {}) {
     assert.equal(entry.fiber, fiber, 'volatile save replaced the native fiber')
     assert.equal(fiber.state, ACTIVE)
     for (const [key, ref] of Object.entries(refs)) {
-      assert.equal(fiber.config[key], ref, `configuration reference replaced: ${key}`)
+      assert.equal((fiber.effectiveConfig ?? fiber.config)[key], ref, `configuration reference replaced: ${key}`)
     }
     assert.equal((await status()).lifecycle.startedAt, startedAt, 'Host remounted inside the same fiber')
     // Mentor state, session settings, Live & Mentor history, Gentle Mentor context (Feature 4) and the escalation-bypass register (spec B4).
@@ -328,7 +329,7 @@ test('all five sensitivity positions reach the real SOUP worker and fixture sett
   for (const [preset, threshold] of thresholds.entries()) {
     await f.update({ preset })
     const s = await f.evaluate()
-    assert.equal(f.fiber.config.preset.get(), preset)
+    assert.equal((f.fiber.effectiveConfig ?? f.fiber.config).preset.get(), preset)
     assert.equal(s.configuration.preset, preset)
     assert.equal(s.configuration.threshold, threshold)
     assert.equal(s.detector.lastResult.threshold, threshold, `preset ${preset} did not reach Python`)
@@ -486,7 +487,7 @@ test('invalid native volatile candidates retain prior effective references and r
     await f.update(candidate)
     assert.deepEqual((await f.status()).configuration, before.configuration, `invalid candidate became effective: ${JSON.stringify(candidate)}`)
     assert.equal(f.volatileEvents.length, commits, 'invalid candidate dispatched a runtime update')
-    for (const [key, value] of Object.entries(good)) assert.equal(f.fiber.config[key].get(), value)
+    for (const [key, value] of Object.entries(good)) assert.equal((f.fiber.effectiveConfig ?? f.fiber.config)[key].get(), value)
     await f.update(good)
   }
   const s = await f.evaluate()
