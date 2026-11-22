@@ -13,6 +13,8 @@ import s from '@deepseek-ai/schemastery'
 import { createPluginRuntime, PRESETS } from '../runtime.mjs'
 // @ts-expect-error JavaScript settings module has no declaration file.
 import { createSessionSettings } from '../session-settings.mjs'
+// @ts-expect-error JavaScript session registry has no declaration file.
+import { createSessionRegistry } from '../session-registry.mjs'
 import { PACKAGE_NAME } from './constants.js'
 import { openTables } from './storage.js'
 import { createLive } from './live.js'
@@ -79,8 +81,16 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
   const agents = new Map<string, Agent>()
   const seenSessions = new Set<string>()
   const pendingMessages = new Map<string, DeliveryRecord>()
-  const runtimes = new Map<string, ReturnType<typeof createPluginRuntime>>()
-  const runningDetectors = new Set<string>()
+  // Same Map/Set instances the registry owns (session -> runtime, running detectors).
+  const registry = createSessionRegistry({
+    resolveAgent: (id: string) => agents.get(id) ?? ctx.agents.get(id as Session['id']),
+    attachAgent: (agent: Agent) => attachAgent(agent),
+    replay: (agent: Agent, beforeSeq?: number) => replayAgent(agent, beforeSeq),
+    report: (error: unknown, details: { phase?: string; sessionId?: string }) => board.recordError(error, details),
+  })
+  // P3: events that could not reach a runtime are counted (status.detector.droppedEvents) and diagnosed once.
+  const runtimes: Map<string, ReturnType<typeof createPluginRuntime>> = registry.runtimes
+  const runningDetectors: Set<string> = registry.running
   const interventions = new Map<string, Intervention>()
   let applySessionSettings: (id: string) => void = () => {}
 
@@ -99,7 +109,7 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
   const { status, abortIntervention, refreshOperationalState, updateMentorStatus, mentorSnapshots } = board
   const live = createLive({ initialLive, liveTable, recordError: board.recordError })
   const { sessionLive, ensureSessionLive, persistLive, observeTool, observeDecision } = live
-  const sessionLiveView = createLiveView({ resolved, agents, live, initialLive, initialMentorState, runtimes, mentorSnapshots, interventions, mentorContexts, registerTable, effectiveSettings })
+  const sessionLiveView = createLiveView({ resolved, agents, live, initialLive, initialMentorState, runtimes, mentorSnapshots, interventions, mentorContexts, registerTable, effectiveSettings, droppedFor: registry.droppedFor })
   const getRuntime = createRuntimeFactory({ ctx, resolved, agents, runtimes, pendingMessages, interventions, runningDetectors, effectiveSettings, initialMentorState, mentorContexts, registerTable, live, board, noteMissing })
 
   const replayAgent = (agent: Agent, beforeSeq?: number): void => {
@@ -121,16 +131,6 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
     // A retained/pre-existing agent is replayed lazily when its next session event arrives.
     if (runtimes.has(id)) applySessionSettings(id)
   }
-  const activateSession = (id: string, event: SessionEvent): ReturnType<typeof createPluginRuntime> | undefined => {
-    const existing = runtimes.get(id)
-    if (existing) return existing
-    const agent = agents.get(id) ?? ctx.agents.get(id as Session['id'])
-    if (!agent) return undefined
-    attachAgent(agent)
-    replayAgent(agent, Number(event.seq))
-    return runtimes.get(id)
-  }
-
   applySessionSettings = (id: string): void => {
     const next = effectiveSettings(id)
     const agent = agents.get(id)
@@ -139,14 +139,20 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
     // or chat edits may update its configuration, but only reattachment can enable
     // and replay it, which prevents a closed chat from missing history on resume.
     const operational = agent ? next : { ...next, enabled: false }
-    const reset = existing ? existing.configure(operational) : Boolean(agent && next.enabled)
+    // Decision C: with a live agent, a baseline growth refills its new slots from the earliest session
+    // history (the material the old replace-the-detector path seeded), not from the next events.
+    const history = agent ? { history: () => agent.session.snapshotEvents() } : {}
+    const reset = existing ? existing.configure(operational, history) : Boolean(agent && next.enabled)
+    // P5: a threshold/window change keeps the collected windows (reset=false) but cancels and re-queues any
+    // in-flight measurement; decision B: re-enabling can START the kept window synchronously (configure above),
+    // so the running flag is cleared only when nothing is evaluating.
+    const evaluating = Boolean(existing?.isEvaluating(id))
+    if (!evaluating) runningDetectors.delete(id)
     if (reset) {
-      runningDetectors.delete(id)
       const live = sessionLive.get(id)
       if (live) {
-        live.baselineSize = 0
-        live.windowSize = 0
-        live.pending = false
+        // The detector keeps its windows across a suspend/resume; observation callbacks restore the counts.
+        if (!evaluating) live.pending = false
         delete live.lastError
       }
       if (status.trajectory.lastSessionId === id) {
@@ -226,8 +232,10 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
     if (event.type === 'tool/call' || event.type === 'tool/result') observeTool(sessionId, event)
     const type: string = event.type
     if (type === 'plan/mode' || type === 'hook/result') observeDecision(sessionId, event)
-    const runtime = runtimes.get(sessionId) ?? activateSession(sessionId, event)
-    runtime?.observe(sessionId, event)
+    // The registry resolves/activates the runtime, replays history when an agent first resolves, and counts +
+    // diagnoses (never silently skips) an event it cannot deliver.
+    registry.observe(sessionId, event)
+    status.detector.droppedEvents = registry.droppedEvents
   })
 
   registerRoutes({ ctx, status, resolved, agents, runtimes, interventions, sessionSettings, sessionLiveView, mentorContexts, contextTable, noteMissing })

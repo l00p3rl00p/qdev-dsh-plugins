@@ -679,3 +679,63 @@ test('Focus rule is selectable in Convergence: default keeps the coherence cut; 
     assert.match(h.text(), /Coherent and at or above the boundary/)
   } finally { h.dispose() }
 })
+
+// Per-chat Live card (0.10.0): everything the live view carries that a user would want to see is RENDERED.
+// P4 recent vs cumulative, P3 dropped events, last drift, M2 'Mentor actions' (decisions, not delivery), L3 the
+// chat's own active threshold (a chat override of the sensitivity, not the global one).
+function liveHarness(patch) {
+  const server = backend()
+  const fetch = (url, options = {}) => {
+    if (new URL(url, 'http://fixture').pathname !== '/api/qdev-soup/session-status') return server.fetch(url, options)
+    const live = liveSnapshot('chat-A')
+    return Promise.resolve(response({ ok: true, live: {
+      ...live,
+      effective: { ...live.effective, ...(patch.effective ?? {}) },
+      detector: { ...live.detector, ...(patch.detector ?? {}) },
+      mentor: { ...live.mentor, ...(patch.mentor ?? {}) },
+    } }))
+  }
+  return harness(fetch)
+}
+
+test('live card renders recent vs cumulative ratio, trend, last drift, dropped events and Mentor actions', async () => {
+  const h = liveHarness({
+    detector: { averageKlDivergence: 0.1, averageThresholdRatio: 0.5, recentThresholdRatio: 2.25, humanSummary: 'Drifting', lastDriftAt: 1700000200000, droppedEvents: 3 },
+    mentor: { actions: { total: 5, reminders: 3, escalations: 1, resets: 1, carries: 0 } },
+  })
+  try {
+    await h.settle(); await h.click(h.button('Live')); await h.settle()
+    const text = h.text()
+    assert.match(text, /Recent drift ratio2\.25×/, 'recentThresholdRatio is not shown')
+    assert.match(text, /TrendDrifting/, 'the recent-window trend is not shown')
+    assert.match(text, /\(all calculations\)/, 'the cumulative average is not labelled as cumulative')
+    assert.ok(text.includes(new Date(1700000200000).toLocaleString()), 'lastDriftAt is not shown')
+    assert.match(text, /Dropped events3/)
+    assert.match(text, /3 session events of this chat could not be delivered/, 'dropped events are not explained')
+    assert.match(text, /Mentor actions5/)
+    assert.match(text, /3 reminders, 1 escalation, 1 reset, 0 carried/)
+    assert.doesNotMatch(text, /Mentor interventions/, 'M2: the label must not claim delivery')
+  } finally { h.dispose() }
+})
+
+test('live card states plainly when nothing is dropped and no drift has happened yet', async () => {
+  const h = liveHarness({ detector: { droppedEvents: 0 }, mentor: { actions: { total: 0, reminders: 0, escalations: 0, resets: 0, carries: 0 } } })
+  try {
+    await h.settle(); await h.click(h.button('Live')); await h.settle()
+    const text = h.text()
+    assert.match(text, /Dropped events0/)
+    assert.doesNotMatch(text, /could not be delivered to a monitor/)
+    assert.match(text, /Last driftNone yet/)
+    assert.match(text, /Recent drift ratio—/)
+    assert.match(text, /Mentor actions0/)
+  } finally { h.dispose() }
+})
+
+test('L3: the live card Active threshold follows the chat effective threshold, not the global one', async () => {
+  const h = liveHarness({ effective: { threshold: 0.05 } })
+  try {
+    await h.settle(); await h.click(h.button('Live')); await h.settle()
+    assert.match(h.text(), /Active threshold0\.05/)
+    assert.doesNotMatch(h.text(), /Active threshold0\.20/)
+  } finally { h.dispose() }
+})

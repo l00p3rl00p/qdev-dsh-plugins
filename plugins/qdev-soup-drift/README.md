@@ -19,6 +19,7 @@ The package identity is `qdev-trajectory-drift-soup`. The source directory remai
 The global master controls observation and interventions. The existing reminder, third-strike clarification, and qualified telemetry behavior remain unchanged. Historical build narratives and acceptance evidence live in the linked verification records, not in the install procedure.
 
 - **0.9.0 — SOUP separated from the plugin:** the drift measurement is `soup_worker.py` alone; everything else is a consumer. See "SOUP and the plugin are separate (0.9.0)" at the end. Built on 0.8.0; nothing from 0.7 or 0.8 was removed.
+- **0.10.0 — 0.9.0's open problems closed:** consumer isolation (sync and async), a `subscribe` seam on the detector, a DSH-free adapter, in-place settings changes that keep windows, recent-window drift summary, drop accounting, evidence contracts and native Cordis publication. See [ARCHITECTURE.md](ARCHITECTURE.md). Built on 0.9.0; nothing from it was removed.
 
 ## Package contents
 
@@ -28,6 +29,7 @@ The global master controls observation and interventions. The existing reminder,
 - `drift.mjs`, `runtime.mjs`, and `reanchor.mjs`: detector and intervention policy.
 - `soup_worker.py`: bridge to official `soup_cli.utils.drift_alarm` functions.
 - `cordis.patch.yml`: default Loader registration.
+- **0.10.0 additions:** `adapter` and the evidence contracts inside `soup-core.mjs`, `status.mjs`, `session-registry.mjs`, `detector-settings.mjs`, `mentor-settings.mjs`, `mentor-actions.mjs` (how Gentle Mentor carries out a decision; today only "inject the reminder"), and `ARCHITECTURE.md`.
 - **0.9.0 additions:** `soup-core.mjs` (calls the worker), `monitor.mjs` and `monitor-cli.mjs` (the standalone drift monitor), and the Host split into `src/constants.ts`, `types.ts`, `storage.ts`, `live.ts`, `status-board.ts`, `live-view.ts`, `mentor-host.ts` and `routes.ts`, with `src/index.ts` as the thin wiring. All compile to `dist/`.
 
 ## Emergency escape — recover DSH without the browser
