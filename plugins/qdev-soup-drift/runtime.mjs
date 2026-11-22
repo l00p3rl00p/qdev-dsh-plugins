@@ -29,6 +29,9 @@ export function createPluginRuntime({
   contextFor = () => ({}),
   bypassFor = () => false,
   onRegister = () => {},
+  // Mentor's action list (mentor-actions.mjs) and the host's hook for each action's result. Empty = the callbacks above.
+  actions = [],
+  onActionResult = () => {},
   spawnProcess,
 } = {}) {
   // Intervention evidence seam (same thin, in-process shape as the detector's subscribe): Mentor publishes, any
@@ -57,6 +60,10 @@ export function createPluginRuntime({
     contextFor,
     bypassFor,
     onRegister,
+    actions,
+    // An action failure is a consumer failure (phase 'consumer', consumer 'action:<name>'), never a measurement failure.
+    reportActionError: (error, details) => reportConsumerError(error, details),
+    onActionResult,
   })
   // Status callbacks and Mentor's own observation must never be able to stop the SOUP core: a throwing
   // one is reported through onError (phase consumer:<name>:<topic>) and the core carries on.

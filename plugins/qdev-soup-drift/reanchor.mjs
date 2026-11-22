@@ -1,4 +1,5 @@
 import { createInterventionEvidence } from './soup-core.mjs'
+import { runActions, validateActions } from './mentor-actions.mjs'
 
 // Feature 5: the first qualifying drift injects exactly this sentence and nothing else.
 export const FIRST_DRIFT_MESSAGE = 'I think what you are doing is interesting; however, I would like to return focus to the current plan.'
@@ -40,12 +41,27 @@ export function createReanchor({
   // producer of intervention evidence; who listens is not its business.
   publish = () => {},
   reportEvidenceError = () => {},
+  // HOW a decision is carried out (mentor-actions.mjs). An ordered list of { name, run(request) }; each is isolated.
+  // When the list is non-empty it REPLACES the inject/escalate callbacks above (they are not called), so a decision is
+  // never carried out twice. With no actions the callbacks behave exactly as before (existing tests pin that).
+  actions = [],
+  reportActionError = () => {},
+  onActionResult = () => {},
 }) {
   const secondDriftFields = (id, original) => {
     const override = contextFor(id) ?? {}
     return { message: override.message ?? GENTLE_MENTOR_MESSAGE, plan: override.plan ?? original, amendments: override.amendments ?? [] }
   }
-  if (typeof inject !== 'function' || typeof escalate !== 'function') throw new TypeError('Callbacks required')
+  const actionList = validateActions(actions)
+  if (!actionList.length && (typeof inject !== 'function' || typeof escalate !== 'function')) throw new TypeError('Callbacks required')
+  // WHY here and not in the policy below: the strikes/reminder/ask-the-human DECISION is unchanged; only the hand-off of
+  // a made decision goes through this one place. Actions run after the old-style callback slot and BEFORE `announce`.
+  const carryOut = (kind, current, respondsTo, text, legacy) => {
+    if (!actionList.length) return legacy()
+    runActions(actionList, Object.freeze({
+      kind, attempt: kind === 'reminder' ? current.detections : null, strikes: current.detections, respondsTo: Object.freeze({ ...respondsTo }), text,
+    }), { reportError: reportActionError, onResult: onActionResult })
+  }
   const state = new Map()
 
   function get(id) {
@@ -125,7 +141,7 @@ export function createReanchor({
         const full = current.detections % 10 === 0
         const reminder = full ? secondDriftReminder(secondDriftFields(id, original)) : FIRST_DRIFT_MESSAGE
         onRegister({ id, turn: current.turn, drift: current.detections, sent: full ? 'full' : 'first', at: Date.now() })
-        inject({ id, turn: current.turn, attempt: current.detections, original: current.intent, reminder, report })
+        carryOut('reminder', current, respondsTo, reminder, () => inject({ id, turn: current.turn, attempt: current.detections, original: current.intent, reminder, report }))
         announce(id, current, 'reminder', { attempt: current.detections, respondsTo })
         return 'injected'
       }
@@ -138,13 +154,13 @@ export function createReanchor({
         changed(id, current)
         // Remembered so a later reset/carry decision can reference the drift that caused the escalation.
         current.escalatedOn = respondsTo
-        escalate({ id, turn: current.turn, detections: current.detections, original: current.intent, question: HUMAN_QUESTION, report })
+        carryOut('escalation', current, respondsTo, HUMAN_QUESTION, () => escalate({ id, turn: current.turn, detections: current.detections, original: current.intent, question: HUMAN_QUESTION, report }))
         announce(id, current, 'escalation', { respondsTo })
         return 'human'
       }
       const normalReminder = current.detections === 1 ? FIRST_DRIFT_MESSAGE : secondDriftReminder(secondDriftFields(id, original))
       onRegister({ id, turn: current.turn, drift: current.detections, sent: current.detections === 1 ? 'first' : 'full', at: Date.now() })
-      inject({ id, turn: current.turn, attempt: current.detections, original: current.intent, reminder: normalReminder, report })
+      carryOut('reminder', current, respondsTo, normalReminder, () => inject({ id, turn: current.turn, attempt: current.detections, original: current.intent, reminder: normalReminder, report }))
       announce(id, current, 'reminder', { attempt: current.detections, respondsTo })
       return 'injected'
     },
