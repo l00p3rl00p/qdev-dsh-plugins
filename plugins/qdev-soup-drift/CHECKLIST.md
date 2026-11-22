@@ -71,7 +71,7 @@ Mark key: [x] done and in the repo · [~] built, not verified live · [ ] not bu
 - [ ] Outlier points marked on the four-quadrant chart: not built.
 - [ ] Layout restraint on Settings, Live, Mentor, Details: not done.
 - [ ] Domain-meaning text (11.5): blocked on source text.
-- [x] "Detector error" on Live and Details. Cause confirmed: the worker runs under the `python` setting (default `python3`), which lacks `soup_cli`, so `ModuleNotFoundError` on every evaluation (README line 143). Fix is a setting: set `python` to `/home/qdev/llm-runtime/tools/venvs/soup/bin/python`, which imports `soup_cli` (verified). Owner to set it in the Harness config.
+- [x] "Detector error" on Live and Details. Cause confirmed: the worker runs under the `python` setting (default `python3`), which lacks `soup_cli`, so `ModuleNotFoundError` on every evaluation (README line 143). Fix is a setting: set `python` to `<path-to-python>` (an interpreter that has `soup_cli`), which imports `soup_cli` (verified). Owner to set it in the Harness config.
 
 ## Dropped by owner decision (2026-11-13)
 

@@ -59,6 +59,25 @@ function sessionKey(id) {
 const tableQueues = new WeakMap()
 
 /**
+ * Per-key promise queue: run(key, task) starts task only after every earlier task for the same key has settled.
+ * A rejected task never blocks the next one; different keys never wait on each other. Used by session
+ * settings and by the Mentor field saves so one chat's read-modify-write is never interleaved.
+ */
+export function createKeyedQueue() {
+  const tails = new Map()
+  return async function run(key, task) {
+    const previous = tails.get(key) ?? Promise.resolve()
+    const pending = previous.catch(() => {}).then(task)
+    tails.set(key, pending)
+    try {
+      return await pending
+    } finally {
+      if (tails.get(key) === pending) tails.delete(key)
+    }
+  }
+}
+
+/**
  * Sparse per-chat settings over a Host-owned native KvTable. This module does not
  * own the domain lifecycle, create a backend, or change global configuration.
  * read is synchronous; mutate resolves after durability and synchronous onCommitted.
@@ -68,8 +87,8 @@ export function createSessionSettings({ table, getGlobal, onCommitted = () => {}
       typeof getGlobal !== 'function' || typeof onCommitted !== 'function') {
     throw new TypeError('A native table, global settings reader and optional commit callback are required')
   }
-  let queues = tableQueues.get(table)
-  if (!queues) tableQueues.set(table, queues = new Map())
+  let enqueue = tableQueues.get(table)
+  if (!enqueue) tableQueues.set(table, enqueue = createKeyedQueue())
 
   function recordOf(id) {
     const stored = table.get(id)
@@ -114,8 +133,7 @@ export function createSessionSettings({ table, getGlobal, onCommitted = () => {}
       if (!Object.hasOwn(input, 'value') || !value.success) throw invalid('Invalid setting value')
       command.value = value.data
     }
-    const previous = queues.get(id) ?? Promise.resolve()
-    const pending = previous.catch(() => {}).then(async () => {
+    return enqueue(id, async () => {
       const current = recordOf(id)
       if (command.expectedRevision !== current.revision) {
         throw new SessionSettingsError('revision-conflict', 'Chat settings changed; refresh before saving', { settings: snapshot(id, current) })
@@ -141,12 +159,6 @@ export function createSessionSettings({ table, getGlobal, onCommitted = () => {}
       onCommitted(id, structuredClone(committed))
       return committed
     })
-    queues.set(id, pending)
-    try {
-      return await pending
-    } finally {
-      if (queues.get(id) === pending) queues.delete(id)
-    }
   }
 
   return { read, mutate }

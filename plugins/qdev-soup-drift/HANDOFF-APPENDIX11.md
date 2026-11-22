@@ -88,10 +88,10 @@ Then open the Convergence tab and check: a point title with distance and persist
 
 ## How to test and install
 
-- Tests need a Python with `soup_cli`. On this Mac: `PYTHONPATH=/Users/almowplay/qvolume/llm-runtime/tools/venvs/soup/lib/python3.11/site-packages SOUP_PYTHON=/Users/almowplay/.pyenv/versions/3.13.13-ssl/bin/python3 node --test test/*.test.mjs`
-- `pnpm` is not on the Mac PATH. Use `./node_modules/.bin/tsc -p tsconfig.json` to build (this writes `dist/`, which is committed and required for install).
+- Tests need a Python with `soup_cli`. Set `SOUP_PYTHON` to that interpreter: `SOUP_PYTHON=<path-to-python> node --test test/*.test.mjs` (add `PYTHONPATH=<path-to-soup_cli-site-packages>` if `soup_cli` is installed outside that interpreter's own site-packages).
+- If `pnpm` is not on your PATH, use `./node_modules/.bin/tsc -p tsconfig.json` to build (this writes `dist/`, which is committed and required for install).
 - Install by full SHA: `dsh plugin --profile web remove qdev-trajectory-drift-soup`, then `add 'github:l00p3rl00p/qdev-dsh-plugins#<SHA>&path:/plugins/qdev-soup-drift'`, then restart the container. The remove-then-add gap is real; the boot log is the check.
-- `scratchpad/reinstall.sh` does this for the Harness container `quatrus-harness-deepseek-harness`.
+- Run these inside your own Harness container, `<harness-container>` (for example `docker exec <harness-container> dsh plugin ...`).
 
 ## Do not touch without asking
 

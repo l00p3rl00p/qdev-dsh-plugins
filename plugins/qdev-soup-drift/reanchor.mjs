@@ -52,6 +52,10 @@ export function createReanchor({
         turn: null,
         detections: carry,
         carry,
+        // Bypass cadence: drifts counted for this chat across turns. Not reset at turn/start and not persisted
+        // (it lives and dies with the chat's in-memory state), and never mixed into carry, so turning bypass off
+        // cannot trigger an immediate escalation.
+        bypassDrifts: 0,
         escalated: false,
         decisionPending: saved.decisionPending === true,
       })
@@ -103,10 +107,11 @@ export function createReanchor({
       if (bypassFor(id)) {
         // Spec B2-B3: never escalate. Every 10th drift sends the full message; the rest send the first sentence.
         current.detections += 1
-        const full = current.detections % 10 === 0
+        current.bypassDrifts += 1
+        const full = current.bypassDrifts % 10 === 0
         const reminder = full ? secondDriftReminder(secondDriftFields(id, original)) : FIRST_DRIFT_MESSAGE
-        onRegister({ id, turn: current.turn, drift: current.detections, sent: full ? 'full' : 'first', at: Date.now() })
-        inject({ id, turn: current.turn, attempt: current.detections, original: current.intent, reminder, report })
+        onRegister({ id, turn: current.turn, drift: current.bypassDrifts, sent: full ? 'full' : 'first', at: Date.now() })
+        inject({ id, turn: current.turn, attempt: current.bypassDrifts, original: current.intent, reminder, report })
         return 'injected'
       }
       if (current.escalated) return 'already-escalated'
