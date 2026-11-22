@@ -92,6 +92,18 @@ const NOW_WINDOW = 3      // any drift among the last N means "drifting now"
 const levelOf = (ratio) => ratio < 0.5 ? 'Stable' : ratio < 1 ? 'Approaching threshold' : ratio < 2 ? 'Drifting' : 'Severe drift'
 
 /**
+ * P4 for ONE chat: the same recent-window summary, derived from the chat's own recent history
+ * ([{ at, kl, threshold, drift }], oldest first). Returns the fields createDriftSummary().applyTo() sets.
+ */
+export function summarizeHistory(history = []) {
+  const summary = createDriftSummary()
+  for (const item of history) summary.record({ turn: null, result: { kl_divergence: item.kl, threshold: item.threshold, drift_detected: item.drift === true }, at: item.at })
+  const detector = {}
+  summary.applyTo(detector)
+  return detector
+}
+
+/**
  * P4: drift summary that cannot be hidden by history. The cumulative averages stay (as separate
  * fields), but humanSummary follows the RECENT evaluations: 40 healthy then 3 drifting is drifting.
  */

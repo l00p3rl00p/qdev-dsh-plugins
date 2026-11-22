@@ -82,7 +82,7 @@ export async function apply(ctx, config = {}) {
     const { status, abortIntervention, refreshOperationalState, updateMentorStatus, mentorSnapshots } = board;
     const live = createLive({ initialLive, liveTable, recordError: board.recordError });
     const { sessionLive, ensureSessionLive, persistLive, observeTool, observeDecision } = live;
-    const sessionLiveView = createLiveView({ resolved, agents, live, initialLive, initialMentorState, runtimes, mentorSnapshots, interventions, mentorContexts, registerTable, effectiveSettings });
+    const sessionLiveView = createLiveView({ resolved, agents, live, initialLive, initialMentorState, runtimes, mentorSnapshots, interventions, mentorContexts, registerTable, effectiveSettings, droppedFor: registry.droppedFor });
     const getRuntime = createRuntimeFactory({ ctx, resolved, agents, runtimes, pendingMessages, interventions, runningDetectors, effectiveSettings, initialMentorState, mentorContexts, registerTable, live, board, noteMissing });
     const replayAgent = (agent, beforeSeq) => {
         const id = String(agent.id);

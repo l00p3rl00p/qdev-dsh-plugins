@@ -6,10 +6,12 @@ export function createSessionRegistry({ resolveAgent, attachAgent, replay, repor
   const running = new Set()
   const reportedDrops = new Set() // sessions that already have their ONE 'drop' diagnostic
   let droppedEvents = 0
+  const droppedBySession = new Map()
 
   // P3: an event that cannot be observed is never silent. Count it, and say why once per session.
   function drop(id, reason) {
     droppedEvents += 1
+    droppedBySession.set(id, (droppedBySession.get(id) ?? 0) + 1)
     if (reportedDrops.has(id)) return false
     reportedDrops.add(id)
     report(new Error(`SOUP dropped session events: ${reason}`), { phase: 'drop', sessionId: id })
@@ -39,6 +41,8 @@ export function createSessionRegistry({ resolveAgent, attachAgent, replay, repor
   return {
     observe,
     get droppedEvents() { return droppedEvents },
+    /** Events of ONE session that could not reach a runtime (for the per-chat view). */
+    droppedFor: (id) => droppedBySession.get(id) ?? 0,
     runtimes,
     running,
     // A consumer failure must not clear the running flag of a live evaluation.

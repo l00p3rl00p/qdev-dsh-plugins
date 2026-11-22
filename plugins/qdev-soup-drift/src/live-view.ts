@@ -3,12 +3,14 @@ import type { Agent } from '@deepseek-ai/dsh-agent'
 import { PRESETS } from '../runtime.mjs'
 // @ts-expect-error JavaScript module has no declaration file.
 import { GENTLE_MENTOR_MESSAGE } from '../reanchor.mjs'
+// @ts-expect-error JavaScript status module has no declaration file.
+import { summarizeHistory } from '../status.mjs'
 import { VERSION } from './constants.js'
 import type { Live } from './live.js'
 import type { Effective, Intervention, LiveHistoryStored, MentorContext, MentorSnapshot, MentorStoredState, RegisterEntry, Resolved, Table } from './types.js'
 
 // The read model behind the Live & Mentor view of one chat.
-export function createLiveView({ resolved, agents, live, initialLive, initialMentorState, runtimes, mentorSnapshots, interventions, mentorContexts, registerTable, effectiveSettings }: {
+export function createLiveView({ resolved, agents, live, initialLive, initialMentorState, runtimes, mentorSnapshots, interventions, mentorContexts, registerTable, effectiveSettings, droppedFor }: {
   resolved: Resolved
   agents: Map<string, Agent>
   live: Live
@@ -20,6 +22,7 @@ export function createLiveView({ resolved, agents, live, initialLive, initialMen
   mentorContexts: Map<string, MentorContext>
   registerTable: Table<RegisterEntry>
   effectiveSettings: (id: string) => Effective
+  droppedFor: (id: string) => number
 }) {
   const { sessionLive, liveTools, liveDecisions } = live
   const sessionLiveView = (id: string, attached = agents.has(id)) => {
@@ -72,6 +75,10 @@ export function createLiveView({ resolved, agents, live, initialLive, initialMen
         evaluations: record?.evaluations ?? 0,
         drifts: record?.drifts ?? 0,
         history: record?.history ?? initialLive[id]?.history ?? [],
+        // P4: the headline follows the RECENT calculations; the cumulative average above stays a separate figure.
+        ...(({ recentThresholdRatio, lastDriftAt, humanSummary }) => ({ recentThresholdRatio, lastDriftAt, humanSummary }))(summarizeHistory(record?.history ?? initialLive[id]?.history ?? [])),
+        // P3: events of this chat that could not reach a monitor (counted, not silently skipped).
+        droppedEvents: droppedFor(id),
         markers: record?.markers ?? initialLive[id]?.markers ?? [],
         ...(record && record.evaluations > 0 ? { averageKlDivergence: record.klTotal / record.evaluations, averageThresholdRatio: record.klTotal / record.evaluations / PRESETS[effective.preset] } : {}),
         ...(record?.lastStartedAt === undefined ? {} : { lastStartedAt: record.lastStartedAt }),
