@@ -55,3 +55,30 @@ test('native: a throwing peer cannot hide evidence from other peers or affect SO
   assert.ok(status.errors.length >= 1, 'the peer failure was not recorded')
   assert.ok(status.errors.every((e) => e.phase === 'consumer'), JSON.stringify(status.errors))
 })
+
+// The 0.9.0 'qdev-soup/signal' channel is kept for older peers. It must be as isolated as the versioned evidence
+// channels: a peer that throws synchronously or rejects asynchronously on it can never stop SOUP's bookkeeping,
+// Mentor or another peer, and is reported as phase 'consumer' (never 'consumer:status:evaluation').
+test('native: a throwing or rejecting peer on the older signal channel cannot affect SOUP, Mentor or other peers', opts, async (t) => {
+  const f = await fixture(t, { baselineCount: 1, windowCount: 1, preset: 0 })
+  const healthy = []
+  f.ctx.on('qdev-soup/signal', () => { throw new Error('signal peer sync boom') })
+  f.ctx.on('qdev-soup/signal', async () => { throw new Error('signal peer async boom') })
+  f.ctx.on('qdev-soup/signal', (x) => { healthy.push(x) })
+  f.start(); f.assistant(REF)
+  const evaluations = async () => (await f.request()).body.detector.evaluations
+  for (let n = 1; n <= 3; n += 1) {
+    f.assistant()
+    const end = Date.now() + 15000
+    while ((await evaluations()) < n && Date.now() < end) await sleep(20)
+    assert.equal(await evaluations(), n, 'SOUP bookkeeping stopped after a signal peer failed')
+  }
+  await until(() => healthy.length === 3)
+  assert.equal(f.injected.length, 3, 'Mentor was affected by a signal peer')
+  const status = (await f.request()).body
+  assert.equal(status.detector.evaluations, 3)
+  assert.notEqual(status.detector.state, 'error')
+  assert.ok(status.errors.length >= 2, 'the peer failures were not recorded')
+  assert.ok(status.errors.every((e) => e.phase === 'consumer'), JSON.stringify(status.errors))
+  assert.ok(status.errors.every((e) => typeof e.consumer === 'string' && e.consumer.includes('qdev-soup/signal')), JSON.stringify(status.errors))
+})

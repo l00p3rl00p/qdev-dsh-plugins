@@ -17,13 +17,15 @@ export function createRuntimeFactory({ ctx, resolved, agents, runtimes, pendingM
     // WHY ctx.parallel and not ctx.emit: Cordis `emit` calls listeners in a bare map, so one throwing listener stops
     // every later listener and the exception escapes into SOUP. `parallel` runs every listener and aggregates failures
     // into one rejection, recorded here as a consumer diagnostic (never a measurement failure).
-    const publishNative = (sessionId, send) => {
-        if (board.status.lifecycle.state !== 'active')
+    // `consumer` names the channel so a status error says which peer channel failed. The 0.9.0 signal is not gated on
+    // lifecycle (it was always published); the evidence channels are.
+    const publishNative = (sessionId, consumer, send, gated = true) => {
+        if (gated && board.status.lifecycle.state !== 'active')
             return;
         const report = (error) => {
             const failures = error instanceof AggregateError ? error.errors : [error];
             for (const failure of failures)
-                board.recordError(failure, { phase: 'consumer', sessionId });
+                board.recordError(failure, { phase: 'consumer', consumer, sessionId });
         };
         try {
             send().catch(report);
@@ -33,8 +35,8 @@ export function createRuntimeFactory({ ctx, resolved, agents, runtimes, pendingM
         }
     };
     // Event names are literals so they are type-checked against the Events augmentation above.
-    const nativeDrift = (evidence) => publishNative(evidence.sessionId, () => ctx.parallel('qdev-soup/drift-evidence/v1', evidence));
-    const nativeIntervention = (evidence) => publishNative(evidence.sessionId, () => ctx.parallel('qdev-soup/intervention-evidence/v1', evidence));
+    const nativeDrift = (evidence) => publishNative(evidence.sessionId, 'peer:qdev-soup/drift-evidence/v1', () => ctx.parallel('qdev-soup/drift-evidence/v1', evidence));
+    const nativeIntervention = (evidence) => publishNative(evidence.sessionId, 'peer:qdev-soup/intervention-evidence/v1', () => ctx.parallel('qdev-soup/intervention-evidence/v1', evidence));
     const { status, abortIntervention, recordError, noteEvaluation, updateMentorStatus } = board;
     const deliver = (agent, record, text, form, report) => {
         const effective = effectiveSettings(String(agent.id));
@@ -204,8 +206,9 @@ export function createRuntimeFactory({ ctx, resolved, agents, runtimes, pendingM
             onEvaluation: ({ sessionId, turn, singleTurn, result }) => {
                 // The monitor's delivered value: any plugin can listen for 'qdev-soup/signal' on the context without
                 // importing this package. Published before any bookkeeping so no consumer can stand between measurement and delivery.
-                ;
-                ctx.emit('qdev-soup/signal', toSignal({ sessionId, turn, singleTurn, result }));
+                // Isolated like the evidence channels (ctx.parallel, guarded): a throwing or rejecting peer cannot stop the
+                // bookkeeping below. Event name and payload are the 0.9.0 contract, unchanged.
+                publishNative(sessionId, 'peer:qdev-soup/signal', () => ctx.parallel('qdev-soup/signal', toSignal({ sessionId, turn, singleTurn, result })), false);
                 const live = ensureSessionLive(sessionId);
                 live.evaluations += 1;
                 if (result.drift_detected)

@@ -17,6 +17,8 @@ declare module '@deepseek-ai/cordis' {
   interface Events {
     'qdev-soup/drift-evidence/v1'(evidence: DriftEvidence): void
     'qdev-soup/intervention-evidence/v1'(evidence: InterventionEvidence): void
+    // 0.9.0 contract, kept for older peers; shape is monitor.mjs toSignal().
+    'qdev-soup/signal'(signal: Record<string, unknown>): void
   }
 }
 
@@ -49,17 +51,19 @@ export function createRuntimeFactory({ ctx, resolved, agents, runtimes, pendingM
   // WHY ctx.parallel and not ctx.emit: Cordis `emit` calls listeners in a bare map, so one throwing listener stops
   // every later listener and the exception escapes into SOUP. `parallel` runs every listener and aggregates failures
   // into one rejection, recorded here as a consumer diagnostic (never a measurement failure).
-  const publishNative = (sessionId: string, send: () => Promise<void>): void => {
-    if (board.status.lifecycle.state !== 'active') return
+  // `consumer` names the channel so a status error says which peer channel failed. The 0.9.0 signal is not gated on
+  // lifecycle (it was always published); the evidence channels are.
+  const publishNative = (sessionId: string, consumer: string, send: () => Promise<void>, gated = true): void => {
+    if (gated && board.status.lifecycle.state !== 'active') return
     const report = (error: unknown): void => {
       const failures = error instanceof AggregateError ? error.errors : [error]
-      for (const failure of failures) board.recordError(failure, { phase: 'consumer', sessionId })
+      for (const failure of failures) board.recordError(failure, { phase: 'consumer', consumer, sessionId } as { phase: string; sessionId: string })
     }
     try { send().catch(report) } catch (error) { report(error) }
   }
   // Event names are literals so they are type-checked against the Events augmentation above.
-  const nativeDrift = (evidence: DriftEvidence): void => publishNative(evidence.sessionId, () => ctx.parallel('qdev-soup/drift-evidence/v1', evidence))
-  const nativeIntervention = (evidence: InterventionEvidence): void => publishNative(evidence.sessionId, () => ctx.parallel('qdev-soup/intervention-evidence/v1', evidence))
+  const nativeDrift = (evidence: DriftEvidence): void => publishNative(evidence.sessionId, 'peer:qdev-soup/drift-evidence/v1', () => ctx.parallel('qdev-soup/drift-evidence/v1', evidence))
+  const nativeIntervention = (evidence: InterventionEvidence): void => publishNative(evidence.sessionId, 'peer:qdev-soup/intervention-evidence/v1', () => ctx.parallel('qdev-soup/intervention-evidence/v1', evidence))
   const { status, abortIntervention, recordError, noteEvaluation, updateMentorStatus } = board
   const deliver = (agent: Agent, record: DeliveryRecord, text: string, form: 'reminder' | 'escalation' | 'clarification', report?: { kl_divergence?: number; threshold?: number }): void => {
     const effective = effectiveSettings(String(agent.id))
@@ -223,7 +227,9 @@ export function createRuntimeFactory({ ctx, resolved, agents, runtimes, pendingM
     onEvaluation: ({ sessionId, turn, singleTurn, result }: { sessionId: string; turn: number | null; singleTurn: boolean; result: { kl_divergence: number; threshold: number; drift_detected: boolean } }) => {
       // The monitor's delivered value: any plugin can listen for 'qdev-soup/signal' on the context without
       // importing this package. Published before any bookkeeping so no consumer can stand between measurement and delivery.
-      ;(ctx as unknown as { emit(name: string, ...args: unknown[]): void }).emit('qdev-soup/signal', toSignal({ sessionId, turn, singleTurn, result }))
+      // Isolated like the evidence channels (ctx.parallel, guarded): a throwing or rejecting peer cannot stop the
+      // bookkeeping below. Event name and payload are the 0.9.0 contract, unchanged.
+      publishNative(sessionId, 'peer:qdev-soup/signal', () => ctx.parallel('qdev-soup/signal', toSignal({ sessionId, turn, singleTurn, result })), false)
       const live = ensureSessionLive(sessionId)
       live.evaluations += 1
       if (result.drift_detected) live.drifts += 1
