@@ -125,11 +125,12 @@ export function createDetector({
     }
   }
 
+  // The measurement is over: free the session and tell observers. The NEXT queued window is started by the
+  // caller only after this window's result has been delivered (L2: evaluationStart(n+1) after evaluation(n)).
   function finish(sessionId, state) {
     state.pending = false
     state.inflight = null
     publishObservation(sessionId, state, null)
-    pump(sessionId, state)
   }
 
   function pump(sessionId, state) {
@@ -147,12 +148,8 @@ export function createDetector({
 
     let cancel
     let settledSync = false
-    const settle = (error, result) => {
-      settledSync = true
-      measurements.delete(cancel)
-      // Stale (reconfigured/disabled meanwhile): its window was already handled by reconfigure().
-      if (childEpoch !== epoch) return
-      finish(sessionId, state)
+    // Deliver the outcome of this measurement to the subscribers (errors are reported, never thrown).
+    const deliver = (error, result) => {
       if (error) {
         if (!disposed || error.phase === 'spawn') reportError(error, { sessionId, turn, phase: error.phase })
         return
@@ -175,6 +172,15 @@ export function createDetector({
       state.last = report
       emit('evaluation', report, { sessionId, turn })
       if (result.drift_detected) emit('drift', report, { sessionId, turn })
+    }
+    const settle = (error, result) => {
+      settledSync = true
+      measurements.delete(cancel)
+      // Stale (reconfigured/disabled meanwhile): its window was already handled by reconfigure().
+      if (childEpoch !== epoch) return
+      finish(sessionId, state)
+      deliver(error, result)
+      pump(sessionId, state)
     }
     cancel = startMeasurement({
       python: cfg.python,
