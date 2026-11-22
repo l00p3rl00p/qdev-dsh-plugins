@@ -33,6 +33,8 @@ export type DeliveryRecord = {
   state: 'pending' | 'delivered' | 'failed' | 'answered'
   error?: string
 }
+// What one Mentor action reported for one decision (mentor-actions.mjs runActions).
+export type ActionResult = { name: string; kind: 'reminder' | 'escalation'; sessionId?: string; turn: number | null; attempt: number | null; ok: boolean; error?: string; at?: number }
 export type SessionLiveRecord = {
   sessionEvents: number
   assistantMessages: number
@@ -111,6 +113,8 @@ export type RuntimeStatus = {
     reminders: DeliveryRecord[]
     escalation?: DeliveryRecord
     lastOutcome?: string
+    // Newest last, six kept: what each Mentor action reported (see mentor-actions.mjs). Absent until an action has run.
+    actionResults?: ActionResult[]
     driftCount: number
     carriedDrifts: number
     resetDecision?: { required: boolean; sessionId: string; turn: number | null }

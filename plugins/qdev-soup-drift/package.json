@@ -24,6 +24,7 @@
     "monitor.mjs",
     "monitor-cli.mjs",
     "reanchor.mjs",
+    "mentor-actions.mjs",
     "runtime.mjs",
     "session-settings.mjs",
     "detector-settings.mjs",
