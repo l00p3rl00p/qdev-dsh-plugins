@@ -1100,6 +1100,40 @@ test('Feature 4: Gentle Mentor edits are validated, owner-only, refused when OFF
   await reopened.close()
 })
 
+test('Feature 4: overlapping Gentle Mentor saves for one chat all survive; chats and failures stay independent', async (t) => {
+  const f = await fixture(t, { liveIds: [A, B] })
+  const post = async (body) => {
+    const route = f.routes.get(STATUS_PATH)
+    const payload = JSON.stringify(body)
+    const values = { host: 'localhost', origin: 'http://localhost', 'x-qdev-soup-action': 'session-mentor', 'x-synthetic-owner': 'yes' }
+    const headers = { ...values, get(name) { return values[String(name).toLowerCase()] ?? null } }
+    let text
+    const response = { statusCode: 0, setHeader() {}, end(value) { text = value } }
+    await route.handler({ method: 'POST', headers, async *[Symbol.asyncIterator]() { yield payload } }, response)
+    return { code: response.statusCode, body: JSON.parse(text) }
+  }
+  // Both requests start before either finishes: the real route and the real native storage table decide the outcome.
+  const [message, amendments, other, rejected] = await Promise.all([
+    post({ sessionId: A, field: 'message', value: 'Stay on the card.' }),
+    post({ sessionId: A, field: 'amendments', value: ['Also keep the tests green.'] }),
+    post({ sessionId: B, field: 'message', value: 'Chat B message.' }),
+    post({ sessionId: A, field: 'nope', value: 'x' }),
+  ])
+  assert.equal(message.code, 200)
+  assert.equal(amendments.code, 200)
+  assert.equal(other.code, 200)
+  assert.equal(rejected.code, 400, 'an invalid edit must still be refused')
+  const live = await f.liveStatus(A)
+  assert.equal(live.mentor.context.message, 'Stay on the card.', 'the message save was lost by an overlapping save')
+  assert.deepEqual(live.mentor.context.amendments, ['Also keep the tests green.'], 'the amendments save was lost by an overlapping save')
+  assert.equal((await f.liveStatus(B)).mentor.context.message, 'Chat B message.')
+  // The rejected edit must not block a later save for the same chat.
+  assert.equal((await post({ sessionId: A, field: 'plan', value: 'A later plan.' })).code, 200)
+  const after = await f.liveStatus(A)
+  assert.equal(after.mentor.context.plan, 'A later plan.')
+  assert.equal(after.mentor.context.message, 'Stay on the card.')
+})
+
 test('tool calls and results from DSH session events are recorded per chat and sent with the live status', async (t) => {
   const f = await fixture(t)
   f.start(A)

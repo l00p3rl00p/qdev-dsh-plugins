@@ -90,8 +90,8 @@ These are universal acceptance boundaries. Put the plugin-specific button, servi
 **Mandatory escape:** DSH's native CLI must remain usable when the browser/plugin manager cannot load. From the Mac's terminal, remove *only the defective installed package* from the intended profile, then restart the Harness container **once**:
 
 ```sh
-docker exec -it quatrus-harness-deepseek-harness bash -lc 'dsh plugin --profile web remove ACTUAL_PLUGIN_PACKAGE_NAME'
-docker restart quatrus-harness-deepseek-harness
+docker exec -it <harness-container> bash -lc 'dsh plugin --profile web remove ACTUAL_PLUGIN_PACKAGE_NAME'
+docker restart <harness-container>
 ```
 
 Use the real package identity from that plugin's `package.json` (e.g. `dsh-auto-code-correct` or `qdev-trajectory-drift-soup`). **Every plugin README must include the actual, copyable commands with its name**, not just link to this document—even a non-Web plugin should document its removal path. If the installed package is absent or removal fails, diagnose the active profile instead of deleting files speculatively.
@@ -250,7 +250,7 @@ playwright-cli -s=<session-name> screenshot --filename=/tmp/output.png
 - Use `playwright-cli -s=<name> find "text"` to verify elements are present before clicking.
 - Grafana and OpenSearch Dashboards require authentication; credentials live in the Mac keyring (`GRAFANA_ADMIN_PASSWORD`, `OPENSEARCH_ADMIN_PASSWORD`) and are not injected into the harness container.
 
-**Verified:** Firefox successfully navigated to Prometheus and captured a live graph screenshot at `/tmp/prometheus-graph.png` showing `container_memory_usage_total_bytes{container_name="quatrus-harness-deepseek-harness"}` over 1h.
+**Verified:** Firefox successfully navigated to Prometheus and captured a live graph screenshot at `/tmp/prometheus-graph.png` showing `container_memory_usage_total_bytes{container_name="<harness-container>"}` over 1h.
 
 ## 8. Known backlog items (dsh-telemetry-seams, v0.2.0)
 
@@ -339,5 +339,5 @@ text in this repository that describes `prepare`, `allowBuilds`, or Git build ap
 - **Why the suite missed it:** the test runs set `PYTHONPATH` to the venv that holds `soup_cli`, so the worker imported fine there. Production spawns without that path. A test environment that supplies a dependency the real launcher does not supply hides a missing-import defect.
 - **Rule 1 — configure the interpreter; never assume `python3`.** For any plugin that runs a Python worker, the interpreter is a required setting. Do not rely on the system default.
 - **Rule 2 — check the worker the way the plugin launches it.** Before calling a worker operational, run the exact command with an empty input in the production environment (`python3 soup_worker.py` with no `PYTHONPATH`). A passing test run under a different environment proves nothing about the launch.
-- **Rule 3 — no machine paths in tracked code.** The fix is the `python` setting (`/home/qdev/llm-runtime/tools/venvs/soup/bin/python` on this machine). Do not hard-code it in the plugin; that would break on any other machine and conflicts with the spec's placeholder rule.
+- **Rule 3 — no machine paths in tracked code.** The fix is the `python` setting (`<path-to-python>`, an interpreter that has `soup_cli`). Do not hard-code it in the plugin; that would break on any other machine and conflicts with the spec's placeholder rule.
 - **Status:** cause confirmed by running the worker; the setting itself is owner-applied in the Harness config and is not verified in the live UI yet.

@@ -1,6 +1,12 @@
 // The SOUP monitor inside a real Host with ONLY the `agents` service: no storage, web server, user questions,
 // Connection or persistence. Real Cordis, Loader, Session and the real Python worker. Run with SOUP_PYTHON set to
 // an interpreter that has official soup-cli.
+//
+// SCOPE (what this does and does not prove): the real built Host starts with only an `agents` registry entry and
+// publishes real SOUP drift values on the native `qdev-soup/signal` event channel without any optional service.
+// It does NOT prove that a reminder reaches a real Harness agent: the `agents` entry below is a minimal registry
+// record (the real agent loop needs a model), so reanchoring is switched OFF and its inject() fails the test if
+// the Host ever tries to deliver through it. Real agent delivery is NOT-PROVEN here; it needs a live Harness.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { setTimeout as delay } from 'node:timers/promises'
@@ -12,10 +18,10 @@ import { Session } from '@deepseek-ai/dsh-session'
 const HOST_URL = new URL('../dist/index.js', import.meta.url)
 const PYTHON = process.env.SOUP_PYTHON || 'python3'
 
-test('agents-only Host delivers a real drift value and stays alive', async (t) => {
+test('agents-only Host publishes real drift values on the signal channel and stays alive (no agent delivery exercised)', async (t) => {
   const ctx = new Context()
   const session = Session.create('alone')
-  ctx.provide('agents', { list: () => [], get: () => ({ id: 'alone', session, inject() {} }), create() { assert.fail('no') } })
+  ctx.provide('agents', { list: () => [], get: () => ({ id: 'alone', session, inject() { assert.fail('this test does not exercise agent delivery; the Host must not inject') } }), create() { assert.fail('no') } })
   assert.equal(ctx.get('storageDomain'), undefined)
   assert.equal(ctx.get('webServer'), undefined)
   assert.equal(ctx.get('userQuestions'), undefined)
@@ -23,7 +29,7 @@ test('agents-only Host delivers a real drift value and stays alive', async (t) =
   ctx.on('qdev-soup/signal', (signal) => signals.push(signal))
   await ctx.plugin(Loader, { baseUrl: HOST_URL.href })
   await ctx.loader.create({ id: 'alone', name: HOST_URL.href, config: {
-    python: PYTHON, enabled: true, detectorEnabled: true, reanchoring: true, preset: 2, baselineCount: 1, windowCount: 1 } })
+    python: PYTHON, enabled: true, detectorEnabled: true, reanchoring: false, preset: 2, baselineCount: 1, windowCount: 1 } })
   await ctx.loader.await()
   const entry = ctx.loader.resolve('alone')
   await entry.fiber.await()

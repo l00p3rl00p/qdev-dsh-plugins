@@ -2,7 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type { Session } from '@deepseek-ai/dsh-session'
 // @ts-expect-error JavaScript settings module has no declaration file.
-import { SessionSettingsError } from '../session-settings.mjs'
+import { createKeyedQueue, SessionSettingsError } from '../session-settings.mjs'
 // @ts-expect-error JavaScript module has no declaration file.
 import { applyMentorEdit, MENTOR_LIMITS } from '../mentor-context.mjs'
 import { SESSION_SETTINGS_PATH, SESSION_STATUS_PATH, STATUS_PATH } from './constants.js'
@@ -45,6 +45,9 @@ export function registerRoutes({ ctx, status, resolved, agents, runtimes, interv
   contextTable: Table<MentorContext>
   noteMissing: (service: string) => void
 }) {
+  // Mentor saves are read-modify-write on the whole per-chat record: serialize them per chat so two overlapping
+  // saves to different fields cannot both start from the same old record and drop each other's field.
+  const enqueueMentorSave = createKeyedQueue()
   // Native Connection owns authentication, trust and owner-only admission for this
   // exact Fetch route. Optional UI services must never gate the monitoring core.
   ctx.inject(['connection', 'sessionPersistence'], (uiCtx) => {
@@ -179,16 +182,25 @@ export function registerRoutes({ ctx, status, resolved, agents, runtimes, interv
             response.end(JSON.stringify({ ok: false, error: 'monitoring-off' }))
             return
           }
-          let next: MentorContext
-          try {
-            next = applyMentorEdit(mentorContexts.get(mentorSessionId) ?? {}, Reflect.get(body, 'field'), Reflect.get(body, 'value'))
-          } catch (error) {
+          const field = Reflect.get(body, 'field')
+          const value = Reflect.get(body, 'value')
+          // The whole read -> validate -> durable write -> in-memory update runs inside the per-chat queue.
+          const outcome = await enqueueMentorSave(mentorSessionId, async (): Promise<{ ok: true } | { ok: false; message: string }> => {
+            let next: MentorContext
+            try {
+              next = applyMentorEdit(mentorContexts.get(mentorSessionId) ?? {}, field, value)
+            } catch (error) {
+              return { ok: false, message: error instanceof Error ? error.message : String(error) }
+            }
+            await contextTable.put(mentorSessionId, next)
+            mentorContexts.set(mentorSessionId, next)
+            return { ok: true }
+          })
+          if (!outcome.ok) {
             response.statusCode = 400
-            response.end(JSON.stringify({ ok: false, error: 'invalid-mentor-edit', message: error instanceof Error ? error.message : String(error) }))
+            response.end(JSON.stringify({ ok: false, error: 'invalid-mentor-edit', message: outcome.message }))
             return
           }
-          await contextTable.put(mentorSessionId, next)
-          mentorContexts.set(mentorSessionId, next)
           response.statusCode = 200
           response.end(JSON.stringify({ ok: true, view: sessionLiveView(mentorSessionId, true) }))
           return

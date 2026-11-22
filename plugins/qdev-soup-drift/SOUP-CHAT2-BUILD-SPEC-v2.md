@@ -217,7 +217,7 @@ Telemetry to OTEL is parked. The OTEL path is a DSH method for SOUP to emit tele
 - **Repeated failures:** grouped by normalized failure type, plotted over time, and read as a tool-by-type table. One type on one tool repeating reads as a misconfigured or failing tool. One type across tools reads as a shared cause in the instructions or input. Both are hypotheses.
 - **Elimination (11.6):** candidate explanations are dropped when the data contradicts them. What remains is not verified; a human or agent judges it.
 - **Qualified convergence:** a candidate counts only with independent sources (calculations, tool telemetry). One source is observed, two corroborated, three or more convergent. Every level is a hypothesis to verify.
-- **Studio simulation:** plugins/qdev-soup-drift/notebooks/convergence_simulation.py runs synthetic scenarios. It lives in the Studio container quatrus-development-marimo and is synced with scripts/sync-convergence-notebook.sh. The logic is mirrored by hand in Python; no parity test yet compares it with client.js.
+- **Studio simulation:** plugins/qdev-soup-drift/notebooks/convergence_simulation.py runs synthetic scenarios. It lives in the Studio container (named by `MARIMO_CONTAINER`) and is synced with scripts/sync-convergence-notebook.sh. The logic is mirrored by hand in Python; no parity test yet compares it with client.js.
 - **Not built:** decision and test-outcome evidence, and the event graph.
 
 

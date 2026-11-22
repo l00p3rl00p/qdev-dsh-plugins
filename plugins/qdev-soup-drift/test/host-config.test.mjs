@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { setTimeout as delay } from 'node:timers/promises'
-import { test } from 'node:test'
+import { test as nodeTest } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import { createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -9,8 +9,10 @@ import { Session } from '@deepseek-ai/dsh-session'
 // Cordis's FiberState is a TypeScript const enum, erased from JavaScript exports.
 const ACTIVE = 2
 const HOST_URL = new URL('../dist/index.js', import.meta.url)
-// Configured interpreter only (main eb44a23): the worker needs the soup-cli venv, not the system python3.
-const PYTHON = process.env.SOUP_PYTHON || '/home/qdev/llm-runtime/tools/venvs/soup/bin/python'
+// Configured interpreter only: the worker needs an interpreter that has soup-cli, not whatever python3 is on PATH.
+// There is deliberately no machine-specific fallback; without SOUP_PYTHON every test here is skipped with a visible reason.
+const PYTHON = process.env.SOUP_PYTHON
+const test = (name, fn) => nodeTest(name, { skip: PYTHON ? false : 'SOUP_PYTHON (an interpreter with soup_cli) is not set' }, fn)
 const STATUS_PATH = '/qdev-soup-drift/status'
 const BASELINE = 'keep following the original implementation plan'
 const DRIFT = 'different unrelated output topic'
