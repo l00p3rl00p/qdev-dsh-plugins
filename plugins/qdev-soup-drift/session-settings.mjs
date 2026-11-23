@@ -1,15 +1,17 @@
 import { z } from 'zod'
+import { detectorSettings } from './detector-settings.mjs'
+import { mentorSettings } from './mentor-settings.mjs'
 import { PRESETS } from './drift.mjs'
 
-const fields = {
-  python: z.string().refine((value) => value.trim().length > 0, 'Python executable must not be empty'),
-  enabled: z.boolean(),
-  detectorEnabled: z.boolean(),
-  reanchoring: z.boolean(),
-  preset: z.number().int().min(0).max(4),
-  baselineCount: z.number().int().min(1).max(100),
-  windowCount: z.number().int().min(1).max(100),
-}
+// WHY composed: each component owns its settings definition (detector-settings.mjs, mentor-settings.mjs). The
+// global master switch belongs to no component and stays here. Stored key names are the same seven as before,
+// so saved records and Loader config load unchanged.
+const master = { name: 'master', fields: { enabled: z.boolean() } }
+const components = [master, detectorSettings, mentorSettings]
+const fields = Object.assign({}, ...components.map((component) => component.fields))
+/** Which component owns each stored setting key (read-only map, for docs and tests). */
+export const SETTING_OWNERS = Object.freeze(Object.fromEntries(
+  components.flatMap((component) => Object.keys(component.fields).map((key) => [key, component.name]))))
 const names = Object.keys(fields)
 const revision = z.number().int().min(0).max(Number.MAX_SAFE_INTEGER)
 // Zod object parsing can materialize inherited known keys. Only JSON-own fields

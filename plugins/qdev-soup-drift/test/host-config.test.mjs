@@ -86,17 +86,18 @@ async function fixture(t, config = {}, saved = {}) {
   assert.equal(entry.fiber.state, ACTIVE)
   assert.ok(routes.has(STATUS_PATH), 'built Host did not mount')
   const fiber = entry.fiber
-  const refs = { ...fiber.config }
+  // Cordis 4.1 (DSH 0.2.2) moved the object the plugin receives to fiber.effectiveConfig; 4.0.5 has only fiber.config.
+  const refs = { ...(fiber.effectiveConfig ?? fiber.config) }
   const volatileEvents = []
   const rootEvents = []
   ctx.on('loader/volatile-update', (paths) => rootEvents.push(paths))
   fiber.ctx.on('loader/volatile-update', (paths) => {
     volatileEvents.push({ paths, values: Object.fromEntries(
-      Object.entries(fiber.config).map(([key, value]) => [key, value?.get ? value.get() : value]),
+      Object.entries(fiber.effectiveConfig ?? fiber.config).map(([key, value]) => [key, value?.get ? value.get() : value]),
     ) })
   })
   const hooks = () => Object.fromEntries(['agent/created', 'agent/disposed', 'session/event']
-    .map((name) => [name, (ctx.events._hooks[name] ?? []).filter((hook) => hook.ctx.fiber === fiber).length]))
+    .map((name) => [name, (ctx.events._hooks[name] ?? []).filter((hook) => hook.ctx === fiber.ctx).length]))
   const initialHooks = hooks()
   assert.deepEqual(initialHooks, { 'agent/created': 1, 'agent/disposed': 1, 'session/event': 1 })
 
@@ -128,7 +129,7 @@ async function fixture(t, config = {}, saved = {}) {
     assert.equal(entry.fiber, fiber, 'volatile save replaced the native fiber')
     assert.equal(fiber.state, ACTIVE)
     for (const [key, ref] of Object.entries(refs)) {
-      assert.equal(fiber.config[key], ref, `configuration reference replaced: ${key}`)
+      assert.equal((fiber.effectiveConfig ?? fiber.config)[key], ref, `configuration reference replaced: ${key}`)
     }
     assert.equal((await status()).lifecycle.startedAt, startedAt, 'Host remounted inside the same fiber')
     // Mentor state, session settings, Live & Mentor history, Gentle Mentor context (Feature 4) and the escalation-bypass register (spec B4).
@@ -209,10 +210,17 @@ test('native Loader commits master/count/threshold saves into the mounted Host a
   assert.equal(s.configuration.threshold, 0.4)
   assert.equal(s.configuration.baselineCount, 3)
   assert.equal(s.configuration.windowCount, 1)
-  assert.equal(s.trajectory.baselineSize, 3, 'replacement detector did not seed the saved baseline count')
+  // P5 + decision C (intentional change; was: a replacement detector seeded the baseline): a settings save
+  // reconfigures the live detector, and the new baseline slot is filled at once from the EARLIEST session
+  // history (the drifting message already measured), so the baseline is 3/3 right after the save.
+  assert.equal(s.trajectory.baselineSize, 3, 'baseline growth must refill from the earliest history at save time')
   assert.equal(s.trajectory.baselineTarget, 3)
   assert.equal(s.trajectory.windowTarget, 1)
-  s = await f.evaluate()
+  // That baseline now contains the earlier drifting text, so a NEW, different drifting message is used.
+  const novel = 'quarterly tax filing deadlines and invoice reconciliation procedures'
+  const evaluationsBefore = s.detector.evaluations
+  f.assistant(novel, 1)
+  s = await f.until((x) => x.detector.evaluations === evaluationsBefore + 1, 'real SOUP worker did not measure the new window')
   assert.equal(s.detector.lastResult.threshold, 0.4)
   assert.equal(f.injected.length, 2)
   assert.equal(f.injected[1].source.attempt, 2, 'saving detector settings erased this turn\'s first strike')
@@ -307,7 +315,9 @@ test('master OFF invalidates an in-flight real SOUP worker across immediate OFF/
   const disabled = await f.status()
   assert.equal(disabled.detector.state, 'disabled')
   await f.update({ enabled: true, preset: 1 })
-  const s = await f.evaluate()
+  // Decision B (intentional change; was: the window was discarded on OFF and a fresh evaluate() was needed):
+  // the window in flight at OFF is kept and measured once after ON, under the NEW threshold.
+  const s = await f.until((x) => x.detector.evaluations === 1, 'kept in-flight window was not measured after ON')
   assert.equal(s.detector.lastResult.threshold, 0.1)
   // The killed process may close after its replacement; neither its result nor
   // its final observation may mutate the new detector or mentor generation.
@@ -330,7 +340,7 @@ test('all five sensitivity positions reach the real SOUP worker and fixture sett
   for (const [preset, threshold] of thresholds.entries()) {
     await f.update({ preset })
     const s = await f.evaluate()
-    assert.equal(f.fiber.config.preset.get(), preset)
+    assert.equal((f.fiber.effectiveConfig ?? f.fiber.config).preset.get(), preset)
     assert.equal(s.configuration.preset, preset)
     assert.equal(s.configuration.threshold, threshold)
     assert.equal(s.detector.lastResult.threshold, threshold, `preset ${preset} did not reach Python`)
@@ -488,7 +498,7 @@ test('invalid native volatile candidates retain prior effective references and r
     await f.update(candidate)
     assert.deepEqual((await f.status()).configuration, before.configuration, `invalid candidate became effective: ${JSON.stringify(candidate)}`)
     assert.equal(f.volatileEvents.length, commits, 'invalid candidate dispatched a runtime update')
-    for (const [key, value] of Object.entries(good)) assert.equal(f.fiber.config[key].get(), value)
+    for (const [key, value] of Object.entries(good)) assert.equal((f.fiber.effectiveConfig ?? f.fiber.config)[key].get(), value)
     await f.update(good)
   }
   const s = await f.evaluate()

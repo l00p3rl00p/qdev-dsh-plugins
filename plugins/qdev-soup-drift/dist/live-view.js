@@ -2,9 +2,11 @@
 import { PRESETS } from '../runtime.mjs';
 // @ts-expect-error JavaScript module has no declaration file.
 import { GENTLE_MENTOR_MESSAGE } from '../reanchor.mjs';
+// @ts-expect-error JavaScript status module has no declaration file.
+import { summarizeHistory } from '../status.mjs';
 import { VERSION } from './constants.js';
 // The read model behind the Live & Mentor view of one chat.
-export function createLiveView({ resolved, agents, live, initialLive, initialMentorState, runtimes, mentorSnapshots, interventions, mentorContexts, registerTable, effectiveSettings }) {
+export function createLiveView({ resolved, agents, live, initialLive, initialMentorState, runtimes, mentorSnapshots, interventions, mentorContexts, registerTable, effectiveSettings, droppedFor }) {
     const { sessionLive, liveTools, liveDecisions } = live;
     const sessionLiveView = (id, attached = agents.has(id)) => {
         const effective = effectiveSettings(id);
@@ -56,6 +58,10 @@ export function createLiveView({ resolved, agents, live, initialLive, initialMen
                 evaluations: record?.evaluations ?? 0,
                 drifts: record?.drifts ?? 0,
                 history: record?.history ?? initialLive[id]?.history ?? [],
+                // P4: the headline follows the RECENT calculations; the cumulative average above stays a separate figure.
+                ...(({ recentThresholdRatio, lastDriftAt, humanSummary }) => ({ recentThresholdRatio, lastDriftAt, humanSummary }))(summarizeHistory(record?.history ?? initialLive[id]?.history ?? [])),
+                // P3: events of this chat that could not reach a monitor (counted, not silently skipped).
+                droppedEvents: droppedFor(id),
                 markers: record?.markers ?? initialLive[id]?.markers ?? [],
                 ...(record && record.evaluations > 0 ? { averageKlDivergence: record.klTotal / record.evaluations, averageThresholdRatio: record.klTotal / record.evaluations / PRESETS[effective.preset] } : {}),
                 ...(record?.lastStartedAt === undefined ? {} : { lastStartedAt: record.lastStartedAt }),
@@ -70,6 +76,8 @@ export function createLiveView({ resolved, agents, live, initialLive, initialMen
                 carry: mentor.carry,
                 decisionPending: mentor.decisionPending,
                 escalated: mentor.escalated,
+                // What Gentle Mentor did in this chat (counted from its intervention evidence; delivery is status.mentor.reminders).
+                actions: record?.interventions ?? { total: 0, reminders: 0, escalations: 0, resets: 0, carries: 0 },
                 originalPlan: runtimes.get(id)?.originalPlan(id) ?? null,
                 // Effective Gentle Mentor prompt parts; "customized" says which fields a chat has overridden.
                 context: {
