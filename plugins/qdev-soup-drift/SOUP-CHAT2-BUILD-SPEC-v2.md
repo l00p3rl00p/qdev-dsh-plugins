@@ -149,3 +149,128 @@ How it is used: read-only glance by the human; the agent is not involved.
 ## 8. Placeholders (this repository is public)
 
 Commands above use `<main-harness-container>`, `<clean-harness-container>`, `<repo-path-in-container>` and `<path-to-soup-python>`. The real values for the owner's machine are in the local-only file `.local-notes/PLACEHOLDER-VALUES.md` at the repository root, which is never committed. Do not write those values into any tracked file, commit message or pull request. Follow the root `AGENTS.md` on `main`.
+
+## 9. Status as built (appended 2026-11-12)
+
+This section records what the branch `feature/soup-feature3-live-mentor` actually contains. It overrides sections 1–8 where they differ. Sections 1–8 are kept unchanged as the record of the plan.
+
+**Base:** `eb44a23` (main, portable Python). **Current version:** 0.8.0, read from `package.json`; nothing else states the release number.
+
+### Feature status
+
+| # | Feature (section 2 of the requirements) | Status | Where it lives |
+|---|---|---|---|
+| 2 | Per-chat settings and overrides | Built (0.6.x) | SOUP tab, Settings view |
+| 3 | Per-chat live SOUP view | Built | Live tab (trajectory, numbers, KL chart) |
+| 4 | Gentle Mentor visibility and editing | Built | Mentor tab; message, current plan and amendments saved per chat |
+| 5 | Gentle Mentor escalation wording | Built | Drift 1 exact sentence; drift 2 message, plan and amendments; drift 3 unchanged |
+| 6 | Per-chat intervention toggle | Built | Gentle Mentor switch in the Settings view |
+| 7 | Live drift telemetry | Built | Live tab and Details tab |
+| — | Convergence (Appendix 11, first slice) | Partly built | Convergence tab: four-quadrant view, click-to-inspect |
+
+### Placement (replaces the placement in section 7 where they differ)
+
+- The SOUP tab holds five views: **Settings**, **Live**, **Mentor**, **Details**, **Convergence**.
+- There is **no card** in Settings or in the composer. The trajectory card from the work in progress is removed from Settings; its content lives in the Live tab.
+- The composer pop-up was removed from scope. The button beside "Read Only" belongs to the prompt-templates plugin.
+
+### Storage (per chat, survives a Host restart)
+
+- `qdev_soup_drift_state`: mentor carry and decision state (0.6.x).
+- `qdev_soup_session_settings`: per-chat settings (0.6.x).
+- `qdev_soup_live_history`: last 50 calculations and intervention markers.
+- `qdev_soup_mentor_context`: Gentle Mentor message, current plan and amendments. An absent key means the default.
+
+### Per-chat settings
+
+- The Python interpreter is no longer a per-chat field. Each chat inherits the global interpreter, which the worker uses. The Runtime group is gone from the view.
+
+### Appendix 11 (Signal focus and qualified convergence): what is and is not built
+
+| Part | Status | Reason |
+|---|---|---|
+| 11.1 Dimensions | Partly: magnitude, focus, boundary distance, persistence | Outlier convergence and event interpretation need other evidence |
+| 11.2 Mathematics | Built as illustrative: `r = min(1, KL / (2·threshold))`, `σ`, `1 − 2σ` | The threshold maps to 0.5 for this view only; the detector is unchanged |
+| 11.3 Four-quadrant view | Built over rolling windows of five calculations | Outlier subsets are not built |
+| 11.4 Click to investigate | Partly: SOUP calculations, and tool calls and results in each window read from DSH's own session events through the uiConversation seam (not verified in the live Harness) | Decisions, test outcomes and the event graph are not built |
+| 11.5 Human meaning | Partly: hypothesis labels and the qualified near-boundary note | Event-specific interpretation needs the evidence in 11.4 |
+| 11.6 Concept blindness | Not built | Needs the same evidence sources |
+| 11.7 Integration | Preserved: the detector, the Gentle Mentor intervention and the existing telemetry path are unchanged | — |
+
+Telemetry to OTEL is parked. The OTEL path is a DSH method for SOUP to emit telemetry, not a plugin read path.
+
+### Verification
+
+- Container suite (real Python worker, real Cordis fixtures): 83 of 83 at the last full run, before the Python-field removal. The client tests were re-run after it (26 of 26).
+- Installed in the main Harness: `6feda14`, version 0.8.0. The boot log shows no SOUP import errors. The Web UI has not yet been checked for the newest tabs.
+
+### Open items
+
+- Web UI check of the Convergence tab, the Details tab and the removed interpreter field, in the live Harness.
+- Appendix 11 items 11.4–11.6 need an evidence source (tool calls, decisions, outcomes). That is a DSH data question, not a SOUP one.
+- Branch history contains `6528259 Update BACKLOG.md migration status`, which is not part of SOUP feature work. Check its origin before merging.
+
+
+### 9a. Addendum (2026-11-12): convergence analysis and the Studio simulation
+
+- **Control chart (11.5):** centre and limits from the average moving range, rules 1, 2 and 4. Separate from the decision threshold.
+- **Repeated failures:** grouped by normalized failure type, plotted over time, and read as a tool-by-type table. One type on one tool repeating reads as a misconfigured or failing tool. One type across tools reads as a shared cause in the instructions or input. Both are hypotheses.
+- **Elimination (11.6):** candidate explanations are dropped when the data contradicts them. What remains is not verified; a human or agent judges it.
+- **Qualified convergence:** a candidate counts only with independent sources (calculations, tool telemetry). One source is observed, two corroborated, three or more convergent. Every level is a hypothesis to verify.
+- **Studio simulation:** plugins/qdev-soup-drift/notebooks/convergence_simulation.py runs synthetic scenarios. It lives in the Studio container (named by `MARIMO_CONTAINER`) and is synced with scripts/sync-convergence-notebook.sh. The logic is mirrored by hand in Python; no parity test yet compares it with client.js.
+- **Not built:** decision and test-outcome evidence, and the event graph.
+
+
+### 9b. Close-out status (2026-11-12)
+
+- **Installed:** 623fac8 (SOUP 0.8.0) in the main Harness. Config shows the plugin; no SOUP errors in the boot log since the last restart.
+- **Verified in the Web UI:** plugin loads (user report), Settings, Live, Mentor and Details tabs, and the Convergence tab rendering with the chat waiting for data.
+- **Built, not fully verified live:** tool-call evidence, failure-type grouping, the tool-by-type table, the control chart, qualified convergence.
+- **Not built:** decision and test-outcome evidence; the event graph.
+- **Judgment step:** concept blindness, the final reading of what remains, stays with a human or agent.
+- **Open:** the outlier and normalization numbers (threshold maps to 0.5; outlier distance 0.2; cluster gap 0.05) need your confirmation.
+- **Not part of this close-out:** the release and gotchas notebooks, which are out of scope per your instruction.
+
+
+### 9c. Decision log and Appendix 11 status (2026-11-12)
+
+- **Decision evidence (11.4, partial):** the Host records two DSH session events per chat: `plan/mode` (turned on or off) and `hook/result` (decision, exit code, stderr summary). The log is saved with the chat's history row and survives a Host restart. The Convergence view lists the decisions in the selected window. Test-suite result: 93 of 93 pass, including a Host restart test for decisions.
+- **Wording:** the "Evidence available" note and the qualified-convergence note now name decisions as built. Test outcomes are still listed as not built.
+- **Appendix 11 status as of this section:**
+  - Built: magnitude and focus axes, coherence 1 − 2σ, separate raw/statistical/interpretation sections, clickable four-quadrant points, outlier clusters, control chart, tool and decision evidence in the window, qualified convergence with source families.
+  - Partial: boundary proximity and persistence (shown as text, not as quadrant attributes); drill-down for contradictory observations; independence of points derived from one source.
+  - Not built: test-outcome evidence, the event relationship graph, outlier subsets on the quadrant, domain-specific meaning text (11.5 examples), and tests for Appendix 11 Examples A, B and C.
+  - Human or agent step: concept blindness judgment (11.6).
+- **Not yet installed:** the decision-log change is not in the Harness. The installed build is still 623fac8.
+
+### 9d. Appendix 11 gap round (2026-11-12)
+
+- **Test outcomes (11.4):** the Host reads shell-like tool output (bash, shell, exec, run, command, terminal) for pytest-style "N failed" and node-style "# fail N" lines. The result is stored per tool call with its summary line. It is a text pattern, not a test runner's verified result, and the UI says so. Covered by a Host test that also checks a non-shell tool is ignored and the outcome survives a restart.
+- **Boundary proximity and persistence (11.1):** each quadrant point's title now gives its mean, distance from the boundary, coherence and same-quadrant window count.
+- **Contradicting readings (11.4):** the selected window lists readings that go against its pattern: crossings in a low window, readings below the boundary in a high window, and readings more than 2σ from the mean. The list states that all readings come from one KL series.
+- **Evidence relationships (11.4):** a small graph shows the selected window with one spoke per evidence family (calculations, tool calls, decisions, test outcomes). Solid means evidence is present.
+- **Qualified convergence (11.4, 11.5):** a failed test outcome is a candidate. It counts as "test outcomes" plus "calculations" when a reading was elevated during the run.
+- **Boundary-hugging wording (11.5):** a focused, low window just under the boundary that persists for three or more windows gets the sentence from the Appendix 11.5 agent example.
+- **Tests:** 96 of 96 pass (real SOUP worker, local Python with soup_cli on PYTHONPATH).
+
+**Still not built:**
+- Appendix 11.2 Examples A, B and C are not reproduced by the view. The view uses a 5-reading window and the examples use 3 readings, so the examples are checked by formula only, not by a test.
+- Outlier subsets are shown in their own section, not on the quadrant (11.3 allows this).
+- Test outcomes come from text patterns. A verified test-runner source is not built.
+- Domain-specific meaning text (aircraft, creative writing) is not built.
+- Concept blindness judgment (11.6) stays a human or agent step.
+- The decision and outcome changes are not installed in the Harness.
+
+### 9e. Install record (2026-11-12)
+
+- **Installed:** commit ffdad12 (SOUP package version still 0.8.0; no version bump) into the main Harness with `dsh plugin --profile web remove` then `add` by full SHA, then a container restart.
+- **Checked:** the plugin list shows qdev-trajectory-drift-soup@0.8.0. The installed dist and client contain the decision log, test-outcome and drill-down code. No SOUP errors in the container log after the restart.
+- **Not checked:** the Web UI tabs, including the new drill-down sections, were not opened after this install. The Examples A–C check and the domain-meaning text are still open.
+
+### 9f. Focus rule selectable (2026-11-12)
+
+- **Decision:** the owner chose all three focus rules, selectable in the Convergence view. The default is the original rule (coherence ≥ 0.5), so existing readings are not re-labelled unless a different rule is picked.
+- **Rules:** coherence ≥ 0.5 (default); coherence ≥ 0.7; dispersion σ ≤ 0.10. The 0.7 and 0.10 cuts are proposed values; set them in the code if the owner wants others.
+- **Effect:** only the Convergence view's grouping changes. Stored readings, Host behaviour and qualified convergence are unchanged.
+- **Test:** Example B (5-reading version) is labelled focused under the default rule and scattered under the 0.7 and dispersion rules. 100 of 100 tests pass.
+- **Not yet done:** the choice is not stored. Each page load starts on the default.

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { setTimeout as delay } from 'node:timers/promises'
-import { test } from 'node:test'
+import { test as nodeTest } from 'node:test'
 import { Context } from '@deepseek-ai/cordis'
 import Loader from '@deepseek-ai/cordis-plugin-loader'
 import { createAssistantMessage, createUserMessage } from '@deepseek-ai/dsh-llm'
@@ -9,7 +9,10 @@ import { Session } from '@deepseek-ai/dsh-session'
 // Cordis's FiberState is a TypeScript const enum, erased from JavaScript exports.
 const ACTIVE = 2
 const HOST_URL = new URL('../dist/index.js', import.meta.url)
-const PYTHON = 'python3'
+// Configured interpreter only: the worker needs an interpreter that has soup-cli, not whatever python3 is on PATH.
+// There is deliberately no machine-specific fallback; without SOUP_PYTHON every test here is skipped with a visible reason.
+const PYTHON = process.env.SOUP_PYTHON
+const test = (name, fn) => nodeTest(name, { skip: PYTHON ? false : 'SOUP_PYTHON (an interpreter with soup_cli) is not set' }, fn)
 const STATUS_PATH = '/qdev-soup-drift/status'
 const BASELINE = 'keep following the original implementation plan'
 const DRIFT = 'different unrelated output topic'
@@ -33,14 +36,15 @@ async function fixture(t, config = {}, saved = {}) {
   const routes = new Map()
   const questions = []
   const calls = { open: 0, close: 0, register: 0, unregister: 0 }
-  ctx.provide('agents', { list: () => [...live.values()] })
+  ctx.provide('agents', { list: () => [...live.values()], get: (id) => live.get(String(id)) })
   ctx.provide('storageDomain', {
     async open(spec) {
       calls.open += 1
       const records = spec.name === 'qdev_soup_drift_state' ? values : new Map()
       return {
         table(name) {
-          assert.equal(name, 'sessions')
+          // The register domain has its own 'entries' table; every other domain in this file uses 'sessions'.
+          assert.equal(name, spec.name === 'qdev_soup_register' ? 'entries' : 'sessions')
           return {
             entries: () => records.entries(),
             get: id => records.get(id),
@@ -127,7 +131,8 @@ async function fixture(t, config = {}, saved = {}) {
       assert.equal(fiber.config[key], ref, `configuration reference replaced: ${key}`)
     }
     assert.equal((await status()).lifecycle.startedAt, startedAt, 'Host remounted inside the same fiber')
-    assert.equal(calls.open, 2)
+    // Mentor state, session settings, Live & Mentor history, Gentle Mentor context (Feature 4) and the escalation-bypass register (spec B4).
+    assert.equal(calls.open, 5)
     assert.equal(calls.close, 0)
     assert.equal(calls.register, 1)
     assert.equal(calls.unregister, 0)

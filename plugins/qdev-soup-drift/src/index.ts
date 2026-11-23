@@ -4,42 +4,23 @@ import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import type {} from '@deepseek-ai/dsh-host-webserver'
-import { createUserMessage } from '@deepseek-ai/dsh-llm'
 import type { Session, SessionEvent } from '@deepseek-ai/dsh-session'
-import { defineDomain, domainTable } from '@deepseek-ai/dsh-storage-domain'
 import type {} from '@deepseek-ai/dsh-user-questions'
 import s from '@deepseek-ai/schemastery'
-import { z } from 'zod'
-// The official SOUP worker and policy remain ordinary package files beside the compiled entry.
+// The official SOUP worker (soup_worker.py) is the only thing that measures drift. This host feeds it through the
+// monitor and wires every other responsibility (mentor, status, live view, settings, routes) beside it.
 // @ts-expect-error JavaScript runtime has no declaration file.
 import { createPluginRuntime, PRESETS } from '../runtime.mjs'
 // @ts-expect-error JavaScript settings module has no declaration file.
-import { createSessionSettings, SessionSettingsRecord, SessionSettingsError } from '../session-settings.mjs'
-
-const PACKAGE_NAME = 'qdev-trajectory-drift-soup'
-const VERSION = '0.6.3'
-const SOURCE = 'https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift'
-const STATUS_PATH = '/qdev-soup-drift/status'
-const SESSION_SETTINGS_PATH = '/api/qdev-soup/session-settings'
-const SESSION_SETTINGS_DOMAIN = defineDomain({
-  name: 'qdev_soup_session_settings',
-  version: 1,
-  layout: 'per-record' as const,
-  tables: { sessions: domainTable(SessionSettingsRecord) },
-})
-
-type MentorStoredState = { carry: number; decisionPending: boolean }
-const MENTOR_STATE_DOMAIN = defineDomain({
-  name: 'qdev_soup_drift_state',
-  version: 1,
-  layout: 'per-record' as const,
-  tables: {
-    sessions: domainTable<string, MentorStoredState>(z.object({
-      carry: z.number().int().nonnegative(),
-      decisionPending: z.boolean(),
-    })),
-  },
-})
+import { createSessionSettings } from '../session-settings.mjs'
+import { PACKAGE_NAME } from './constants.js'
+import { openTables } from './storage.js'
+import { createLive } from './live.js'
+import { createStatusBoard } from './status-board.js'
+import { createLiveView } from './live-view.js'
+import { createRuntimeFactory } from './mentor-host.js'
+import { registerRoutes } from './routes.js'
+import type { DeliveryRecord, Effective, Intervention, Resolved } from './types.js'
 
 declare module '@deepseek-ai/dsh-llm' {
   interface MessageSourceMap {
@@ -54,7 +35,9 @@ declare module '@deepseek-ai/dsh-llm' {
 }
 
 export const name = PACKAGE_NAME
-export const inject = ['agents', 'storageDomain', 'webServer', 'userQuestions']
+// Only the monitoring core's service is required. Storage, web server and user questions serve the
+// consumers (mentor, register, settings, status routes); when one is absent the monitor still runs.
+export const inject = ['agents']
 
 export const Config = s.object({
   python: s.string().default('python3')
@@ -62,6 +45,7 @@ export const Config = s.object({
   enabled: s.boolean().default(true).volatile().description('Master switch for trajectory observation and intervention.'),
   detectorEnabled: s.boolean().default(true).volatile().description('Run the official SOUP drift detector for observed assistant messages.'),
   reanchoring: s.boolean().default(true).volatile().description('Deliver two Gentle Mentor reminders, then ask the human for clarification.'),
+  escalationBypass: s.boolean().default(false).description('Global escalation bypass (spec B1). When on, a chat may use its own bypass switch: it never escalates, and every 10th drift sends the full message.'),
   preset: s.number().min(0).max(4).step(1).default(2).volatile()
     .description('Five-position SOUP sensitivity selector; position 2 is threshold 0.2.'),
   baselineCount: s.number().min(1).max(100).step(1).default(4).volatile()
@@ -72,103 +56,18 @@ export const Config = s.object({
 
 export type SoupConfig = ReturnType<typeof Config>
 
-type DeliveryRecord = {
-  kind: 'reminder' | 'escalation' | 'clarification'
-  attempt?: number
-  sessionId: string
-  turn: number
-  messageId?: string
-  requestedAt: number
-  deliveredAt?: number
-  eventSeq?: number
-  state: 'pending' | 'delivered' | 'failed' | 'answered'
-  error?: string
-}
-
-type RuntimeStatus = {
-  identity: { name: string; version: string; description: string; source: string }
-  configuration: {
-    enabled: boolean
-    detectorEnabled: boolean
-    reanchoring: boolean
-    preset: number
-    threshold: number
-    baselineCount: number
-    windowCount: number
-    python: string
-  }
-  lifecycle: { state: 'active' | 'disposing'; startedAt: number; liveAgents: number; subscriptions: number }
-  trajectory: {
-    state: 'disabled' | 'waiting' | 'observing'
-    sessionEvents: number
-    assistantMessages: number
-    replayedEvents: number
-    sessionsObserved: number
-    lastEventAt?: number
-    lastEventType?: string
-    lastSessionId?: string
-    baselineSize: number
-    baselineTarget: number
-    windowSize: number
-    windowTarget: number
-  }
-  detector: {
-    state: 'disabled' | 'idle' | 'running' | 'error'
-    evaluations: number
-    drifts: number
-    lastStartedAt?: number
-    lastCompletedAt?: number
-    averageKlDivergence?: number
-    averageThresholdRatio?: number
-    humanSummary: 'Waiting for measurements' | 'Stable' | 'Approaching threshold' | 'Drifting' | 'Severe drift'
-    lastResult?: { sessionId: string; turn: number | null; klDivergence: number; threshold: number; driftDetected: boolean; singleTurn: boolean }
-  }
-  mentor: {
-    state: 'disabled' | 'ready' | 'reminding' | 'escalated' | 'error'
-    reminders: DeliveryRecord[]
-    escalation?: DeliveryRecord
-    lastOutcome?: string
-    driftCount: number
-    carriedDrifts: number
-    resetDecision?: { required: boolean; sessionId: string; turn: number | null }
-  }
-  errors: Array<{ at: number; message: string; phase?: string; sessionId?: string }>
-}
-
-const messageText = (answer: { answers: Array<{ selected: string[]; custom?: string }> }): string => {
-  const item = answer.answers[0]
-  return item?.custom?.trim() || item?.selected?.join(', ') || 'Continue with the original plan.'
-}
-
-const readJsonBody = async (request: AsyncIterable<Uint8Array | string>): Promise<unknown> => {
-  const chunks: Uint8Array[] = []
-  let size = 0
-  for await (const chunk of request) {
-    const bytes = typeof chunk === 'string' ? new TextEncoder().encode(chunk) : chunk
-    size += bytes.byteLength
-    if (size > 4096) throw new Error('Request body exceeds 4096 bytes')
-    chunks.push(bytes)
-  }
-  const body = new Uint8Array(size)
-  let offset = 0
-  for (const chunk of chunks) {
-    body.set(chunk, offset)
-    offset += chunk.byteLength
-  }
-  return JSON.parse(new TextDecoder().decode(body))
-}
-
 export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig): Promise<void> {
-  const mentorDomain = await ctx.storageDomain.open(MENTOR_STATE_DOMAIN)
-  ctx.effect(() => () => mentorDomain.close())
-  const mentorTable = mentorDomain.table('sessions')
-  const initialMentorState = Object.fromEntries(mentorTable.entries())
-  const settingsDomain = await ctx.storageDomain.open(SESSION_SETTINGS_DOMAIN)
-  ctx.effect(() => () => settingsDomain.close())
-  const readConfiguration = () => ({
+  // Consumer services are optional. A missing one is recorded in status.lifecycle.degraded and its
+  // consumer falls back to volatile (in-memory) state; the SOUP monitor itself never depends on them.
+  const degraded: string[] = []
+  const noteMissing = (service: string): void => { if (!degraded.includes(service)) degraded.push(service) }
+  const { mentorTable, registerTable, liveTable, contextTable, settingsTable, initialMentorState, initialLive, mentorContexts } = await openTables(ctx, noteMissing)
+  const readConfiguration = (): Resolved => ({
     // The configured interpreter is authoritative; python3 is the portable default.
 
     python: config.python ?? 'python3',
+    // Global escalation bypass (spec B1): a plain, persisted setting, read as a value rather than volatile.
+    escalationBypass: config.escalationBypass === true,
     enabled: config.enabled.get() ?? true,
     detectorEnabled: config.detectorEnabled.get() ?? true,
     reanchoring: config.reanchoring.get() ?? true,
@@ -182,274 +81,26 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
   const pendingMessages = new Map<string, DeliveryRecord>()
   const runtimes = new Map<string, ReturnType<typeof createPluginRuntime>>()
   const runningDetectors = new Set<string>()
-  const interventions = new Map<string, { controller: AbortController; record: DeliveryRecord }>()
+  const interventions = new Map<string, Intervention>()
   let applySessionSettings: (id: string) => void = () => {}
-  const status: RuntimeStatus = {
-    identity: {
-      name: PACKAGE_NAME,
-      version: VERSION,
-      description: 'SOUP-powered trajectory drift detection and Gentle Mentor reanchoring for DeepSeek Harness sessions.',
-      source: SOURCE,
-    },
-    configuration: { ...resolved, threshold: PRESETS[resolved.preset] },
-    lifecycle: { state: 'active', startedAt: Date.now(), liveAgents: 0, subscriptions: 4 },
-    trajectory: {
-      state: resolved.enabled ? 'waiting' : 'disabled',
-      sessionEvents: 0,
-      assistantMessages: 0,
-      replayedEvents: 0,
-      sessionsObserved: 0,
-      baselineSize: 0,
-      baselineTarget: resolved.baselineCount,
-      windowSize: 0,
-      windowTarget: resolved.windowCount,
-    },
-    detector: {
-      state: !resolved.enabled || !resolved.detectorEnabled ? 'disabled' : 'idle',
-      evaluations: 0,
-      drifts: 0,
-      humanSummary: 'Waiting for measurements',
-    },
-    mentor: {
-      state: !resolved.enabled || !resolved.reanchoring ? 'disabled' : 'ready',
-      reminders: [],
-      driftCount: 0,
-      carriedDrifts: 0,
-    },
-    errors: [],
-  }
 
   const sessionSettings = createSessionSettings({
-    table: settingsDomain.table('sessions'),
+    table: settingsTable,
     getGlobal: () => resolved,
     onCommitted: (id: string) => {
-      if (status.lifecycle.state === 'active') applySessionSettings(id)
+      if (board.status.lifecycle.state === 'active') applySessionSettings(id)
     },
   })
-  const effectiveSettings = (id: string): Omit<RuntimeStatus['configuration'], 'threshold'> => sessionSettings.read(id).effective
-  const abortIntervention = (id: string): void => {
-    const pending = interventions.get(id)
-    if (!pending) return
-    pending.controller.abort()
-    pending.record.state = 'failed'
-    pending.record.error = 'Cancelled by SOUP settings or session disposal'
-    interventions.delete(id)
-  }
-  const refreshOperationalState = (): void => {
-    const configurations = [...agents.keys()].map(effectiveSettings)
-    const observing = resolved.enabled && (!configurations.length || configurations.some((value) => value.enabled))
-    const detecting = observing && (configurations.length ? configurations.some((value) => value.enabled && value.detectorEnabled) : resolved.detectorEnabled)
-    const mentoring = observing && (configurations.length ? configurations.some((value) => value.enabled && value.reanchoring) : resolved.reanchoring)
-    if (!observing) status.trajectory.state = 'disabled'
-    else if (status.trajectory.state === 'disabled') status.trajectory.state = 'waiting'
-    status.detector.state = !detecting ? 'disabled' : runningDetectors.size ? 'running' : 'idle'
-    status.mentor.state = !mentoring ? 'disabled' : status.mentor.resetDecision?.required ? 'escalated' : 'ready'
-  }
+  const effectiveSettings = (id: string): Effective => sessionSettings.read(id).effective
 
-  const recordError = (error: unknown, details: { phase?: string; sessionId?: string } = {}): void => {
-    const message = error instanceof Error ? error.message : String(error)
-    status.errors.unshift({ at: Date.now(), message, ...details })
-    status.errors.splice(8)
-    if (status.detector.state !== 'disabled') status.detector.state = 'error'
-    ctx.logger.error('SOUP drift error phase=%s session=%s: %s', details.phase ?? 'runtime', details.sessionId ?? '-', message)
-  }
-
-  let klTotal = 0
-  let ratioTotal = 0
-  const updateDriftSummary = (): void => {
-    // Different chats may have different thresholds; average each recorded sample's ratio.
-    const ratio = status.detector.evaluations ? ratioTotal / status.detector.evaluations : undefined
-    status.detector.averageThresholdRatio = ratio
-    status.detector.humanSummary = ratio === undefined
-      ? 'Waiting for measurements'
-      : ratio < 0.5 ? 'Stable' : ratio < 1 ? 'Approaching threshold' : ratio < 2 ? 'Drifting' : 'Severe drift'
-  }
-  const mentorSnapshots = new Map<string, {
-    sessionId: string
-    turn: number | null
-    driftCount: number
-    carry: number
-    decisionPending: boolean
-    escalated: boolean
-  }>()
-  const updateMentorStatus = (snapshot: {
-    sessionId: string
-    turn: number | null
-    driftCount: number
-    carry: number
-    decisionPending: boolean
-    escalated: boolean
-  }, persist = true): void => {
-    mentorSnapshots.set(snapshot.sessionId, snapshot)
-    status.mentor.driftCount = snapshot.driftCount
-    status.mentor.carriedDrifts = snapshot.carry
-    const pending = [...mentorSnapshots.values()].find((item) => item.decisionPending)
-    if (pending) {
-      status.mentor.resetDecision = { required: true, sessionId: pending.sessionId, turn: pending.turn }
-    } else {
-      delete status.mentor.resetDecision
-      if (status.mentor.state === 'escalated') status.mentor.state = 'ready'
-    }
-    if (persist) {
-      void mentorTable.put(snapshot.sessionId, {
-        carry: snapshot.carry,
-        decisionPending: snapshot.decisionPending,
-      }).catch((error: unknown) => recordError(error, { phase: 'mentor-state-persist', sessionId: snapshot.sessionId }))
-    }
-  }
-
-  const deliver = (agent: Agent, record: DeliveryRecord, text: string, form: 'reminder' | 'escalation' | 'clarification', report?: { kl_divergence?: number; threshold?: number }): void => {
-    const effective = effectiveSettings(String(agent.id))
-    if (!effective.enabled || !effective.reanchoring) {
-      record.state = 'failed'
-      record.error = 'Intervention disabled for this chat'
-      return
-    }
-    const message = createUserMessage({
-      content: [{ type: 'text', text }],
-      source: {
-        kind: 'qdev-trajectory-drift-soup' as const,
-        form,
-        ...(record.attempt === undefined ? {} : { attempt: record.attempt }),
-        ...(typeof report?.kl_divergence === 'number' ? { kl: report.kl_divergence } : {}),
-        ...(typeof report?.threshold === 'number' ? { threshold: report.threshold } : {}),
-      },
-    })
-    record.messageId = String(message.id)
-    pendingMessages.set(record.messageId, record)
-    agent.inject(message)
-  }
-
-  const getRuntime = (id: string): ReturnType<typeof createPluginRuntime> => {
-    const existing = runtimes.get(id)
-    if (existing) return existing
-    const runtime = createPluginRuntime({
-    ...effectiveSettings(id),
-    initialMentorState: { [id]: initialMentorState[id] },
-    onMentorStateChange: updateMentorStatus,
-    inject: ({ id, turn, attempt, reminder, report }: { id: string; turn: number; attempt: number; reminder: string; report: { kl_divergence: number; threshold: number } }) => {
-      const record: DeliveryRecord = { kind: 'reminder', attempt, sessionId: id, turn, requestedAt: Date.now(), state: 'pending' }
-      status.mentor.reminders.push(record)
-      status.mentor.reminders.splice(0, Math.max(0, status.mentor.reminders.length - 6))
-      status.mentor.state = 'reminding'
-      const agent = agents.get(id)
-      if (!agent) {
-        record.state = 'failed'
-        record.error = 'No live receiving agent'
-        status.mentor.state = 'error'
-        ctx.logger.warn('SOUP reminder could not be injected: no agent session=%s', id)
-        return
-      }
-      deliver(agent, record, reminder, 'reminder', report)
-    },
-    escalate: ({ id, turn, question, report }: { id: string; turn: number; question: string; report: { kl_divergence: number; threshold: number } }) => {
-      // Never replace a live controller without aborting it: a late answer from an
-      // older question must not reset the current guard or inject clarification.
-      abortIntervention(id)
-      const record: DeliveryRecord = { kind: 'escalation', sessionId: id, turn, requestedAt: Date.now(), state: 'pending' }
-      status.mentor.escalation = record
-      status.mentor.state = 'escalated'
-      const agent = agents.get(id)
-      if (!agent) {
-        record.state = 'failed'
-        record.error = 'No live receiving agent'
-        status.mentor.state = 'error'
-        return
-      }
-      deliver(agent, record, `SOUP measured repeated trajectory drift and paused automatic reanchoring. ${question}`, 'escalation', report)
-      const controller = new AbortController()
-      interventions.set(id, { controller, record })
-      const signal = controller.signal
-      void ctx.userQuestions.ask({
-        agent,
-        signal,
-        questions: [{
-          id: 'trajectory-clarification',
-          header: 'Trajectory drift',
-          question,
-          detail: `SOUP detected a third qualifying drift window (KL ${report.kl_divergence.toFixed(4)}, threshold ${report.threshold}). Your response will be delivered to the agent.`,
-        }, {
-          id: 'reset-drift-count',
-          header: 'Drift accountability',
-          question: 'Reset the accumulated qualifying-drift count?',
-          detail: 'Reset starts the reminder policy from zero. Keep carries the three strikes forward, so the next qualifying drift escalates immediately.',
-          options: [
-            { label: 'Yes — reset to 0', description: 'Give the corrected trajectory a fresh two-reminder allowance.' },
-            { label: 'No — carry 3 forward', description: 'Keep accountability across turns; the next qualifying drift escalates.' },
-          ],
-        }],
-      }).then((answer) => {
-        const effective = effectiveSettings(id)
-        if (signal.aborted || !effective.enabled || !effective.reanchoring) return
-        record.state = 'answered'
-        const resetAnswer = answer.answers.find((item) => item.id === 'reset-drift-count')
-        if (resetAnswer) runtime.decideDriftReset(id, resetAnswer.selected.includes('Yes — reset to 0'))
-        const clarification: DeliveryRecord = { kind: 'clarification', sessionId: id, turn, requestedAt: Date.now(), state: 'pending' }
-        deliver(agent, clarification, `Human clarification after SOUP escalation:\n\n${messageText(answer)}`, 'clarification')
-        status.mentor.lastOutcome = resetAnswer?.selected.includes('Yes — reset to 0')
-          ? 'Human clarification delivered; drift count reset to 0.'
-          : 'Human clarification delivered; three qualifying drifts carried forward.'
-      }).catch((error: unknown) => {
-        if (signal.aborted) return
-        record.state = 'failed'
-        record.error = error instanceof Error ? error.message : String(error)
-        status.mentor.state = 'error'
-        recordError(error, { phase: 'human-escalation', sessionId: id })
-      }).finally(() => {
-        if (interventions.get(id)?.controller === controller) interventions.delete(id)
-      })
-    },
-    notify: ({ sessionId, turn, singleTurn, result }: { sessionId: string; turn: number | null; singleTurn: boolean; result: { kl_divergence: number; threshold: number } }) => {
-      status.detector.drifts += 1
-      ctx.logger.warn('SOUP DRIFT session=%s turn=%s KL=%s threshold=%s singleTurn=%s', sessionId, turn ?? '-', result.kl_divergence, result.threshold, singleTurn)
-    },
-    reportMissing: ({ id }: { id: string }) => {
-      status.mentor.lastOutcome = 'Original intent unavailable; reminder suppressed.'
-      ctx.logger.warn('SOUP original intent unavailable session=%s', id)
-    },
-    reportStale: ({ id, turn, reportTurn }: { id: string; turn: number; reportTurn: number | null }) => {
-      status.mentor.lastOutcome = 'Stale cross-turn drift result suppressed.'
-      ctx.logger.info('SOUP stale drift suppressed session=%s currentTurn=%s reportTurn=%s', id, turn, reportTurn ?? '-')
-    },
-    onObservation: ({ sessionId, baselineSize, baselineTarget, windowSize, windowTarget }: { sessionId: string; baselineSize: number; baselineTarget: number; windowSize: number; windowTarget: number }) => {
-      status.trajectory.state = 'observing'
-      status.trajectory.lastSessionId = sessionId
-      status.trajectory.baselineSize = baselineSize
-      status.trajectory.baselineTarget = baselineTarget
-      status.trajectory.windowSize = windowSize
-      status.trajectory.windowTarget = windowTarget
-    },
-    onEvaluationStart: ({ sessionId }: { sessionId: string }) => {
-      runningDetectors.add(sessionId)
-      status.detector.state = 'running'
-      status.detector.lastStartedAt = Date.now()
-    },
-    onEvaluation: ({ sessionId, turn, singleTurn, result }: { sessionId: string; turn: number | null; singleTurn: boolean; result: { kl_divergence: number; threshold: number; drift_detected: boolean } }) => {
-      runningDetectors.delete(sessionId)
-      status.detector.state = runningDetectors.size ? 'running' : 'idle'
-      status.detector.evaluations += 1
-      ratioTotal += result.kl_divergence / result.threshold
-      klTotal += result.kl_divergence
-      status.detector.averageKlDivergence = klTotal / status.detector.evaluations
-      updateDriftSummary()
-      status.detector.lastCompletedAt = Date.now()
-      status.detector.lastResult = {
-        sessionId,
-        turn,
-        singleTurn,
-        klDivergence: result.kl_divergence,
-        threshold: result.threshold,
-        driftDetected: result.drift_detected,
-      }
-    },
-    onError: (error: unknown, details: { phase?: string; sessionId?: string } = {}) => {
-      if (details.sessionId) runningDetectors.delete(details.sessionId)
-      recordError(error, details)
-    },
-    })
-    runtimes.set(id, runtime)
-    return runtime
-  }
+  // Consumers, each in its own module: per-chat records, the status board, the Live & Mentor read model,
+  // and the Gentle Mentor runtime factory.
+  const board = createStatusBoard({ ctx, resolved, degraded, agents, runningDetectors, interventions, effectiveSettings, mentorTable })
+  const { status, abortIntervention, refreshOperationalState, updateMentorStatus, mentorSnapshots } = board
+  const live = createLive({ initialLive, liveTable, recordError: board.recordError })
+  const { sessionLive, ensureSessionLive, persistLive, observeTool, observeDecision } = live
+  const sessionLiveView = createLiveView({ resolved, agents, live, initialLive, initialMentorState, runtimes, mentorSnapshots, interventions, mentorContexts, registerTable, effectiveSettings })
+  const getRuntime = createRuntimeFactory({ ctx, resolved, agents, runtimes, pendingMessages, interventions, runningDetectors, effectiveSettings, initialMentorState, mentorContexts, registerTable, live, board, noteMissing })
 
   const replayAgent = (agent: Agent, beforeSeq?: number): void => {
     const id = String(agent.id)
@@ -473,7 +124,7 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
   const activateSession = (id: string, event: SessionEvent): ReturnType<typeof createPluginRuntime> | undefined => {
     const existing = runtimes.get(id)
     if (existing) return existing
-    const agent = agents.get(id) ?? ctx.agents.list().find((item) => String(item.id) === id)
+    const agent = agents.get(id) ?? ctx.agents.get(id as Session['id'])
     if (!agent) return undefined
     attachAgent(agent)
     replayAgent(agent, Number(event.seq))
@@ -491,6 +142,13 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
     const reset = existing ? existing.configure(operational) : Boolean(agent && next.enabled)
     if (reset) {
       runningDetectors.delete(id)
+      const live = sessionLive.get(id)
+      if (live) {
+        live.baselineSize = 0
+        live.windowSize = 0
+        live.pending = false
+        delete live.lastError
+      }
       if (status.trajectory.lastSessionId === id) {
         status.trajectory.baselineSize = 0
         status.trajectory.windowSize = 0
@@ -523,6 +181,8 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
       abortIntervention(id)
       const runtime = runtimes.get(id)
       if (runtime) runtime.configure({ ...effectiveSettings(id), enabled: false })
+      const live = sessionLive.get(id)
+      if (live) live.pending = false
       runningDetectors.delete(id)
       refreshOperationalState()
     }
@@ -532,6 +192,11 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
     if (!resolved.enabled) return
     const sessionId = String(session.id)
     if (!effectiveSettings(sessionId).enabled) return
+    const live = ensureSessionLive(sessionId)
+    live.sessionEvents += 1
+    live.lastEventAt = event.time
+    live.lastEventType = event.type
+    if (event.type === 'assistant/message') live.assistantMessages += 1
     seenSessions.add(sessionId)
     status.trajectory.sessionEvents += 1
     status.trajectory.sessionsObserved = seenSessions.size
@@ -547,137 +212,31 @@ export async function apply(ctx: Context, config: SoupConfig = {} as SoupConfig)
         record.deliveredAt = event.time
         record.eventSeq = Number(event.seq)
         pendingMessages.delete(String(inserted.id))
+        const deliveredLive = sessionLive.get(record.sessionId)
+        if (deliveredLive) {
+          deliveredLive.mentorActivity = 'ready'
+          // Delivered reminders, escalations and clarifications appear as markers on the chart.
+          deliveredLive.markers.push({ at: Date.now(), kind: record.kind })
+          if (deliveredLive.markers.length > 50) deliveredLive.markers.splice(0, deliveredLive.markers.length - 50)
+          persistLive(record.sessionId, deliveredLive)
+        }
         status.mentor.lastOutcome = `${record.kind} delivered in native agent inbox event ${String(event.seq)}.`
       }
     }
+    if (event.type === 'tool/call' || event.type === 'tool/result') observeTool(sessionId, event)
+    const type: string = event.type
+    if (type === 'plan/mode' || type === 'hook/result') observeDecision(sessionId, event)
     const runtime = runtimes.get(sessionId) ?? activateSession(sessionId, event)
     runtime?.observe(sessionId, event)
   })
 
-  // Native Connection owns authentication, trust and owner-only admission for this
-  // exact Fetch route. Optional UI services must never gate the monitoring core.
-  ctx.inject(['connection', 'sessionPersistence'], (uiCtx) => {
-    const reply = (data: unknown, code = 200): Response => Response.json(data, {
-      status: code, headers: { 'cache-control': 'no-store' },
-    })
-    const view = (id: string) => ({ ...sessionSettings.read(id), writable: resolved.enabled })
-    const exists = async (id: string): Promise<boolean> => agents.has(id)
-      || ctx.agents.list().some((agent) => String(agent.id) === id)
-      || Boolean(await uiCtx.sessionPersistence.stat(id as Session['id']))
-    uiCtx.connection.fetch.register({
-      path: SESSION_SETTINGS_PATH,
-      methods: ['GET', 'POST'],
-      requestBody: 'buffered',
-      async fetch(request) {
-        if (status.lifecycle.state !== 'active') return reply({ ok: false, error: 'plugin-disposed' }, 503)
-        try {
-          if (request.method === 'GET') {
-            const ids = new URL(request.url).searchParams.getAll('sessionId')
-            if (ids.length !== 1) return reply({ ok: false, error: 'invalid-settings', message: 'One session identifier is required' }, 400)
-            const settings = view(ids[0])
-            if (!await exists(ids[0])) return reply({ ok: false, error: 'session-not-found' }, 404)
-            return reply({ ok: true, settings })
-          }
-          if (request.headers.get('x-qdev-soup-action') !== 'session-settings') {
-            return reply({ ok: false, error: 'action-header-required' }, 403)
-          }
-          if (!request.headers.get('content-type')?.startsWith('application/json')) {
-            return reply({ ok: false, error: 'json-required' }, 415)
-          }
-          if (!resolved.enabled) return reply({ ok: false, error: 'soup-disabled', message: 'Enable the global SOUP master before editing chat settings' }, 409)
-          const text = await request.text()
-          if (Buffer.byteLength(text) > 16_384) return reply({ ok: false, error: 'request-too-large' }, 413)
-          let body: unknown
-          try { body = JSON.parse(text) } catch { return reply({ ok: false, error: 'invalid-settings', message: 'Invalid JSON' }, 400) }
-          if (!body || typeof body !== 'object' || Array.isArray(body)) return reply({ ok: false, error: 'invalid-settings' }, 400)
-          const { sessionId, ...command } = body as Record<string, unknown>
-          if (typeof sessionId !== 'string') return reply({ ok: false, error: 'invalid-settings' }, 400)
-          view(sessionId)
-          if (!await exists(sessionId)) return reply({ ok: false, error: 'session-not-found' }, 404)
-          if (!resolved.enabled) return reply({ ok: false, error: 'soup-disabled' }, 409)
-          const settings = await sessionSettings.mutate(sessionId, command)
-          return reply({ ok: true, settings: { ...settings, writable: resolved.enabled } })
-        } catch (error) {
-          if (error instanceof SessionSettingsError) {
-            const failure = error as Error & { code: string; settings?: Record<string, unknown> }
-            return reply({
-              ok: false, error: failure.code, message: failure.message,
-              ...(failure.settings ? { settings: { ...failure.settings, writable: resolved.enabled } } : {}),
-            }, failure.code === 'revision-conflict' ? 409 : failure.code === 'storage-failed' ? 503 : 400)
-          }
-          return reply({ ok: false, error: 'settings-unavailable', message: 'Unable to read or apply chat settings' }, 500)
-        }
-      },
-    })
-  })
-
-  ctx.effect(() => ctx.webServer.register({
-    kind: 'exact',
-    path: STATUS_PATH,
-    handler: async (request, response) => {
-      response.setHeader('content-type', 'application/json; charset=utf-8')
-      response.setHeader('cache-control', 'no-store')
-      if (request.method === 'GET') {
-        response.statusCode = 200
-        response.end(JSON.stringify(status))
-        return
-      }
-      if (request.method === 'POST' && !resolved.enabled) {
-        response.statusCode = 409
-        response.end(JSON.stringify({ ok: false, error: 'soup-disabled' }))
-        return
-      }
-      if (request.method !== 'POST') {
-        response.statusCode = 405
-        response.setHeader('allow', 'GET, POST')
-        response.end(JSON.stringify({ ok: false, error: 'method-not-allowed' }))
-        return
-      }
-      const rejection = ctx.get('connection')?.requestRejection(request)
-      if (rejection !== undefined) {
-        response.statusCode = rejection
-        response.end(JSON.stringify({ ok: false, error: rejection === 401 ? 'unauthorized' : 'forbidden' }))
-        return
-      }
-      if (request.headers['x-qdev-soup-action'] !== 'reset-drift-count') {
-        response.statusCode = 403
-        response.end(JSON.stringify({ ok: false, error: 'action-header-required' }))
-        return
-      }
-      try {
-        const body = await readJsonBody(request)
-        if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error('Expected a JSON object')
-        const action = Reflect.get(body, 'action')
-        const reset = Reflect.get(body, 'reset')
-        const requestedSession = Reflect.get(body, 'sessionId')
-        if (action !== 'reset-drift-count' || typeof reset !== 'boolean') throw new Error('Invalid reset action')
-        const sessionId = typeof requestedSession === 'string' && requestedSession
-          ? requestedSession
-          : status.mentor.resetDecision?.sessionId
-        if (!sessionId) throw new Error('No session is awaiting a reset decision')
-        const result = runtimes.get(sessionId)?.decideDriftReset(sessionId, reset) ?? { accepted: false, reason: 'no-live-runtime' }
-        if (result.accepted) {
-          const pending = interventions.get(sessionId)
-          if (pending) {
-            pending.controller.abort()
-            pending.record.state = 'answered'
-            delete pending.record.error
-            interventions.delete(sessionId)
-          }
-        }
-        response.statusCode = result.accepted ? 200 : 409
-        response.end(JSON.stringify({ ok: result.accepted, result }))
-      } catch (error) {
-        response.statusCode = 400
-        response.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }))
-      }
-    },
-  }))
+  registerRoutes({ ctx, status, resolved, agents, runtimes, interventions, sessionSettings, sessionLiveView, mentorContexts, contextTable, noteMissing })
   ctx.effect(() => async () => {
     status.lifecycle.state = 'disposing'
     for (const id of interventions.keys()) abortIntervention(id)
     for (const runtime of runtimes.values()) runtime.dispose()
     runtimes.clear()
+    sessionLive.clear()
     runningDetectors.clear()
     agents.clear()
     pendingMessages.clear()

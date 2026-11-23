@@ -10,6 +10,13 @@
 - **Drift visualization:** threshold graph and intervention/event history per chat.
 - **Persistent native settings:** retain effective configuration across reopen and restart.
 
+Status (this branch): the per-chat Live & Mentor view (card, KL chart, reset decision), persisted history, and editable Gentle Mentor context are built. Current version: package.json.
+
+## Open items
+
+- **Done in this branch:** the Live & Mentor history (last 50 calculations and markers) is stored per chat in the `qdev_soup_live_history` storage domain and restored after a Host restart. The reset footnote is removed.
+- **Parked:** OTEL telemetry. SOUP should emit telemetry through a DSH method, not through a plugin read path. Not started.
+
 ## Future feature — separate scope
 
 - **Original SOUP application visualization:** expose the real upstream SOUP application's capabilities without duplicating its engine.

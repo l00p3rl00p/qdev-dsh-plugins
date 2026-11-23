@@ -7,6 +7,7 @@ window.__ModuleLoader__.load({
 
     const ENTRY = 'qdev-trajectory-drift-soup';
     const THRESHOLDS = [0.05, 0.1, 0.2, 0.3, 0.4];
+    const SESSION_STATUS_PATH = '/api/qdev-soup/session-status';
     const ROW_KEYS = [`${ENTRY}#${ENTRY}`];
 
     const styles = {
@@ -54,6 +55,12 @@ window.__ModuleLoader__.load({
       sourceBadge: { display: 'inline-flex', alignItems: 'center', minHeight: 17, padding: '0 6px', borderRadius: 999, background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-secondary)', fontSize: 10, lineHeight: '16px', fontWeight: 650, whiteSpace: 'nowrap' },
       inlineHint: { color: 'var(--dsw-alias-label-secondary)', fontSize: 10, lineHeight: '16px', whiteSpace: 'nowrap' },
       compactButton: { padding: '4px 7px', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 6, background: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)', font: 'inherit', fontSize: 11, lineHeight: '16px', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' },
+      liveCard: { gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 11px', border: '1px solid var(--dsw-alias-border-l2)', borderRadius: 8, background: 'var(--dsw-alias-bg-layer-1)' },
+      liveHeader: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' },
+      liveMetrics: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: 5 },
+      liveMetric: { minWidth: 0, padding: '5px 7px', borderRadius: 6, background: 'var(--dsw-alias-bg-layer-2)' },
+      liveValue: { display: 'block', overflow: 'hidden', color: 'var(--dsw-alias-label-primary)', fontSize: 13, lineHeight: '18px', fontWeight: 680, textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
+      liveMeter: { height: 3, marginTop: 4, overflow: 'hidden', borderRadius: 999, background: 'var(--dsw-alias-bg-base)' },
     };
 
     function SoupIcon({ size = 34 }) {
@@ -129,157 +136,6 @@ window.__ModuleLoader__.load({
         onChange: event => setDraft(event.target.value), onBlur: commit,
         onKeyDown: event => { if (event.key === 'Enter') event.currentTarget.blur(); },
       }));
-    }
-
-    function useLiveStatus() {
-      const [status, setStatus] = useState(null);
-      const [error, setError] = useState('');
-      const [refreshKey, setRefreshKey] = useState(0);
-      useEffect(() => {
-        let active = true;
-        let controller;
-        async function refresh() {
-          controller?.abort();
-          controller = new AbortController();
-          try {
-            const response = await fetch('/qdev-soup-drift/status', {
-              signal: controller.signal, credentials: 'same-origin', headers: { accept: 'application/json' },
-            });
-            if (!response.ok) throw new Error(`Status endpoint returned ${response.status}`);
-            const next = await response.json();
-            if (active) { setStatus(next); setError(''); }
-          } catch (cause) {
-            if (active && cause?.name !== 'AbortError') setError(cause instanceof Error ? cause.message : String(cause));
-          }
-        }
-        refresh();
-        const timer = window.setInterval(refresh, 4000);
-        return () => { active = false; window.clearInterval(timer); controller?.abort(); };
-      }, [refreshKey]);
-      return { status, error, refresh: () => setRefreshKey(value => value + 1) };
-    }
-
-    function Metric({ label, value }) {
-      return h('div', { style: styles.metric },
-        h('span', { style: styles.hint }, label),
-        h('strong', { style: styles.metricValue }, String(value)),
-      );
-    }
-
-    function formatTime(value) {
-      if (typeof value !== 'number') return 'Waiting for session activity';
-      return new Date(value).toLocaleString();
-    }
-
-    function DeliveryEvidence({ record }) {
-      const details = [
-        record.state,
-        record.attempt == null ? null : `attempt ${record.attempt}`,
-        record.eventSeq == null ? null : `inbox event ${record.eventSeq}`,
-        record.messageId ? `message ${record.messageId}` : null,
-      ].filter(Boolean).join(' · ');
-      return h('li', { style: styles.body },
-        h('strong', { style: styles.label }, record.kind),
-        ` — ${details}`,
-        record.error ? h('span', { style: styles.error }, ` — ${record.error}`) : null,
-      );
-    }
-
-    function StatusPanel() {
-      const { status, error, refresh } = useLiveStatus();
-      const [decisionWorking, setDecisionWorking] = useState('');
-      const [decisionError, setDecisionError] = useState('');
-      const trajectory = status?.trajectory ?? {};
-      const detector = status?.detector ?? {};
-      const mentor = status?.mentor ?? {};
-      const deliveries = [...(mentor.reminders ?? []), ...(mentor.escalation ? [mentor.escalation] : [])];
-      const delivered = deliveries.filter(item => item.state === 'delivered' || item.state === 'answered').length;
-      const result = detector.lastResult;
-      const kl = typeof result?.klDivergence === 'number' ? result.klDivergence.toFixed(4) : '—';
-      const average = typeof detector.averageKlDivergence === 'number' ? detector.averageKlDivergence.toFixed(4) : '—';
-      const ratio = typeof detector.averageThresholdRatio === 'number' ? detector.averageThresholdRatio : null;
-      const ratioLabel = ratio == null ? 'Waiting for enough output' : `${ratio.toFixed(1)}× the active threshold`;
-      const summary = detector.humanSummary ?? 'Waiting for measurements';
-      const meterColor = summary === 'Stable'
-        ? 'var(--dsw-alias-state-success-primary)'
-        : summary === 'Approaching threshold'
-          ? 'var(--dsw-alias-state-warn-primary)'
-          : 'var(--dsw-alias-state-error-primary)';
-      const hostErrors = Array.isArray(status?.errors) ? status.errors : [];
-      const resetDecision = mentor.resetDecision?.required ? mentor.resetDecision : null;
-      const resetDisabled = Boolean(decisionWorking) || status?.configuration?.enabled === false;
-
-      async function chooseReset(reset) {
-        if (!resetDecision || resetDisabled) return;
-        setDecisionWorking(reset ? 'reset' : 'carry');
-        setDecisionError('');
-        try {
-          const response = await fetch('/qdev-soup-drift/status', {
-            method: 'POST', credentials: 'same-origin',
-            headers: { 'content-type': 'application/json', 'x-qdev-soup-action': 'reset-drift-count' },
-            body: JSON.stringify({ action: 'reset-drift-count', sessionId: resetDecision.sessionId, reset }),
-          });
-          const payload = await response.json();
-          if (!response.ok || !payload.ok) throw new Error(payload.error || payload.result?.reason || `Reset action returned ${response.status}`);
-          refresh();
-        } catch (cause) {
-          setDecisionError(cause instanceof Error ? cause.message : String(cause));
-        } finally {
-          setDecisionWorking('');
-        }
-      }
-
-      return h('section', { style: styles.card, 'aria-labelledby': 'soup-live-status' },
-        h('p', { style: styles.sectionLabel }, 'Trajectory monitor'),
-        h('h3', { id: 'soup-live-status', style: styles.title }, 'What SOUP sees right now'),
-        h('div', { style: styles.hero },
-          h('div', { style: styles.copy },
-            h('strong', { style: { ...styles.metricValue, marginTop: 0, fontSize: 24 } }, summary),
-            h('p', { style: styles.body }, ratio == null
-              ? 'SOUP is collecting a stable baseline before it compares live output.'
-              : `Average KL divergence is ${average}, which is ${ratioLabel}. KL is the difference between recent output and the baseline: 0 means closely aligned, larger values mean more change, and a value above the threshold counts as drift.`),
-            h('div', { style: styles.meter, role: 'meter', 'aria-label': 'Average drift versus threshold', 'aria-valuemin': 0, 'aria-valuemax': 100, 'aria-valuenow': ratio == null ? 0 : Math.min(100, Math.round(ratio * 100)) },
-              h('span', { style: { display: 'block', width: `${ratio == null ? 0 : Math.min(100, ratio * 100)}%`, height: '100%', background: meterColor, transition: 'width 180ms ease' } }),
-            ),
-          ),
-          h('div', { style: styles.copy },
-            h('span', { style: styles.sectionLabel }, 'Accountability'),
-            h('strong', { style: { ...styles.metricValue, marginTop: 0 } }, `${mentor.driftCount ?? 0} qualifying drift${mentor.driftCount === 1 ? '' : 's'}`),
-            h('span', { style: styles.hint }, `${mentor.carriedDrifts ?? 0} carried across turns · two reminders, then escalation`),
-          ),
-        ),
-        resetDecision ? h('div', { style: { ...styles.hero, borderColor: 'var(--dsw-alias-state-warn-primary)' } },
-          h('div', { style: styles.copy },
-            h('strong', { style: styles.label }, 'Reset the drift count?'),
-            h('p', { style: styles.body }, 'Reset gives the corrected trajectory a fresh allowance. Keep carries three strikes forward, so the next qualifying drift escalates immediately.'),
-          ),
-          h('div', { style: styles.actionRow, role: 'group', 'aria-label': 'Reset accumulated drift count' },
-            h('button', { type: 'button', style: { ...styles.button, borderColor: 'var(--dsw-alias-state-success-primary)' }, disabled: resetDisabled, onClick: () => chooseReset(true) }, decisionWorking === 'reset' ? 'Resetting…' : 'Yes — reset to 0'),
-            h('button', { type: 'button', style: { ...styles.button, borderColor: 'var(--dsw-alias-state-warn-primary)' }, disabled: resetDisabled, onClick: () => chooseReset(false) }, decisionWorking === 'carry' ? 'Saving…' : 'No — carry 3 forward'),
-          ),
-          decisionError ? h('p', { role: 'alert', style: styles.error }, decisionError) : null,
-        ) : null,
-        h('div', { style: styles.statusGrid },
-          h(Metric, { label: 'Session events', value: trajectory.sessionEvents ?? '—' }),
-          h(Metric, { label: 'Assistant messages', value: trajectory.assistantMessages ?? '—' }),
-          h(Metric, { label: 'SOUP calculations', value: detector.evaluations ?? '—' }),
-          h(Metric, { label: 'Average KL', value: average }),
-          h(Metric, { label: 'Latest KL', value: kl }),
-          h(Metric, { label: 'Inbox deliveries', value: status ? delivered : '—' }),
-        ),
-        h('p', { style: styles.hint }, `Trajectory ${trajectory.state ?? 'unavailable'} · Detector ${detector.state ?? 'unavailable'} · Mentor ${mentor.state ?? 'unavailable'} · Latest activity ${formatTime(trajectory.lastEventAt)}`),
-        result ? h('p', { style: styles.body }, `Latest calculation: ${result.driftDetected ? 'drift detected' : 'within threshold'} at KL ${kl} / ${Number(result.threshold).toFixed(2)}${result.singleTurn ? ' in one turn' : ' across turns'}.`) : null,
-        mentor.lastOutcome ? h('p', { role: 'status', style: styles.body }, mentor.lastOutcome) : null,
-        deliveries.length ? h('div', null,
-          h('h4', { style: styles.title }, 'Delivery evidence'),
-          h('ul', { style: { margin: '8px 0 0', paddingLeft: 20 } }, deliveries.map((record, index) => h(DeliveryEvidence, { key: `${record.kind}-${record.requestedAt}-${index}`, record }))),
-        ) : h('p', { style: styles.hint }, 'No mentor delivery has been requested in this runtime.'),
-        error ? h('p', { role: 'alert', style: styles.error }, `Live status unavailable: ${error}`) : null,
-        hostErrors.length ? h('div', { role: 'alert' },
-          h('h4', { style: styles.title }, 'Recent host errors'),
-          h('ul', { style: { margin: '8px 0 0', paddingLeft: 20 } }, hostErrors.map((item, index) => h('li', { key: `${item.at}-${index}`, style: styles.error }, `${formatTime(item.at)} · ${item.phase ?? 'runtime'} · ${item.message}`))),
-        ) : null,
-      );
     }
 
     function usePageForm(source) {
@@ -368,7 +224,7 @@ window.__ModuleLoader__.load({
             ),
           ) : null,
           h('div', { style: styles.copy },
-            h('code', { style: styles.code }, 'qdev-trajectory-drift-soup · version 0.6.3'),
+            h('code', { style: styles.code }, 'qdev-trajectory-drift-soup'),
             h('a', {
               href: 'https://github.com/l00p3rl00p/qdev-dsh-plugins/tree/main/plugins/qdev-soup-drift',
               target: '_blank', rel: 'noreferrer',
@@ -410,7 +266,6 @@ window.__ModuleLoader__.load({
             h(Toggle, { label: 'Enable Gentle Mentor reanchoring', checked: reanchoring, disabled: !writable || !enabled || !detectorEnabled, onChange: next => set(['reanchoring'], next) }),
           ),
         ),
-        h(StatusPanel),
       );
     }
 
@@ -422,8 +277,151 @@ window.__ModuleLoader__.load({
       ['preset', 'Sensitivity', 'preset'],
       ['baselineCount', 'Baseline messages', 'number'],
       ['windowCount', 'Comparison window', 'number'],
-      ['python', 'Python interpreter', 'text'],
     ];
+
+    function useSessionLiveStatus(sessionId) {
+      const [live, setLive] = useState(null);
+      const [error, setError] = useState('');
+      const [refreshKey, setRefreshKey] = useState(0);
+      useEffect(() => {
+        if (!sessionId) { setLive(null); setError(''); return undefined; }
+        let active = true;
+        let controller;
+        let generation = 0;
+        setLive(null);
+        async function refresh() {
+          controller?.abort();
+          const requestController = new AbortController();
+          controller = requestController;
+          const requestGeneration = ++generation;
+          const current = () => active && requestGeneration === generation && controller === requestController && !requestController.signal.aborted;
+          try {
+            const response = await fetch(`${SESSION_STATUS_PATH}?sessionId=${encodeURIComponent(sessionId)}`, {
+              credentials: 'same-origin', signal: requestController.signal, headers: { accept: 'application/json' },
+            });
+            const payload = await response.json();
+            if (!current()) return;
+            if (!response.ok || !payload.ok) throw new Error(payload.message || payload.error || `Session status returned ${response.status}`);
+            if (payload.live?.sessionId !== sessionId) throw new Error('Live status response belongs to a different chat.');
+            setLive(payload.live); setError('');
+          } catch (cause) {
+            if (current() && cause?.name !== 'AbortError') setError(cause instanceof Error ? cause.message : String(cause));
+          }
+        }
+        void refresh();
+        const timer = window.setInterval(refresh, 5000);
+        return () => { active = false; window.clearInterval(timer); controller?.abort(); };
+      }, [sessionId, refreshKey]);
+      return { live, error, refresh: () => setRefreshKey(value => value + 1) };
+    }
+
+    // Human-readable timestamp for the per-chat card; waits until the chat has activity.
+    function formatTime(value) {
+      if (typeof value !== 'number') return 'Waiting for session activity';
+      return new Date(value).toLocaleString();
+    }
+
+    function SessionLiveMetric({ label, value, current, target }) {
+      const percent = Number.isFinite(current) && Number.isFinite(target) && target > 0
+        ? Math.min(100, Math.round((current / target) * 100)) : null;
+      return h('div', { style: styles.liveMetric },
+        h('span', { style: styles.inlineHint }, label),
+        h('strong', { style: styles.liveValue }, value),
+        percent == null ? null : h('div', { style: styles.liveMeter, role: 'progressbar', 'aria-label': label, 'aria-valuemin': 0, 'aria-valuemax': target, 'aria-valuenow': Math.min(current, target) },
+          h('span', { style: { display: 'block', width: `${percent}%`, height: '100%', background: 'var(--dsw-alias-brand-primary)' } }),
+        ),
+      );
+    }
+
+    // Human decision after escalation: reset the qualifying-drift count or carry three strikes forward.
+    // Posts to the Host's reset-drift-count action, scoped to this chat's sessionId.
+    function ResetDecision({ sessionId, disabled, onChanged }) {
+      const [working, setWorking] = useState('');
+      const [error, setError] = useState('');
+      async function choose(reset) {
+        if (working || disabled) return;
+        setWorking(reset ? 'reset' : 'carry');
+        setError('');
+        try {
+          const response = await fetch('/qdev-soup-drift/status', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'content-type': 'application/json', 'x-qdev-soup-action': 'reset-drift-count' },
+            body: JSON.stringify({ action: 'reset-drift-count', sessionId, reset }),
+          });
+          const payload = await response.json();
+          if (!response.ok || !payload.ok) throw new Error(payload.error || payload.result?.reason || `Reset action returned ${response.status}`);
+          onChanged?.();
+        } catch (cause) {
+          setError(cause instanceof Error ? cause.message : String(cause));
+        } finally {
+          setWorking('');
+        }
+      }
+      return h('div', { style: { ...styles.hero, borderColor: 'var(--dsw-alias-state-warn-primary)' } },
+        h('div', { style: styles.copy },
+          h('strong', { style: styles.label }, 'Reset the drift count?'),
+          h('p', { style: styles.body }, 'Reset gives the corrected trajectory a fresh allowance. Keep carries three strikes forward, so the next qualifying drift escalates immediately.'),
+        ),
+        h('div', { style: styles.actionRow, role: 'group', 'aria-label': 'Reset accumulated drift count' },
+          h('button', { type: 'button', style: { ...styles.button, borderColor: 'var(--dsw-alias-state-success-primary)' }, disabled: Boolean(working) || disabled, onClick: () => choose(true) }, 'Yes — reset to 0'),
+          h('button', { type: 'button', style: { ...styles.button, borderColor: 'var(--dsw-alias-state-warn-primary)' }, disabled: Boolean(working) || disabled, onClick: () => choose(false) }, 'No — carry 3 forward'),
+        ),
+        error ? h('p', { role: 'alert', style: styles.error }, error) : null,
+      );
+    }
+
+    function SessionLiveCard({ live, error, onChanged }) {
+      if (!live) return h('section', { style: styles.liveCard, 'aria-label': 'Live trajectory status' },
+        h('div', { style: styles.liveHeader },
+          h('h3', { style: styles.compactCardTitle }, 'Live trajectory'),
+          h('span', { style: styles.sourceBadge }, error ? 'Unavailable' : 'Loading…'),
+        ),
+        error ? h('p', { role: 'alert', style: styles.error }, error) : null,
+      );
+      const trajectory = live.trajectory ?? {};
+      const detector = live.detector ?? {};
+      const mentor = live.mentor ?? {};
+      const effective = live.effective ?? {};
+      const result = detector.lastResult;
+      const summary = trajectory.state === 'disabled' ? 'Monitoring off'
+        : trajectory.state === 'detached' ? 'Chat detached'
+          : detector.state === 'disabled' ? 'Detector off'
+            : detector.state === 'running' ? 'Evaluating'
+            : detector.state === 'error' ? 'Detector error'
+              : result?.driftDetected ? 'Drift detected'
+                : result ? 'Within threshold'
+                  : trajectory.baselineSize < effective.baselineTarget ? 'Building baseline' : 'Monitoring';
+      const stateColor = summary === 'Within threshold' || summary === 'Monitoring'
+        ? 'var(--dsw-alias-state-success-primary)'
+        : summary === 'Drift detected' || summary === 'Detector error'
+          ? 'var(--dsw-alias-state-error-primary)'
+          : 'var(--dsw-alias-state-warn-primary)';
+      const kl = typeof result?.klDivergence === 'number'
+        ? `${result.klDivergence.toFixed(4)} / ${Number(result.threshold).toFixed(2)}`
+        : `— / ${Number(effective.threshold).toFixed(2)}`;
+      return h('section', { style: styles.liveCard, 'aria-label': 'Live trajectory status' },
+        h('div', { style: styles.liveHeader },
+          h('div', { style: styles.compactMeta },
+            h('h3', { style: { ...styles.compactCardTitle, padding: 0 } }, 'Live trajectory'),
+            h('strong', { role: 'status', 'aria-live': 'polite', style: { ...styles.label, fontSize: 13, color: stateColor } }, summary),
+          ),
+          h('span', { style: styles.sourceBadge }, live.attached ? 'Live chat' : 'Stored chat'),
+        ),
+        h('div', { style: styles.liveMetrics },
+          h(SessionLiveMetric, { label: 'Reference', value: `${trajectory.baselineSize ?? 0} / ${effective.baselineTarget ?? '—'}`, current: trajectory.baselineSize, target: effective.baselineTarget }),
+          h(SessionLiveMetric, { label: 'Live window', value: `${trajectory.windowSize ?? 0} / ${effective.windowTarget ?? '—'}`, current: trajectory.windowSize, target: effective.windowTarget }),
+          h(SessionLiveMetric, { label: 'Latest KL / threshold', value: kl }),
+          h(SessionLiveMetric, { label: 'Mentor', value: `${mentor.driftCount ?? 0} drift${mentor.driftCount === 1 ? '' : 's'} · ${mentor.state ?? 'unavailable'}` }),
+        ),
+        h('span', { style: { ...styles.inlineHint, whiteSpace: 'normal' } }, `${detector.evaluations ?? 0} calculation${detector.evaluations === 1 ? '' : 's'} · ${detector.drifts ?? 0} qualifying drift${detector.drifts === 1 ? '' : 's'} · latest activity ${formatTime(trajectory.lastEventAt)}`),
+        h('span', { style: { ...styles.inlineHint, whiteSpace: 'normal' } }, `Accountability: ${mentor.driftCount ?? 0} qualifying drift${mentor.driftCount === 1 ? '' : 's'} · ${mentor.carry ?? 0} carried across turns · two reminders, then escalation`),
+        h('p', { style: styles.hint }, 'KL is the difference between recent output and the baseline: 0 means closely aligned, larger values mean more change, and a value above the threshold counts as drift.'),
+        detector.averageKlDivergence == null ? null : h('span', { style: { ...styles.inlineHint, whiteSpace: 'normal' } }, `Average KL ${detector.averageKlDivergence.toFixed(4)} · ${detector.averageThresholdRatio.toFixed(1)}× the active threshold`),
+        mentor.decisionPending ? h(ResetDecision, { sessionId: live.sessionId, disabled: live.effective?.enabled === false, onChanged }) : null,
+        result ? h('span', { style: { ...styles.inlineHint, whiteSpace: 'normal' } }, `Latest calculation: ${result.driftDetected ? 'drift detected' : 'within threshold'} at KL ${kl}`) : null,
+        error ? h('p', { role: 'alert', style: styles.error }, error) : null,
+      );
+    }
 
     function SessionField({ field, label, type, settings, disabled, mutate }) {
       const overridden = Object.prototype.hasOwnProperty.call(settings.overrides, field);
@@ -475,11 +473,787 @@ window.__ModuleLoader__.load({
       );
     }
 
-    function SessionSettingsView({ sessionId }) {
+    // Live & Mentor: a read-only per-chat glance. It polls only while this view is mounted (every 5 s).
+    // part: 'live' shows the trajectory view; 'mentor' shows the Gentle Mentor prompt. Both poll only while mounted.
+    function LiveMentorView({ sessionId, part }) {
+      const sessionLive = useSessionLiveStatus(sessionId);
+      const live = sessionLive.live;
+      const history = live?.detector?.history ?? [];
+      const markers = live?.detector?.markers ?? [];
+      const latest = history.length ? history[history.length - 1].kl : null;
+      const threshold = live?.effective?.threshold;
+      return h('div', { style: styles.sessionBody },
+        h('div', { style: styles.liveHeader },
+          h('h3', { style: styles.compactCardTitle }, part === 'mentor' ? 'Mentor' : 'Live'),
+          live?.version ? h('span', { style: styles.sourceBadge }, `version ${live.version}`) : null,
+          h('button', { type: 'button', style: styles.compactButton, onClick: () => sessionLive.refresh() }, 'Refresh'),
+        ),
+        part === 'live' ? h(SessionLiveCard, { live, error: sessionLive.error, onChanged: sessionLive.refresh }) : null,
+        part === 'live' ? h('div', { style: styles.liveMetrics },
+          h(SessionLiveMetric, { label: 'Current drift score (KL)', value: latest == null ? '—' : latest.toFixed(4) }),
+          h(SessionLiveMetric, { label: 'Effective threshold', value: threshold == null ? '—' : Number(threshold).toFixed(2) }),
+          h(SessionLiveMetric, { label: 'Average KL', value: typeof live?.detector?.averageKlDivergence === 'number' ? live.detector.averageKlDivergence.toFixed(4) : '—' }),
+          h(SessionLiveMetric, { label: 'Session events', value: live?.trajectory?.sessionEvents ?? 0 }),
+          h(SessionLiveMetric, { label: 'Assistant messages', value: live?.trajectory?.assistantMessages ?? 0 }),
+          h(SessionLiveMetric, { label: 'Mentor deliveries', value: markers.filter((marker) => marker.kind !== 'crossing').length }),
+        ) : null,
+        part === 'live' ? (history.length ? h(KlChart, { history, markers, threshold }) : h('p', { role: 'status', style: styles.hint }, 'Waiting for measurements')) : null,
+        part === 'mentor' ? h(GentleMentorSection, { sessionId, live, onSaved: sessionLive.refresh }) : null,
+      );
+    }
+
+    // Inline SVG only. Colours are the existing DSH alias theme tokens used elsewhere in this file.
+    function KlChart({ history, markers, threshold }) {
+      const W = 300, H = 120, P = 8;
+      const t = Number(threshold) || 0;
+      const max = Math.max(t, ...history.map(p => p.kl), 0.0001) * 1.1;
+      const x = i => P + (history.length < 2 ? 0 : (i * (W - 2 * P)) / (history.length - 1));
+      const y = v => H - P - (v / max) * (H - 2 * P);
+      const points = history.map((p, i) => `${x(i).toFixed(1)},${y(p.kl).toFixed(1)}`).join(' ');
+      // A marker belongs to the last calculation at or before its time.
+      const marks = markers.map(m => {
+        let index = -1;
+        history.forEach((p, i) => { if (p.at <= m.at) index = i; });
+        return index < 0 ? null : { x: x(index), y: y(history[index].kl), kind: m.kind };
+      }).filter(Boolean);
+      return h('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'KL over recent calculations against the threshold', style: { width: '100%', height: 'auto', display: 'block' } },
+        h('line', { x1: P, x2: W - P, y1: y(t), y2: y(t), stroke: 'var(--dsw-alias-state-warn-primary)', strokeDasharray: '4 3' }),
+        h('polyline', { points, fill: 'none', stroke: 'var(--dsw-alias-brand-primary)', strokeWidth: 2 }),
+        ...marks.map((m, i) => h('circle', { key: i, cx: m.x.toFixed(1), cy: m.y.toFixed(1), r: 3, fill: m.kind === 'crossing' ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warn-primary)' })),
+      );
+    }
+
+    // Feature 4: the Gentle Mentor prompt for this chat. Each field saves on an explicit click, and a failed save keeps the typed text.
+    const MENTOR_ACTION_PATH = '/qdev-soup-drift/status';
+    const FIRST_DRIFT_SENTENCE = 'I think what you are doing is interesting; however, I would like to return focus to the current plan.';
+
+    async function saveMentorField(sessionId, field, value) {
+      const response = await fetch(MENTOR_ACTION_PATH, {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'content-type': 'application/json', 'x-qdev-soup-action': 'session-mentor' },
+        body: JSON.stringify({ sessionId, field, value }),
+      });
+      const payload = await response.json();
+      if (!response.ok || !payload.ok) throw new Error(payload.message || payload.error || `Save returned ${response.status}`);
+    }
+
+    function MentorTextField({ label, value, customized, disabled, onSave }) {
+      const [draft, setDraft] = useState(value);
+      const [working, setWorking] = useState(false);
+      const [error, setError] = useState('');
+      // The parent keys this field on its saved value, so a saved change remounts it and shows the server text.
+      async function save(next) {
+        setWorking(true); setError('');
+        try { await onSave(next); if (next === null) setDraft(value); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setWorking(false); }
+      }
+      return h('div', { style: { display: 'grid', gap: 6, marginTop: 8 } },
+        h('div', { style: styles.liveHeader }, h('span', { style: styles.label }, label), h('span', { style: styles.sourceBadge }, customized ? 'chat' : 'default')),
+        h('textarea', { 'aria-label': label, value: draft, rows: 3, disabled: disabled || working, onChange: (event) => setDraft(event.target.value), style: { width: '100%', boxSizing: 'border-box', minHeight: 64 } }),
+        h('div', { style: styles.actionRow },
+          h('button', { type: 'button', style: styles.compactButton, disabled: disabled || working || draft === value, onClick: () => save(draft) }, 'Save'),
+          h('button', { type: 'button', style: styles.compactButton, disabled: disabled || working || !customized, onClick: () => save(null) }, 'Use default'),
+        ),
+        error ? h('p', { role: 'alert', style: styles.error }, error) : null,
+      );
+    }
+
+    function MentorAmendments({ items, customized, disabled, onSave }) {
+      const [list, setList] = useState(items);
+      const [entry, setEntry] = useState('');
+      const [working, setWorking] = useState(false);
+      const [error, setError] = useState('');
+      // The parent keys this list on its saved content, so a saved change remounts it and shows the server list.
+      async function save(next) {
+        setWorking(true); setError('');
+        try { await onSave(next); if (next === null) setList([]); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setWorking(false); }
+      }
+      return h('div', { style: { display: 'grid', gap: 6, marginTop: 8 } },
+        h('div', { style: styles.liveHeader }, h('span', { style: styles.label }, 'Plan amendments'), h('span', { style: styles.sourceBadge }, customized ? 'chat' : 'default')),
+        list.length ? h('ol', { style: { margin: 0, paddingLeft: 20 } }, list.map((item, index) => h('li', { key: `${index}-${item}`, style: styles.body },
+          item, ' ', h('button', { type: 'button', style: styles.compactButton, disabled: disabled || working, onClick: () => setList(list.filter((_, i) => i !== index)) }, 'Remove'),
+        ))) : h('p', { style: styles.hint }, 'No amendments.'),
+        h('div', { style: styles.actionRow },
+          h('textarea', { 'aria-label': 'New plan amendment', rows: 3, value: entry, disabled: disabled || working, onChange: (event) => setEntry(event.target.value), style: { flex: 1, boxSizing: 'border-box' } }),
+          h('button', { type: 'button', style: styles.compactButton, disabled: disabled || working || !entry.trim() || list.length >= 50, onClick: () => { setList([...list, entry.trim()]); setEntry(''); } }, 'Add'),
+        ),
+        h('div', { style: styles.actionRow },
+          h('button', { type: 'button', style: styles.compactButton, disabled: disabled || working, onClick: () => save(list) }, 'Save amendments'),
+          h('button', { type: 'button', style: styles.compactButton, disabled: disabled || working || !customized, onClick: () => save(null) }, 'Use default'),
+        ),
+        error ? h('p', { role: 'alert', style: styles.error }, error) : null,
+      );
+    }
+
+    function GentleMentorSection({ sessionId, live, onSaved }) {
+      const context = live?.mentor?.context ?? { message: '', plan: '', amendments: [], customized: {} };
+      const original = live?.mentor?.originalPlan || 'Waiting for the first user message.';
+      const disabled = live?.effective?.enabled === false;
+      const save = (field) => async (value) => { await saveMentorField(sessionId, field, value); onSaved?.(); };
+      return h('section', { style: styles.compactCard, 'aria-label': 'Gentle Mentor' },
+        h('h3', { style: styles.compactCardTitle }, 'Gentle Mentor'),
+        disabled ? h('p', { role: 'status', style: styles.hint }, 'Monitoring is OFF; Gentle Mentor edits are read-only.') : null,
+        h('p', { style: styles.hint }, `First drift says: "${FIRST_DRIFT_SENTENCE}"`),
+        h('p', { style: styles.body }, `Original plan (read-only): ${original}`),
+        h(MentorTextField, { key: `message-${context.message ?? ''}`, label: 'Mentor message', value: context.message ?? '', customized: Boolean(context.customized?.message), disabled, onSave: save('message') }),
+        h(MentorTextField, { key: `plan-${context.plan ?? ''}`, label: 'Current plan', value: context.plan ?? original, customized: Boolean(context.customized?.plan), disabled, onSave: save('plan') }),
+        h(MentorAmendments, { key: `amend-${JSON.stringify(context.amendments ?? [])}`, items: context.amendments ?? [], customized: Boolean(context.customized?.amendments), disabled, onSave: save('amendments') }),
+        // Spec B1, B6: per-chat escalation bypass. It works only when the global switch is on.
+        h(EscalationBypassControl, { key: `bypass-${context.escalationBypass ? 1 : 0}-${context.escalationBypassGlobal ? 1 : 0}`, on: Boolean(context.escalationBypass), globalOn: Boolean(context.escalationBypassGlobal), disabled, onSave: save('escalationBypass') }),
+        h(DriftRegister, { entries: live?.mentor?.context?.register ?? [] }),
+      );
+    }
+
+    // Spec B4-B5: the register of drifts for this chat. Read-only, kept for the whole mission, no clear control.
+    function DriftRegister({ entries }) {
+      return h('div', { style: { display: 'grid', gap: 6, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--dsw-alias-border-l1)' } },
+        h('span', { style: styles.label }, `Drift register (${entries.length} recorded)`),
+        entries.length
+          ? h('ol', { style: { margin: 0, paddingLeft: 20, display: 'grid', gap: 4, maxHeight: 200, overflowY: 'auto' } }, entries.map((entry, i) => h('li', { key: `${entry.drift}-${entry.at}-${i}`, style: { ...styles.body, fontSize: 12 } },
+            `Drift ${entry.drift} · turn ${entry.turn} · sent ${entry.sent === 'full' ? 'full plan message' : 'first sentence'} · ${new Date(entry.at).toLocaleTimeString()}`,
+          )))
+          : h('p', { style: styles.hint }, 'No drifts recorded yet.'),
+      );
+    }
+
+    // Spec B1: a per-chat switch. It is inert while the global switch is off, and says so.
+    function EscalationBypassControl({ on, globalOn, disabled, onSave }) {
+      const [working, setWorking] = useState(false);
+      const [error, setError] = useState('');
+      const locked = disabled || working || !globalOn;
+      async function toggle(next) {
+        setWorking(true); setError('');
+        try { await onSave(next); } catch (cause) { setError(cause instanceof Error ? cause.message : String(cause)); } finally { setWorking(false); }
+      }
+      return h('div', { style: { display: 'grid', gap: 6, marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--dsw-alias-border-l1)' } },
+        h('label', { style: { display: 'flex', alignItems: 'center', gap: 8, color: 'var(--dsw-alias-label-primary)', fontSize: 13 } },
+          h('input', { type: 'checkbox', checked: on, disabled: locked, onChange: (event) => toggle(event.target.checked) }),
+          'Escalation bypass for this chat',
+        ),
+        h('p', { style: styles.hint }, globalOn
+          ? 'On: this chat never escalates to a human. Drifts send the first sentence, and every 10th drift sends the full plan.'
+          : 'Off globally. Turn on the global escalation bypass in SOUP settings to use this switch.'),
+        error ? h('p', { role: 'alert', style: styles.error }, error) : null,
+      );
+    }
+
+    // Details: its own tab. Telemetry for this chat, read-only, polling only while open.
+    // Register tab (spec B4-B5): the whole drift history for this chat, read-only, never cleared.
+    function RegisterView({ sessionId }) {
+      const sessionLive = useSessionLiveStatus(sessionId);
+      const entries = sessionLive.live?.mentor?.context?.register ?? [];
+      return h('div', { style: styles.sessionBody },
+        h('div', { style: styles.liveHeader },
+          h('h3', { style: { ...styles.compactCardTitle, padding: 0 } }, 'Register'),
+          h('button', { type: 'button', style: styles.compactButton, onClick: () => sessionLive.refresh() }, 'Refresh'),
+        ),
+        h('p', { style: styles.hint }, 'Every drift in this chat, and what the model received. Kept for the whole mission; there is no clear control.'),
+        sessionLive.error ? h('p', { role: 'alert', style: styles.error }, sessionLive.error) : null,
+        h(DriftRegister, { entries }),
+      );
+    }
+
+    function SoupDetailsView({ sessionId }) {
+      const sessionLive = useSessionLiveStatus(sessionId);
+      const live = sessionLive.live;
+      const detector = live?.detector ?? {};
+      const trajectory = live?.trajectory ?? {};
+      const mentor = live?.mentor ?? {};
+      const threshold = Number(live?.effective?.threshold);
+      const history = detector.history ?? [];
+      const markers = detector.markers ?? [];
+      const interventions = markers.filter((marker) => marker.kind !== 'crossing');
+      const average = typeof detector.averageKlDivergence === 'number' ? detector.averageKlDivergence : null;
+      const ratio = average != null && threshold > 0 ? average / threshold : null;
+      const meterColor = ratio == null ? 'var(--dsw-alias-border-l2)' : ratio < 1 ? 'var(--dsw-alias-state-success-primary)' : 'var(--dsw-alias-state-error-primary)';
+      const tile = (label, value, tone) => h('div', { key: label, style: { ...styles.liveMetric, borderLeft: `3px solid ${tone ?? 'var(--dsw-alias-border-l2)'}` } },
+        h('span', { style: styles.inlineHint }, label),
+        h('strong', { style: styles.liveValue }, String(value)),
+      );
+      const cell = { padding: '4px 6px', textAlign: 'left', borderTop: '1px solid var(--dsw-alias-border-l2)' };
+      const recent = history.slice(-10).reverse();
+      return h('div', { style: styles.sessionBody },
+        h('div', { style: styles.liveHeader },
+          h('h3', { style: styles.compactCardTitle }, 'Details'),
+          h('button', { type: 'button', style: styles.compactButton, onClick: () => sessionLive.refresh() }, 'Refresh'),
+        ),
+        sessionLive.error ? h('p', { role: 'alert', style: styles.error }, sessionLive.error) : null,
+        h('div', { style: styles.liveMetrics },
+          tile('Calculations', detector.evaluations ?? 0),
+          tile('Qualifying drifts', detector.drifts ?? 0, detector.drifts ? 'var(--dsw-alias-state-error-primary)' : null),
+          tile('Carried drifts', mentor.carry ?? 0),
+          tile('Session events', trajectory.sessionEvents ?? 0),
+          tile('Assistant messages', trajectory.assistantMessages ?? 0),
+          tile('Mentor deliveries', interventions.length),
+        ),
+        h('section', { style: styles.compactCard, 'aria-label': 'Average KL against threshold' },
+          h('span', { style: styles.label }, 'Average KL against threshold'),
+          h('div', { role: 'meter', 'aria-label': 'Average KL against threshold', 'aria-valuemin': 0, 'aria-valuemax': 200, 'aria-valuenow': ratio == null ? 0 : Math.min(200, Math.round(ratio * 100)), style: { height: 8, borderRadius: 4, overflow: 'hidden', background: 'var(--dsw-alias-border-l2)', marginTop: 6 } },
+            h('span', { style: { display: 'block', height: '100%', width: `${ratio == null ? 0 : Math.min(100, ratio * 100)}%`, background: meterColor } }),
+          ),
+          h('span', { style: styles.hint }, average == null ? 'Waiting for measurements' : `${average.toFixed(4)} KL · ${ratio.toFixed(2)}× the threshold of ${threshold.toFixed(2)}`),
+        ),
+        history.length ? h(KlChart, { history, markers, threshold }) : null,
+        h('section', { style: styles.compactCard, 'aria-label': 'Recent calculations' },
+          h('span', { style: styles.label }, 'Recent calculations'),
+          recent.length ? h('table', { style: { width: '100%', borderCollapse: 'collapse', marginTop: 6 } },
+            h('thead', null, h('tr', null, ['Time', 'KL', 'Threshold', 'Result'].map((title) => h('th', { key: title, style: { ...cell, borderTop: 'none', ...styles.inlineHint } }, title)))),
+            h('tbody', null, recent.map((point, index) => h('tr', { key: `${point.at}-${index}` },
+              h('td', { style: cell }, new Date(point.at).toLocaleTimeString()),
+              h('td', { style: cell }, point.kl.toFixed(4)),
+              h('td', { style: cell }, point.threshold.toFixed(2)),
+              h('td', { style: cell }, h('span', { style: { ...styles.sourceBadge, color: point.drift ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-success-primary)' } }, point.drift ? 'drift' : 'within')),
+            )))) : h('p', { style: styles.hint }, 'No calculations yet.'),
+        ),
+        h('section', { style: styles.compactCard, 'aria-label': 'Interventions' },
+          h('span', { style: styles.label }, 'Interventions'),
+          interventions.length ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, interventions.slice(-10).reverse().map((marker, index) => h('li', { key: `${marker.at}-${index}`, style: styles.body },
+            h('strong', null, marker.kind), ` · ${new Date(marker.at).toLocaleTimeString()}`,
+          ))) : h('p', { style: styles.hint }, 'No interventions yet.'),
+        ),
+        h('section', { style: styles.compactCard, 'aria-label': 'Current state' },
+          h('span', { style: styles.label }, 'Current state'),
+          h('p', { style: styles.body }, `Trajectory ${trajectory.state ?? '—'} · Detector ${detector.state ?? '—'} · Mentor ${mentor.state ?? '—'}`),
+          h('p', { style: styles.hint }, `Plan amendments: ${(live?.mentor?.context?.amendments ?? []).length || 'none'}`),
+        ),
+      );
+    }
+
+    // Convergence: a SOUP tab. A four-quadrant view of rolling windows over this chat's calculations.
+    // Navigational and read-only: quadrants describe the pattern, they do not decide an event.
+    // Measurements are normalized so the decision threshold sits at 0.5 (the appendix boundary): r = min(1, KL / (2 * threshold)).
+    // Tool evidence (Appendix 11.4): tool calls and results recorded by the Host from DSH's own session events.
+    // The client only reads the list the Host sends with the live status.
+    function ToolEvidenceSection({ tools, chosen }) {
+      const from = chosen.slice[0].at;
+      const to = chosen.slice[chosen.slice.length - 1].at;
+      const inWindow = (tools ?? []).filter((tool) => tool.startedAt >= from && tool.startedAt <= to);
+      return h('section', { style: styles.compactCard, 'aria-label': 'Tool calls in this window' },
+        h('span', { style: styles.label }, 'Tool calls in this window'),
+        inWindow.length
+          ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, inWindow.map((tool, i) => h('li', { key: `${tool.callId}-${i}`, style: styles.body },
+            h('strong', null, tool.name), ` · ${new Date(tool.startedAt).toLocaleTimeString()}`,
+            tool.error ? h('span', { style: styles.error }, ' · failed') : null,
+          )))
+          : h('p', { style: styles.hint }, 'No tool calls in this window.'),
+      );
+    }
+
+    // Drill-down helpers (Appendix 11.1, 11.4, 11.5). All read the same single KL series, so none of them is an independent source by itself.
+    function pointTitle(point) {
+      return `Window ending ${new Date(point.at).toLocaleTimeString()}: mean ${point.mean.toFixed(3)} · distance from boundary ${point.distance.toFixed(3)} · coherence ${point.coherence.toFixed(3)} · same quadrant for ${point.persistence} window${point.persistence === 1 ? '' : 's'}`;
+    }
+    // Readings that go against the window's pattern: crossings in a low window, readings below the boundary in a high window, and readings more than two sigma from the mean.
+    function ContradictionSection({ chosen }) {
+      const rows = [];
+      chosen.slice.forEach((point, i) => {
+        const value = chosen.values[i];
+        if (chosen.magnitude === 'LOW' && point.drift) rows.push({ at: point.at, value, reason: 'crossed the boundary in a low window' });
+        else if (chosen.magnitude === 'HIGH' && !point.drift) rows.push({ at: point.at, value, reason: 'below the boundary in a high window' });
+        else if (chosen.sigma > 0 && Math.abs(value - chosen.mean) > 2 * chosen.sigma) rows.push({ at: point.at, value, reason: 'more than 2σ from the window mean' });
+      });
+      return h('section', { style: styles.compactCard, 'aria-label': 'Readings that contradict this window' },
+        h('span', { style: styles.label }, 'Readings that contradict this window'),
+        rows.length
+          ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, rows.map((row, i) => h('li', { key: `${row.at}-${i}`, style: styles.body },
+            h('strong', null, row.value.toFixed(3)), ` · ${new Date(row.at).toLocaleTimeString()} · ${row.reason}`,
+          )))
+          : h('p', { style: styles.hint }, 'None in this window.'),
+        h('p', { style: styles.hint }, 'These readings come from one KL series. They describe the same source, not independent evidence.'),
+      );
+    }
+    // Test outcomes from shell tool output text (Appendix 11.4). Read from text, not from a test runner, so each one stays a hypothesis.
+    function TestOutcomeSection({ tools, chosen }) {
+      const from = chosen.slice[0].at;
+      const to = chosen.slice[chosen.slice.length - 1].at;
+      const inWindow = (tools ?? []).filter((tool) => tool.outcome && tool.startedAt >= from && tool.startedAt <= to);
+      return h('section', { style: styles.compactCard, 'aria-label': 'Test outcomes in this window' },
+        h('span', { style: styles.label }, 'Test outcomes in this window'),
+        inWindow.length
+          ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, inWindow.map((tool, i) => h('li', { key: `${tool.callId}-${i}`, style: styles.body },
+            h('strong', null, tool.outcome.result), ` · ${tool.name} · ${new Date(tool.startedAt).toLocaleTimeString()}`,
+            h('div', { style: styles.hint }, tool.outcome.summary),
+          )))
+          : h('p', { style: styles.hint }, 'No test outcomes in this window.'),
+        h('p', { style: styles.hint }, 'Read from shell tool output text, not from a test runner. Treat as a hypothesis until verified.'),
+      );
+    }
+    // Evidence relationships for the selected window (Appendix 11.4): one centre, one spoke per evidence family. Solid spoke = evidence present.
+    function RelationshipGraph({ chosen, tools, decisions }) {
+      const from = chosen.slice[0].at;
+      const to = chosen.slice[chosen.slice.length - 1].at;
+      const inRange = (at) => at >= from && at <= to;
+      const toolsIn = (tools ?? []).filter((tool) => inRange(tool.startedAt));
+      const failedIn = toolsIn.filter((tool) => tool.error).length;
+      const decisionsIn = (decisions ?? []).filter((d) => inRange(d.at)).length;
+      const testsIn = toolsIn.filter((tool) => tool.outcome);
+      const testsFailed = testsIn.filter((tool) => tool.outcome.result === 'failed').length;
+      const spokes = [
+        { label: `Calculations ${chosen.slice.length}`, count: chosen.slice.length, x: 60, y: 40 },
+        { label: `Tool calls ${toolsIn.length} (${failedIn} failed)`, count: toolsIn.length, x: 240, y: 40 },
+        { label: `Decisions ${decisionsIn}`, count: decisionsIn, x: 60, y: 150 },
+        { label: `Test outcomes ${testsIn.length} (${testsFailed} failed)`, count: testsIn.length, x: 240, y: 150 },
+      ];
+      return h('section', { style: styles.compactCard, 'aria-label': 'Evidence relationships' },
+        h('span', { style: styles.label }, 'Evidence relationships'),
+        h('svg', { viewBox: '0 0 300 190', role: 'img', 'aria-label': 'Evidence relationships for the selected window', style: { width: '100%', height: 'auto', display: 'block', marginTop: 6 } },
+          spokes.map((spoke) => h('line', { key: spoke.label, x1: 150, y1: 95, x2: spoke.x, y2: spoke.y, stroke: 'currentColor', strokeWidth: 1.5, strokeDasharray: spoke.count > 0 ? undefined : '4 3', opacity: spoke.count > 0 ? 0.8 : 0.3 })),
+          h('circle', { cx: 150, cy: 95, r: 22, fill: 'var(--dsw-alias-border-l2)', stroke: 'currentColor' }),
+          h('text', { x: 150, y: 99, textAnchor: 'middle', fill: 'currentColor', fontSize: 9 }, chosen.focus.toLowerCase()),
+          spokes.map((spoke) => h('text', { key: `t-${spoke.label}`, x: spoke.x, y: spoke.y, textAnchor: 'middle', fill: 'currentColor', fontSize: 10 }, spoke.label)),
+        ),
+        h('p', { style: styles.hint }, 'Calculations are one source family. Each other spoke is a separate source family.'),
+      );
+    }
+
+    // Decision evidence (Appendix 11.4): plan-mode switches and hook decisions recorded by the Host from DSH's own session events.
+    function DecisionEvidenceSection({ decisions, chosen }) {
+      const from = chosen.slice[0].at;
+      const to = chosen.slice[chosen.slice.length - 1].at;
+      const inWindow = (decisions ?? []).filter((d) => d.at >= from && d.at <= to);
+      return h('section', { style: styles.compactCard, 'aria-label': 'Decisions in this window' },
+        h('span', { style: styles.label }, 'Decisions in this window'),
+        inWindow.length
+          ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, inWindow.map((d, i) => h('li', { key: `${d.at}-${i}`, style: styles.body },
+            h('strong', null, d.kind), ` · ${new Date(d.at).toLocaleTimeString()} · ${d.detail}`,
+          )))
+          : h('p', { style: styles.hint }, 'No decisions in this window.'),
+      );
+    }
+
+    const CONVERGENCE_WINDOW = 5;
+    const QUADRANT_NOTES = {
+      'FOCUSED/LOW': 'Coherent and below the boundary: calm, or riding near the limit (see distance from the boundary).',
+      'FOCUSED/HIGH': 'Coherent and at or above the boundary: a focused, elevated signal.',
+      'SCATTERED/LOW': 'Scattered and below the boundary: ordinary variation or isolated events.',
+      'SCATTERED/HIGH': 'Scattered and at or above the boundary: mixed, conflicting, or multiple events.',
+    };
+    // Focus rules (Appendix 11.2 open decision). The owner selects one in the Convergence view. Default is the original coherence cut.
+    const FOCUS_RULES = {
+      coherence: { label: 'Coherence ≥ 0.5 (default)', focused: (p) => p.coherence >= 0.5, note: 'focus = coherence at or above 0.5' },
+      coherence07: { label: 'Coherence ≥ 0.7', focused: (p) => p.coherence >= 0.7, note: 'focus = coherence at or above 0.7' },
+      dispersion: { label: 'Dispersion σ ≤ 0.10', focused: (p) => p.sigma <= 0.1, note: 'focus = dispersion (σ) at or below 0.10' },
+    };
+    function convergencePoints(history, threshold, rule = 'coherence') {
+      const limit = Number(threshold) > 0 ? Number(threshold) : null;
+      if (!limit) return [];
+      const norm = (kl) => Math.min(1, Math.max(0, kl / (2 * limit)));
+      const points = [];
+      for (let end = CONVERGENCE_WINDOW; end <= history.length; end += 1) {
+        const slice = history.slice(end - CONVERGENCE_WINDOW, end);
+        const values = slice.map((point) => norm(point.kl));
+        const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+        const sigma = Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length);
+        const coherence = Math.max(0, 1 - 2 * sigma);
+        points.push({
+          index: points.length, at: slice[slice.length - 1].at, slice, values,
+          mean, sigma, coherence, distance: 0.5 - mean,
+          crossings: slice.filter((point) => point.drift).length,
+          focus: FOCUS_RULES[rule].focused({ coherence, sigma }) ? 'FOCUSED' : 'SCATTERED',
+          magnitude: mean >= 0.5 ? 'HIGH' : 'LOW',
+        });
+      }
+      points.forEach((point, i) => {
+        let run = 0;
+        for (let j = i; j >= 0 && points[j].focus === point.focus && points[j].magnitude === point.magnitude; j -= 1) run += 1;
+        point.persistence = run;
+      });
+      return points;
+    }
+    // Outlier clusters (Appendix 11.3): calculations far from this chat's typical level that agree with each other.
+    // Definition used here: an outlier is at least 0.2 from the median normalized value; neighbouring outliers within 0.05 form a cluster of at least two.
+    // Descriptive only: a cluster is a pattern to inspect, not an event verdict.
+    const OUTLIER_DISTANCE = 0.2;
+    const CLUSTER_GAP = 0.05;
+    const MIN_CLUSTER = 2;
+    function outlierClusters(history, threshold) {
+      const limit = Number(threshold) > 0 ? Number(threshold) : null;
+      if (!limit || history.length < MIN_CLUSTER) return [];
+      const items = history.map((point, index) => ({ index, at: point.at, kl: point.kl, value: Math.min(1, Math.max(0, point.kl / (2 * limit))) }));
+      const sorted = items.map((item) => item.value).sort((a, b) => a - b);
+      const mid = sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+      const outliers = items.filter((item) => Math.abs(item.value - mid) >= OUTLIER_DISTANCE).sort((a, b) => a.value - b.value);
+      const groups = [];
+      let current = [];
+      for (const item of outliers) {
+        if (current.length && item.value - current[current.length - 1].value > CLUSTER_GAP) { groups.push(current); current = []; }
+        current.push(item);
+      }
+      if (current.length) groups.push(current);
+      return groups.filter((members) => members.length >= MIN_CLUSTER).map((members) => {
+        const values = members.map((member) => member.value);
+        const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+        const sigma = Math.sqrt(values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length);
+        return { members, mean, median: mid, coherence: Math.max(0, 1 - 2 * sigma), side: mean >= 0.5 ? 'at or above the boundary' : 'below the boundary' };
+      });
+    }
+    function OutlierClustersSection({ history, threshold }) {
+      const clusters = outlierClusters(history, threshold);
+      return h('section', { style: styles.compactCard, 'aria-label': 'Outlier clusters' },
+        h('span', { style: styles.label }, 'Outlier clusters'),
+        clusters.length === 0
+          ? h('p', { style: styles.hint }, "No outlier cluster in this chat's calculations.")
+          : clusters.map((cluster, i) => h('div', { key: i, style: styles.compactRow },
+            h('span', { style: styles.body }, `${cluster.members.length} calculations, ${cluster.side}`),
+            h('span', { style: styles.hint }, `mean ${cluster.mean.toFixed(3)} · coherence ${cluster.coherence.toFixed(3)} · population median ${cluster.median.toFixed(3)}`),
+          )),
+        h('p', { style: styles.hint }, 'Outlier: at least 0.2 from the median of normalized values. Cluster: outliers within 0.05 of each other, at least two. Descriptive only.'),
+      );
+    }
+
+    // Six Sigma control chart (Appendix 11.5): statistical signal, separate from the decision threshold.
+    // Centre = mean of the chat's calculations; limits = centre +/- 3 sigma (sigma from the average moving range); lower limit floored at 0 (KL is not negative).
+    // Rules used (Western Electric style): rule 1 = one point beyond 3 sigma; rule 2 = 2 of 3 beyond 2 sigma on one side;
+    // rule 4 = 8 in a row on one side of the centre. Each flag is a statistical signal to investigate, not an event verdict.
+    const SPC_MIN_POINTS = 8;
+    function spcAnalysis(history) {
+      const values = history.map((point) => point.kl);
+      if (values.length < SPC_MIN_POINTS) return null;
+      const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+      const moving = values.slice(1).map((value, i) => Math.abs(value - values[i]));
+      const mrBar = moving.reduce((sum, value) => sum + value, 0) / moving.length;
+      const sigma = mrBar / 1.128; // individuals chart: sigma from the average moving range, so one spike cannot inflate its own limit
+      const ucl = mean + 3 * sigma;
+      const lcl = Math.max(0, mean - 3 * sigma);
+      const flags = [];
+      values.forEach((value, i) => {
+        if (value > ucl || value < lcl) flags.push({ index: i, rule: 'Rule 1', text: 'one reading beyond a control limit (3 sigma)' });
+      });
+      values.forEach((value, i) => {
+        if (i < 2) return;
+        const window = values.slice(i - 2, i + 1);
+        const above = window.filter((v) => v > mean + 2 * sigma).length;
+        const below = window.filter((v) => v < mean - 2 * sigma).length;
+        if (above >= 2 || below >= 2) flags.push({ index: i, rule: 'Rule 2', text: '2 of 3 readings beyond 2 sigma on one side' });
+      });
+      values.forEach((value, i) => {
+        if (i < 7) return;
+        const window = values.slice(i - 7, i + 1);
+        if (window.every((v) => v > mean) || window.every((v) => v < mean)) flags.push({ index: i, rule: 'Rule 4', text: '8 readings in a row on one side of the centre line' });
+      });
+      return { mean, sigma, ucl, lcl, flags };
+    }
+    function SpcChart({ history, spc }) {
+      const W = 300, H = 140, P = 10;
+      const top = Math.max(spc.ucl, ...history.map((p) => p.kl)) * 1.1 || 1;
+      const x = (i) => P + (history.length < 2 ? 0 : (i * (W - 2 * P)) / (history.length - 1));
+      const y = (v) => H - P - (Math.max(0, v) / top) * (H - 2 * P);
+      const points = history.map((p, i) => `${x(i).toFixed(1)},${y(p.kl).toFixed(1)}`).join(' ');
+      const flagged = new Set(spc.flags.map((f) => f.index));
+      return h('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Control chart of calculations with centre and control limits', style: { width: '100%', height: 'auto', display: 'block', marginTop: 6 } },
+        h('line', { x1: P, x2: W - P, y1: y(spc.ucl), y2: y(spc.ucl), stroke: 'var(--dsw-alias-state-error-primary)', strokeDasharray: '4 3' }),
+        h('line', { x1: P, x2: W - P, y1: y(spc.mean), y2: y(spc.mean), stroke: 'var(--dsw-alias-brand-primary)' }),
+        h('line', { x1: P, x2: W - P, y1: y(spc.lcl), y2: y(spc.lcl), stroke: 'var(--dsw-alias-state-error-primary)', strokeDasharray: '4 3' }),
+        h('polyline', { points, fill: 'none', stroke: 'currentColor', strokeWidth: 1.5 }),
+        history.map((p, i) => flagged.has(i) ? h('circle', { key: i, cx: x(i).toFixed(1), cy: y(p.kl).toFixed(1), r: 4, fill: 'var(--dsw-alias-state-error-primary)' }) : null),
+      );
+    }
+    function SpcSection({ history }) {
+      const spc = spcAnalysis(history);
+      return h('section', { style: styles.compactCard, 'aria-label': 'Control chart' },
+        h('span', { style: styles.label }, 'Control chart (Six Sigma)'),
+        spc === null
+          ? h('p', { style: styles.hint }, `Waiting for ${SPC_MIN_POINTS} calculations to set control limits.`)
+          : h('div', null,
+            h(SpcChart, { history, spc }),
+            h('p', { style: styles.hint }, `Centre ${spc.mean.toFixed(4)} · UCL ${spc.ucl.toFixed(4)} · LCL ${spc.lcl.toFixed(4)} · sigma ${spc.sigma.toFixed(4)}`),
+            spc.flags.length
+              ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, spc.flags.slice(0, 8).map((flag, i) => h('li', { key: `${flag.index}-${flag.rule}-${i}`, style: styles.body }, `${flag.rule}: ${flag.text} (calculation ${flag.index + 1})`)))
+              : h('p', { style: styles.hint }, 'No control-chart rule is violated. The process looks stable.'),
+          ),
+      );
+    }
+
+    // Repeated failures by type (Appendix 11.5 and 11.6): a failure type is the normalized reason the failed result gave.
+    // Two or more failures of one type in a chat is a repeated mistake. The scatter shows when each type recurs.
+    const FAILURE_LANE_LIMIT = 6;
+    function failureType(tool) {
+      const reason = (tool.reason ?? '').toLowerCase().replace(/[0-9]+/g, '#').replace(/["'`]/g, '');
+      const words = reason.split(/\s+/).filter(Boolean).slice(0, 6).join(' ');
+      return words || `${tool.name} failed (no reason recorded)`;
+    }
+    function failureGroups(tools) {
+      const groups = new Map();
+      for (const tool of tools ?? []) {
+        if (!tool.error) continue;
+        const key = failureType(tool);
+        groups.set(key, [...(groups.get(key) ?? []), tool]);
+      }
+      return [...groups.entries()].map(([type, list]) => ({ type, list })).sort((a, b) => b.list.length - a.list.length);
+    }
+    function FailureScatter({ groups, times }) {
+      const W = 300, rowH = 22, P = 8, labelW = 96;
+      const H = P * 2 + rowH * groups.length;
+      const min = Math.min(...times);
+      const max = Math.max(...times);
+      const x = (t) => P + labelW + ((t - min) / (max - min || 1)) * (W - labelW - 2 * P);
+      return h('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Failures by type over time', style: { width: '100%', height: 'auto', display: 'block', marginTop: 6 } },
+        groups.map((group, i) => {
+          const y = P + rowH * i + rowH / 2;
+          return h('g', { key: group.type },
+            h('line', { x1: P + labelW, x2: W - P, y1: y, y2: y, stroke: 'var(--dsw-alias-border-l2)' }),
+            h('text', { x: P, y: y + 3, fontSize: 9, fill: 'currentColor' }, group.type.slice(0, 16)),
+            group.list.map((tool, j) => h('circle', { key: j, cx: x(tool.startedAt).toFixed(1), cy: y.toFixed(1), r: 3.5, fill: 'var(--dsw-alias-state-error-primary)' })),
+          );
+        }),
+      );
+    }
+    function RepeatedFailuresSection({ tools }) {
+      const groups = failureGroups(tools);
+      const repeated = groups.filter((group) => group.list.length >= 2);
+      const times = (tools ?? []).map((tool) => tool.startedAt);
+      const plainType = (type) => type.replace(/^error:\s*/i, '').replace(/#+\s*/g, '').trim() || 'Unnamed failure';
+      return h('section', { style: styles.compactCard, 'aria-label': 'Repeated failures' },
+        h('span', { style: styles.label }, 'Repeated failures'),
+        repeated.length
+          ? h('ul', { style: { margin: '8px 0 0', padding: 0, listStyle: 'none', display: 'grid', gap: 8 } }, repeated.map((group) => h('li', { key: group.type, style: { padding: '8px 10px', borderLeft: '3px solid var(--dsw-alias-state-error-primary)', borderRadius: 6, background: 'var(--dsw-alias-bg-layer-2)' } },
+            h('strong', { style: { display: 'block', color: 'var(--dsw-alias-label-primary)', fontSize: 13, lineHeight: '18px' } }, `${plainType(group.type)} · ${group.list.length} times`),
+            h('span', { style: { ...styles.hint, display: 'block', marginTop: 2 } }, `Tools: ${[...new Set(group.list.map((tool) => tool.name))].join(', ')}`),
+          )))
+          : h('p', { style: styles.hint }, groups.length ? 'Every failure happened once so far. Nothing is repeating.' : 'No failed tool calls in this chat.'),
+      );
+    }
+
+    // Tool by failure type (Appendix 11.5 and 11.6). Two dimensions, read together:
+    //  - one failure type on one tool, repeated: the tool is probably misconfigured or not working. Fix the configuration, or guard it deterministically.
+    //  - one failure type across several tools: the cause is more likely shared (instructions or the input pattern). Fix the instructions, or validate the input deterministically.
+    // These readings are hypotheses to check, not verdicts.
+    function FailureMatrixSection({ tools }) {
+      const failed = (tools ?? []).filter((tool) => tool.error);
+      const toolNames = [...new Set(failed.map((tool) => tool.name))];
+      const typeOf = new Map();
+      const cell = new Map();
+      for (const tool of failed) {
+        const type = failureType(tool);
+        typeOf.set(type, true);
+        const key = `${type}||${tool.name}`;
+        cell.set(key, (cell.get(key) ?? 0) + 1);
+      }
+      const types = [...typeOf.keys()];
+      const maxCell = Math.max(1, ...cell.values());
+      const plainType = (type) => type.replace(/^error:\s*/i, '').replace(/#+\s*/g, '').trim() || 'Unnamed failure';
+      const readings = [];
+      for (const type of types) {
+        const onTools = toolNames.filter((name) => (cell.get(`${type}||${name}`) ?? 0) > 0);
+        const total = onTools.reduce((sum, name) => sum + cell.get(`${type}||${name}`), 0);
+        if (total < 2) continue;
+        if (onTools.length === 1) readings.push(`"${type}" on ${onTools[0]} (${total} times): the tool is probably misconfigured or not working. Fix the configuration, or guard it deterministically.`);
+        else readings.push(`"${type}" across ${onTools.join(', ')} (${total} times): the cause is more likely shared. Check the instructions or the input pattern, or validate it deterministically.`);
+      }
+      return h('section', { style: styles.compactCard, 'aria-label': 'Tool by failure type' },
+        h('span', { style: styles.label }, 'Tool by failure type'),
+        types.length === 0
+          ? h('p', { style: styles.hint }, 'No failed tool calls in this chat.')
+          : h('div', null,
+            h('div', { style: { overflow: 'auto', maxHeight: 260, marginTop: 6, border: '1px solid var(--dsw-alias-border-l1)', borderRadius: 8 } },
+              h('table', { style: { borderCollapse: 'collapse', width: '100%', tableLayout: 'fixed', fontVariantNumeric: 'tabular-nums' } },
+                h('colgroup', null, h('col', { style: { width: '34%' } }), toolNames.map((name) => h('col', { key: name }))),
+                h('thead', null, h('tr', null,
+                  h('th', { style: { ...styles.inlineHint, position: 'sticky', top: 0, zIndex: 2, background: 'var(--dsw-alias-bg-layer-1)', textAlign: 'left', padding: '6px 8px', borderBottom: '1px solid var(--dsw-alias-border-l2)', fontWeight: 600 } }, 'Failure type'),
+                  toolNames.map((name) => h('th', { key: name, style: { ...styles.inlineHint, position: 'sticky', top: 0, zIndex: 2, background: 'var(--dsw-alias-bg-layer-1)', padding: '6px 8px', borderBottom: '1px solid var(--dsw-alias-border-l2)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' } }, name)),
+                )),
+                h('tbody', null, types.map((type) => h('tr', { key: type },
+                  h('td', { style: { padding: '6px 8px', fontSize: 12, color: 'var(--dsw-alias-label-primary)', borderTop: '1px solid var(--dsw-alias-border-l1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, plainType(type)),
+                  toolNames.map((name) => {
+                    const count = cell.get(`${type}||${name}`) ?? 0;
+                    const share = maxCell ? count / maxCell : 0;
+                    return h('td', { key: name, style: { padding: '6px 8px', borderTop: '1px solid var(--dsw-alias-border-l1)', textAlign: 'left', verticalAlign: 'middle' } },
+                      count ? h('div', { style: { display: 'flex', alignItems: 'center', gap: 6 } },
+                        h('span', { style: { flex: '0 0 auto', minWidth: 14, fontSize: 12, fontWeight: 650, color: 'var(--dsw-alias-label-primary)' } }, count),
+                        h('span', { style: { flex: 1, height: 6, borderRadius: 999, background: 'var(--dsw-alias-bg-base)', overflow: 'hidden' } },
+                          h('span', { style: { display: 'block', height: '100%', width: `${Math.max(8, share * 100)}%`, background: 'var(--dsw-alias-state-error-primary)' } }),
+                        ),
+                      ) : null,
+                    );
+                  }),
+                ))),
+              ),
+            ),
+            readings.length
+              ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, readings.map((reading, i) => h('li', { key: i, style: styles.body }, reading)))
+              : h('p', { style: styles.hint }, 'No failure type repeats enough to read yet.'),
+          ),
+      );
+    }
+
+    // Qualified convergence (the governing question): how strongly, how precisely, and toward what event the observations converge.
+    // A candidate event counts only with independent evidence sources. Sources are families: 'calculations' (SOUP's KL readings and
+    // control chart, which all come from the same readings) and 'tool telemetry' (DSH's tool calls and results).
+    // Levels: 1 source = observed; 2 = corroborated; 3 or more = convergent. Every level is a hypothesis to verify, never a verified event.
+    function qualifiedConvergence({ history, tools, threshold, spc }) {
+      const limit = Number(threshold) > 0 ? Number(threshold) : null;
+      const candidates = [];
+      if (limit !== null && history.length >= 3) {
+        const recent = history.slice(-3);
+        if (recent.every((point) => point.kl >= 0.5 * limit && point.kl < limit)) {
+          candidates.push({ event: 'The chat keeps riding just under the limit', sources: ['calculations'], contradicted: null });
+        }
+      }
+      if (spc && spc.flags.length) candidates.push({ event: 'A special cause is moving the calculations', sources: ['calculations'], contradicted: null });
+      for (const group of failureGroups(tools).filter((g) => g.list.length >= 2)) {
+        const times = group.list.map((tool) => tool.startedAt);
+        const from = Math.min(...times);
+        const to = Math.max(...times);
+        const sources = ['tool telemetry'];
+        const elevated = limit !== null && history.some((point) => point.at >= from && point.at <= to && point.kl >= 0.5 * limit);
+        if (elevated) sources.push('calculations');
+        candidates.push({ event: `The same failure keeps recurring: ${group.type}`, sources, contradicted: elevated ? null : 'the calculations were not elevated while it happened' });
+      }
+      for (const tool of (tools ?? []).filter((t) => t.outcome?.result === 'failed')) {
+        const end = tool.endedAt ?? tool.startedAt;
+        const elevated = limit !== null && history.some((point) => point.at >= tool.startedAt && point.at <= end && point.kl >= 0.5 * limit);
+        candidates.push({ event: `A test run failed: ${tool.outcome.summary}`, sources: elevated ? ['test outcomes', 'calculations'] : ['test outcomes'], contradicted: null });
+      }
+      const levelOf = (count) => (count >= 3 ? 'convergent' : count === 2 ? 'corroborated' : 'observed');
+      return candidates.map((c) => ({ ...c, level: levelOf(new Set(c.sources).size) }));
+    }
+    function QualifiedConvergenceSection({ history, tools, threshold, spc }) {
+      const items = qualifiedConvergence({ history, tools, threshold, spc });
+      const qualified = items.filter((item) => item.level !== 'observed');
+      return h('section', { style: styles.compactCard, 'aria-label': 'Qualified convergence' },
+        h('span', { style: styles.label }, 'Qualified convergence (hypotheses, not verified events)'),
+        qualified.length
+          ? h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, qualified.map((item, i) => h('li', { key: i, style: styles.body },
+            h('strong', null, item.level), ` · ${item.event}`,
+            h('div', { style: styles.hint }, `Independent sources: ${[...new Set(item.sources)].join(' + ')}`),
+            item.contradicted ? h('div', { style: styles.hint }, `Weakened because ${item.contradicted}.`) : null,
+          )))
+          : h('p', { style: styles.body }, items.length
+            ? `No qualified convergence. Each candidate rests on one source: ${items.map((item) => item.event.toLowerCase()).join('; ')}.`
+            : 'No qualified convergence. No candidate event has evidence yet.'),
+        h('p', { style: styles.hint }, 'Verifying a candidate needs evidence outside these sources, such as a verified test-runner result, which is not built yet.'),
+      );
+    }
+
+    // Concept blindness, the elimination step: list candidate explanations, drop each one the evidence contradicts,
+    // and show what remains. Remaining candidates are not verified; judging them is the arbitration step for a human or agent.
+    function EliminationSection({ history, tools, spc, threshold }) {
+      const limit = Number(threshold) > 0 ? Number(threshold) : null;
+      const failures = (tools ?? []).filter((tool) => tool.error).length;
+      const crossings = history.filter((point) => point.drift).length;
+      const recurringType = failureGroups(tools).some((group) => group.list.length >= 2);
+      const nearLimit = limit !== null && history.length > 0 && history.every((point) => point.kl >= 0.5 * limit && point.kl < limit);
+      const candidates = [
+        { label: 'A real threshold crossing drives the readings', contradicted: crossings === 0 },
+        { label: 'Failing tool calls drive the readings', contradicted: failures === 0 },
+        { label: 'One failure type keeps recurring (a repeated mistake)', contradicted: !recurringType },
+        { label: 'A special cause (control-chart rule violated)', contradicted: !spc || spc.flags.length === 0 },
+        { label: 'Steady riding just under the limit', contradicted: !nearLimit },
+      ];
+      const remaining = candidates.filter((candidate) => !candidate.contradicted);
+      const dropped = candidates.filter((candidate) => candidate.contradicted);
+      return h('section', { style: styles.compactCard, 'aria-label': 'Elimination' },
+        h('span', { style: styles.label }, 'What the evidence leaves (elimination)'),
+        remaining.length
+          ? h('div', null,
+            h('p', { style: styles.body }, 'Still standing. Not verified; a human or agent judges these:'),
+            h('ol', { style: { margin: '6px 0 0', paddingLeft: 20 } }, remaining.map((candidate) => h('li', { key: candidate.label, style: styles.body }, candidate.label))),
+          )
+          : h('p', { style: styles.hint }, 'Every candidate is contradicted by the evidence here. No qualified pattern to report.'),
+        dropped.length ? h('p', { style: styles.hint }, `Ruled out by the data: ${dropped.map((candidate) => candidate.label.toLowerCase()).join('; ')}.`) : null,
+      );
+    }
+
+    function ConvergenceView({ sessionId }) {
+      const sessionLive = useSessionLiveStatus(sessionId);
+      const live = sessionLive.live;
+      const threshold = live?.effective?.threshold;
+      const history = live?.detector?.history ?? [];
+      const [focusRule, setFocusRule] = useState('coherence');
+      const points = convergencePoints(history, threshold, focusRule);
+      const [selected, setSelected] = useState(null);
+      const chosen = selected != null && points[selected] ? points[selected] : points[points.length - 1] ?? null;
+      const W = 300, H = 240, P = 28;
+      const x = (magnitude) => P + magnitude * (W - 2 * P);
+      const y = (focus) => H - P - focus * (H - 2 * P);
+      const colorOf = (point) => point.magnitude === 'HIGH'
+        ? (point.focus === 'FOCUSED' ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-state-warn-primary)')
+        : 'var(--dsw-alias-brand-primary)';
+      const key = chosen ? `${chosen.focus}/${chosen.magnitude}` : null;
+      const quadrantRect = (px, py, label) => h('rect', { key: label, x: px, y: py, width: (W - 2 * P) / 2, height: (H - 2 * P) / 2, fill: 'var(--dsw-alias-border-l2)', opacity: 0.25 });
+      return h('div', { style: { ...styles.sessionBody, display: 'flex', flexDirection: 'column', gap: 12 } },
+        h('div', { style: { ...styles.liveHeader, paddingBottom: 8, borderBottom: '1px solid var(--dsw-alias-border-l1)' } },
+          h('h3', { style: { ...styles.compactCardTitle, padding: 0 } }, 'Convergence'),
+          h('button', { type: 'button', style: styles.compactButton, onClick: () => sessionLive.refresh() }, 'Refresh'),
+        ),
+        h('div', { role: 'group', 'aria-label': 'Focus rule', style: { display: 'flex', flexDirection: 'column', gap: 6 } },
+          h('span', { style: styles.sectionLabel }, 'Group points by'),
+          h('div', { style: styles.actionRow },
+            Object.keys(FOCUS_RULES).map((key) => h('button', { key, type: 'button', 'aria-pressed': focusRule === key, style: { ...styles.compactButton, padding: '6px 10px', fontSize: 12, fontWeight: focusRule === key ? 700 : 500, borderColor: focusRule === key ? 'var(--dsw-alias-brand-primary)' : 'var(--dsw-alias-border-l2)' }, onClick: () => setFocusRule(key) }, FOCUS_RULES[key].label)),
+          ),
+        ),
+        h('p', { style: styles.hint }, `Focus rule: ${FOCUS_RULES[focusRule].note}. Changing it changes only how points are grouped here.`),
+        sessionLive.error ? h('p', { role: 'alert', style: styles.error }, sessionLive.error) : null,
+        points.length === 0 ? h('p', { role: 'status', style: styles.hint }, `Waiting for ${CONVERGENCE_WINDOW} calculations`) : null,
+        points.length === 0 ? null : h('section', { style: styles.compactCard, 'aria-label': 'Four-quadrant view' },
+          h('span', { style: styles.label }, 'Four-quadrant view'),
+          h('svg', { viewBox: `0 0 ${W} ${H}`, role: 'img', 'aria-label': 'Focus against magnitude for rolling windows', style: { width: '100%', height: 'auto', display: 'block', marginTop: 6 } },
+            quadrantRect(P, P, 'focused-low'), quadrantRect(W / 2, P, 'focused-high'),
+            quadrantRect(P, H / 2, 'scattered-low'), quadrantRect(W / 2, H / 2, 'scattered-high'),
+            h('line', { x1: x(0.5), x2: x(0.5), y1: P, y2: H - P, stroke: 'var(--dsw-alias-state-warn-primary)', strokeDasharray: '4 3' }),
+            h('text', { x: W / 2, y: P - 8, textAnchor: 'middle', fill: 'currentColor', fontSize: 10 }, 'HIGH FOCUS'),
+            h('text', { x: W / 2, y: H - 8, textAnchor: 'middle', fill: 'currentColor', fontSize: 10 }, 'LOW FOCUS'),
+            h('text', { x: P, y: H - 8, fill: 'currentColor', fontSize: 10 }, 'LOWER MAGNITUDE'),
+            h('text', { x: W - P, y: H - 8, textAnchor: 'end', fill: 'currentColor', fontSize: 10 }, 'HIGHER MAGNITUDE'),
+            points.map((point) => h('circle', {
+              key: point.index, cx: x(point.mean).toFixed(1), cy: y(point.coherence).toFixed(1),
+              r: 4 + Math.min(4, point.crossings), fill: colorOf(point), stroke: chosen && chosen.index === point.index ? 'currentColor' : 'none', strokeWidth: 2,
+              style: { cursor: 'pointer' }, role: 'button', 'aria-label': `window ending ${new Date(point.at).toLocaleTimeString()}`,
+              onClick: () => setSelected(point.index),
+            }, h('title', null, pointTitle(point)))),
+          ),
+        ),
+        chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Raw measurements' },
+          h('span', { style: styles.label }, 'Raw measurements'),
+          h('table', { style: { width: '100%', borderCollapse: 'collapse', marginTop: 6 } },
+            h('thead', null, h('tr', null, ['Time', 'KL', 'Normalized', 'Crossed'].map((title) => h('th', { key: title, style: { ...styles.inlineHint, textAlign: 'left', padding: '4px 6px' } }, title)))),
+            h('tbody', null, chosen.slice.map((point, i) => h('tr', { key: `${point.at}-${i}` },
+              h('td', { style: { padding: '4px 6px' } }, new Date(point.at).toLocaleTimeString()),
+              h('td', { style: { padding: '4px 6px' } }, point.kl.toFixed(4)),
+              h('td', { style: { padding: '4px 6px' } }, chosen.values[i].toFixed(3)),
+              h('td', { style: { padding: '4px 6px' } }, point.drift ? 'yes' : 'no'),
+            ))),
+          ),
+        ) : null,
+        chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Statistical measures' },
+          h('span', { style: styles.label }, 'Statistical measures'),
+          h('p', { style: styles.body }, `Mean ${chosen.mean.toFixed(3)} · dispersion ${chosen.sigma.toFixed(3)} · coherence ${chosen.coherence.toFixed(3)}`),
+          h('p', { style: styles.body }, `Distance from the boundary ${chosen.distance.toFixed(3)} · crossings in window ${chosen.crossings} · same quadrant for ${chosen.persistence} window${chosen.persistence === 1 ? '' : 's'}`),
+        ) : null,
+        chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Interpretation' },
+          h('span', { style: styles.label }, 'Interpretation (hypothesis, not a verified event)'),
+          h('p', { style: styles.body }, QUADRANT_NOTES[key]),
+          chosen.focus === 'FOCUSED' && chosen.magnitude === 'LOW' && chosen.distance < 0.05
+            ? h('p', { style: styles.body }, 'Qualified near-boundary signal: focused and just below the boundary. It needs evidence beyond these numbers before it means anything.')
+            : null,
+          chosen.focus === 'FOCUSED' && chosen.magnitude === 'LOW' && chosen.distance < 0.05 && chosen.persistence >= 3
+            ? h('p', { style: styles.body }, 'The chat repeatedly approaches the operating boundary without crossing it. The pattern is concentrated and persistent.')
+            : null,
+          h('p', { style: styles.hint }, 'The detector is unchanged. Its binary decision is shown as crossings above.'),
+        ) : null,
+        chosen ? h(ToolEvidenceSection, { tools: live?.tools ?? [], chosen }) : null,
+        chosen ? h(DecisionEvidenceSection, { decisions: live?.decisions ?? [], chosen }) : null,
+        chosen ? h(TestOutcomeSection, { tools: live?.tools ?? [], chosen }) : null,
+        chosen ? h(ContradictionSection, { chosen }) : null,
+        chosen ? h(RelationshipGraph, { chosen, tools: live?.tools ?? [], decisions: live?.decisions ?? [] }) : null,
+        h(OutlierClustersSection, { history, threshold }),
+        h(SpcSection, { history }),
+        h(RepeatedFailuresSection, { tools: live?.tools ?? [] }),
+        h(FailureMatrixSection, { tools: live?.tools ?? [] }),
+        h(EliminationSection, { history, tools: live?.tools ?? [], spc: spcAnalysis(history), threshold }),
+        h(QualifiedConvergenceSection, { history, tools: live?.tools ?? [], threshold, spc: spcAnalysis(history) }),
+        chosen ? h('section', { style: styles.compactCard, 'aria-label': 'Evidence available' },
+          h('span', { style: styles.label }, 'Evidence available'),
+          h('p', { style: styles.hint }, 'SOUP calculations, tool calls, decisions (plan mode, hooks) and test outcomes read from shell output text. Not verified by a test runner. Outlier subsets come from the same readings and are not independent sources.'),
+        ) : null,
+      );
+    }
+
+    function SessionSettingsView({ sessionId, defaultTab = 'settings' }) {
       const [settings, setSettings] = useState(null);
       const [loading, setLoading] = useState(false);
       const [working, setWorking] = useState('');
       const [error, setError] = useState('');
+      const [view, setView] = useState(defaultTab);
       const scope = React.useRef({ id: sessionId, generation: 0, alive: true, busy: false, controller: null });
       if (scope.current.id !== sessionId) {
         scope.current.controller?.abort();
@@ -544,7 +1318,6 @@ window.__ModuleLoader__.load({
       const grouped = visible ? [
         ['Controls', SESSION_FIELDS.slice(0, 3)],
         ['Detection', SESSION_FIELDS.slice(3, 6)],
-        ['Runtime', SESSION_FIELDS.slice(6)],
       ] : [];
       return h('main', { style: styles.sessionView, 'aria-label': 'SOUP settings for this chat', 'aria-busy': loading },
         h('header', { style: styles.sessionHeader },
@@ -555,7 +1328,16 @@ window.__ModuleLoader__.load({
           ),
           h('button', { type: 'button', style: styles.compactButton, disabled: loading || Boolean(working), onClick: () => { void request(); } }, loading ? 'Loading…' : 'Reload'),
         ),
-        h('div', { style: styles.sessionBody },
+        h('div', null,
+          h('div', { role: 'group', 'aria-label': 'SOUP view', style: { display: 'flex', gap: 8, marginBottom: 10 } },
+            h('button', { type: 'button', 'aria-pressed': view === 'settings', style: styles.compactButton, onClick: () => setView('settings') }, 'Settings'),
+            h('button', { type: 'button', 'aria-pressed': view === 'live', style: styles.compactButton, onClick: () => setView('live') }, 'Live'),
+            h('button', { type: 'button', 'aria-pressed': view === 'mentor', style: styles.compactButton, onClick: () => setView('mentor') }, 'Mentor'),
+            h('button', { type: 'button', 'aria-pressed': view === 'details', style: styles.compactButton, onClick: () => setView('details') }, 'Details'),
+            h('button', { type: 'button', 'aria-pressed': view === 'convergence', style: styles.compactButton, onClick: () => setView('convergence') }, 'Convergence'),
+            h('button', { type: 'button', 'aria-pressed': view === 'register', style: styles.compactButton, onClick: () => setView('register') }, 'Register'),
+          ),
+          view === 'convergence' ? h(ConvergenceView, { sessionId }) : view === 'details' ? h(SoupDetailsView, { sessionId }) : view === 'live' || view === 'mentor' ? h(LiveMentorView, { sessionId, part: view }) : view === 'register' ? h(RegisterView, { sessionId }) : h('div', { style: styles.sessionBody },
           loading ? h('p', { role: 'status', style: styles.body }, 'Loading chat settings…') : null,
           visible && !visible.masterEnabled ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Global monitoring is OFF. Chat settings are read-only and cannot bypass the global master switch.') : visible && !visible.writable ? h('p', { role: 'status', style: { ...styles.body, marginBottom: 10 } }, 'Chat settings are read-only.') : null,
           visible ? h('div', { style: styles.sessionGrid },
@@ -572,7 +1354,7 @@ window.__ModuleLoader__.load({
             )),
           ) : null,
           error ? h('p', { role: 'alert', style: { ...styles.error, marginTop: 10 } }, error) : null,
-        ),
+        )),
       );
     }
 
@@ -580,10 +1362,22 @@ window.__ModuleLoader__.load({
       return sessionId ? h(SessionSettingsView, { key: String(sessionId), sessionId: String(sessionId) }) : null;
     }
 
+    const SOUP_PANE_ID = 'soup-sidebar';
+    function SoupSidebarTab({ sessionId }) {
+      return sessionId ? h(SessionSettingsView, { key: `pane-${sessionId}`, sessionId: String(sessionId), defaultTab: 'convergence' }) : null;
+    }
+
+    // No hot key here: it would read a service this plugin does not declare, which blocks activation. The user creates the hot key.
     return {
       name: 'qdev-trajectory-drift-soup-settings',
       inject: ['slots', 'configForms'],
       apply(ctx) {
+        ctx.slots.inject('sidebar.right.pane.tab', () => ctx.slots.register({
+          name: 'sidebar.right.pane.tab', key: SOUP_PANE_ID,
+        }, SoupSidebarTab));
+        ctx.slots.inject('sidebar.right.pane.tab.title', () => ctx.slots.register({
+          name: 'sidebar.right.pane.tab.title', key: SOUP_PANE_ID,
+        }, () => h('span', null, 'SOUP')));
         ctx.slots.inject('settings.section', () => ctx.slots.register({
           name: 'settings.section', id: 'soup-trajectory-drift', order: 18, label: 'SOUP Drift',
           inject: () => ({ source: ctx.configForms.get(ENTRY) }),

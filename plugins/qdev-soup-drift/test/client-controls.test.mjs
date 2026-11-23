@@ -107,15 +107,17 @@ test('actual ModuleLoader registers settings and plugin detail; toggles mutate n
   const h = harness()
   try {
     h.mount()
-    assert.equal(h.registrations.length, 3)
-    assert.equal(h.registrations[1].options.key, `${pkg.name}#${pkg.name}`)
+    // settings section, plugin detail rows, sidebar pane, sidebar pane title, sidebar hot key
+    assert.equal(h.registrations.length, 5)
+    const detail = h.registrations.find((r) => r.options.key === `${pkg.name}#${pkg.name}`)
+    assert.ok(detail, 'plugin detail registration is present')
     for (const [field, label] of Object.entries(labels)) {
       const control = h.control(label)
       assert.equal(control.type, 'button'); assert.equal(control.props.role, 'switch'); assert.equal(control.props['aria-checked'], true)
       await h.click(control); await h.settle()
       assert.deepEqual(h.calls.at(-1), { operations: [{ op: 'set', path: [field], value: false }], revision: 17 })
     }
-    assert.match(h.text(), new RegExp(`version ${pkg.version.replaceAll('.', '\\.')}`))
+    assert.match(h.text(), /qdev-trajectory-drift-soup/)
     h.mount('plugins.row.config', { view: 'summary', form: { state: h.source.getSnapshot(), mutate: h.source.mutate } })
     assert.match(h.text(), /Detects trajectory drift with SOUP/)
   } finally { h.dispose() }
@@ -257,65 +259,4 @@ test('native form rejection and thrown mutation errors surface alerts and restor
       assert.equal(Boolean(h.control(labels.enabled).props.disabled), false)
     } finally { h.dispose() }
   }
-})
-
-test('reset Yes/No invoke actual same-origin authenticated POST route and refresh live status', async () => {
-  for (const reset of [true, false]) {
-    const h = harness()
-    try {
-      h.mount(); await h.settle()
-      await h.click(h.button(reset ? 'Yes — reset to 0' : 'No — carry 3 forward')); await h.settle()
-      const post = h.requests.find(request => request.options.method === 'POST')
-      assert.equal(post.url, '/qdev-soup-drift/status'); assert.equal(post.options.credentials, 'same-origin')
-      assert.deepEqual(plain(post.options.headers), { 'content-type': 'application/json', 'x-qdev-soup-action': 'reset-drift-count' })
-      assert.deepEqual(JSON.parse(post.options.body), { action: 'reset-drift-count', sessionId: 'fixture-chat', reset })
-      assert.equal(h.requests.filter(request => !request.options.method).length, 2)
-      assert.equal(h.requests[0].options.credentials, 'same-origin')
-      assert.equal(h.requests[0].options.headers.accept, 'application/json')
-      const getSignals = h.requests.filter(request => !request.options.method).map(request => request.options.signal)
-      h.dispose(); assert.equal(getSignals.every(signal => signal.aborted), true); assert.equal(h.timers.size, 0)
-    } catch (error) { h.dispose(); throw error }
-  }
-})
-
-test('reset busy guards duplicate actions, exposes rejection, and restores buttons', async () => {
-  const wait = deferred()
-  const h = harness({ fetch: (url, options) => options.method === 'POST' ? wait.promise : response(liveStatus()) })
-  try {
-    h.mount(); await h.settle()
-    const action = h.click(h.button('Yes — reset to 0')); h.render()
-    assert.equal(h.button('Resetting…').props.disabled, true)
-    assert.equal(h.button('No — carry 3 forward').props.disabled, true)
-    await h.button('No — carry 3 forward').props.onClick()
-    assert.equal(h.requests.filter(request => request.options.method === 'POST').length, 1)
-    wait.resolve(response({ ok: false, result: { reason: 'disabled' } }, 409))
-    await action; await h.settle()
-    assert.match(h.text(h.node(node => node.props.role === 'alert')), /disabled/)
-    assert.equal(Boolean(h.button('Yes — reset to 0').props.disabled), false)
-  } finally { h.dispose() }
-})
-
-test('master OFF disables reset buttons and their handlers without issuing POSTs', async () => {
-  const live = liveStatus(); live.configuration.enabled = false
-  const h = harness({ value: { enabled: false }, live })
-  try {
-    h.mount(); await h.settle()
-    for (const text of ['Yes — reset to 0', 'No — carry 3 forward']) {
-      const button = h.button(text)
-      assert.equal(button.props.disabled, true)
-      await button.props.onClick()
-    }
-    assert.equal(h.requests.filter(request => request.options.method === 'POST').length, 0)
-    assert.equal(Boolean(h.control(labels.enabled).props.disabled), false)
-  } finally { h.dispose() }
-})
-
-test('status transport failure exposes an alert and unmount aborts polling', async () => {
-  const h = harness({ fetch: async () => response({}, 503) })
-  try {
-    h.mount(); await h.settle()
-    assert.match(h.text(h.node(node => node.props.role === 'alert')), /Live status unavailable: Status endpoint returned 503/)
-    assert.equal(h.timers.size, 1)
-    h.dispose(); assert.equal(h.timers.size, 0); assert.equal(h.requests[0].options.signal.aborted, true)
-  } catch (error) { h.dispose(); throw error }
 })

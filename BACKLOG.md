@@ -24,4 +24,4 @@ The backlog is **not** a public feature commitment. When preparing a release, dr
 
 ## Migration status
 
-These source directories are currently staged copies, not Git submodules. ACC already has a canonical standalone repository. SOUP and Telemetry Seams still originate in Scratchpad and need dedicated Git repositories before conversion.
+All plugin repositories have been established, and source directories are fully tracked as Git submodules with independent histories.
